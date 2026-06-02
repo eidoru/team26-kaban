@@ -1,0 +1,294 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum GroupStatus {
+  forming
+  active
+  completed
+}
+
+enum GroupFrequency {
+  weekly
+  biweekly
+  monthly
+  custom
+}
+
+enum RoundStatus {
+  scheduled
+  current
+  closed
+}
+
+enum ContributionStatus {
+  pending
+  reported
+  confirmed
+}
+
+enum ContributionSource {
+  organizer
+  member
+}
+
+enum ObligationStatus {
+  unsettled
+  partially_settled
+  settled
+}
+
+enum InviteTokenType {
+  group_invite
+  membership_claim
+}
+
+enum DisputeStatus {
+  open
+  resolved
+}
+
+enum NotificationType {
+  member_left
+  chair_claimed
+  contribution_confirmed
+  contribution_due
+  turn_to_receive
+  dispute_raised
+  dispute_resolved
+  general
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  displayName  String   @map("display_name")
+  contact      String?
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  memberships    Membership[]
+  refreshTokens  RefreshToken[]
+  notifications  Notification[]
+  auditLogs      AuditLog[]     @relation("AuditActor")
+  managedGroups  Group[]        @relation("ManagedGroups")
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String   @map("user_id")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+model Group {
+  id                 String         @id @default(uuid())
+  name               String
+  status             GroupStatus    @default(forming)
+  contributionAmount Decimal        @map("contribution_amount") @db.Decimal(12, 2)
+  frequency          GroupFrequency
+  frequencyDays      Int?           @map("frequency_days")
+  slotCount          Int            @map("slot_count")
+  startDate                  DateTime?      @map("start_date") @db.Date
+  shortfallInterestRatePercent Decimal      @default(0) @map("shortfall_interest_rate_percent") @db.Decimal(5, 2)
+  managerId          String         @map("manager_id")
+  createdAt          DateTime       @default(now()) @map("created_at")
+  updatedAt          DateTime       @updatedAt @map("updated_at")
+
+  manager      User          @relation("ManagedGroups", fields: [managerId], references: [id])
+  memberships  Membership[]
+  rounds       Round[]
+  inviteTokens InviteToken[]
+  auditLogs    AuditLog[]
+  notifications Notification[]
+
+  @@map("groups")
+}
+
+model Membership {
+  id          String  @id @default(uuid())
+  groupId     String  @map("group_id")
+  userId      String? @map("user_id")
+  displayName String  @map("display_name")
+  contact     String?
+  turnNumber  Int?    @map("turn_number")
+  isManager   Boolean @default(false) @map("is_manager")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  group         Group          @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user          User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+  contributions Contribution[]
+  obligations   Obligation[]   @relation("DebtorMembership")
+  roundsWon     Round[]        @relation("RoundRecipient")
+  inviteTokens  InviteToken[]
+  disputes      Dispute[]
+
+  @@unique([groupId, userId])
+  @@unique([groupId, turnNumber])
+  @@map("memberships")
+}
+
+model InviteToken {
+  id                 String          @id @default(uuid())
+  token              String          @unique @default(uuid())
+  type               InviteTokenType
+  groupId            String          @map("group_id")
+  targetMembershipId String?         @map("target_membership_id")
+  expiresAt          DateTime?       @map("expires_at")
+  revokedAt          DateTime?       @map("revoked_at")
+  createdAt          DateTime        @default(now()) @map("created_at")
+
+  group            Group       @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  targetMembership Membership? @relation(fields: [targetMembershipId], references: [id], onDelete: Cascade)
+
+  @@map("invite_tokens")
+}
+
+model Round {
+  id                    String      @id @default(uuid())
+  groupId               String      @map("group_id")
+  number                Int
+  recipientMembershipId String      @map("recipient_membership_id")
+  dueDate               DateTime    @map("due_date") @db.Date
+  status                RoundStatus @default(scheduled)
+  closedAt              DateTime?   @map("closed_at")
+  createdAt             DateTime    @default(now()) @map("created_at")
+
+  group               Group          @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  recipientMembership Membership     @relation("RoundRecipient", fields: [recipientMembershipId], references: [id])
+  contributions       Contribution[]
+  obligations         Obligation[]
+
+  @@unique([groupId, number])
+  @@map("rounds")
+}
+
+model Contribution {
+  id           String             @id @default(uuid())
+  roundId      String             @map("round_id")
+  membershipId String             @map("membership_id")
+  amount       Decimal            @db.Decimal(12, 2)
+  status       ContributionStatus @default(pending)
+  source       ContributionSource
+  proofUrl     String?            @map("proof_url")
+  note         String?
+  reportedAt   DateTime?          @map("reported_at")
+  confirmedAt  DateTime?          @map("confirmed_at")
+  createdAt    DateTime           @default(now()) @map("created_at")
+  updatedAt    DateTime           @updatedAt @map("updated_at")
+
+  round       Round     @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  membership  Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  disputes    Dispute[]
+
+  @@unique([roundId, membershipId])
+  @@map("contributions")
+}
+
+model Obligation {
+  id                 String           @id @default(uuid())
+  debtorMembershipId String           @map("debtor_membership_id")
+  sourceRoundId      String           @map("source_round_id")
+  amount             Decimal          @db.Decimal(12, 2)
+  settledAmount      Decimal          @default(0) @map("settled_amount") @db.Decimal(12, 2)
+  status             ObligationStatus @default(unsettled)
+  externalCoverageNote String?        @map("external_coverage_note")
+  createdAt          DateTime         @default(now()) @map("created_at")
+  updatedAt          DateTime         @updatedAt @map("updated_at")
+
+  debtorMembership Membership        @relation("DebtorMembership", fields: [debtorMembershipId], references: [id])
+  sourceRound      Round             @relation(fields: [sourceRoundId], references: [id])
+  catchUpAgreement CatchUpAgreement?
+  settlements      Settlement[]
+
+  @@map("obligations")
+}
+
+model CatchUpAgreement {
+  id             String    @id @default(uuid())
+  obligationId   String    @unique @map("obligation_id")
+  amountOwed     Decimal   @map("amount_owed") @db.Decimal(12, 2)
+  targetDate     DateTime? @map("target_date") @db.Date
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  obligation Obligation @relation(fields: [obligationId], references: [id], onDelete: Cascade)
+
+  @@map("catch_up_agreements")
+}
+
+model Settlement {
+  id           String   @id @default(uuid())
+  obligationId String   @map("obligation_id")
+  amount       Decimal  @db.Decimal(12, 2)
+  note         String?
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  obligation Obligation @relation(fields: [obligationId], references: [id], onDelete: Cascade)
+
+  @@map("settlements")
+}
+
+model Dispute {
+  id             String        @id @default(uuid())
+  contributionId String        @map("contribution_id")
+  raisedById     String        @map("raised_by_id")
+  status         DisputeStatus @default(open)
+  note           String?
+  proofUrl       String?       @map("proof_url")
+  resolution     String?
+  resolvedAt     DateTime?     @map("resolved_at")
+  createdAt      DateTime      @default(now()) @map("created_at")
+
+  contribution Contribution @relation(fields: [contributionId], references: [id], onDelete: Cascade)
+  raisedBy     Membership   @relation(fields: [raisedById], references: [id])
+
+  @@map("disputes")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  groupId    String?  @map("group_id")
+  actorId    String?  @map("actor_id")
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id")
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  group Group? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  actor User?  @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@map("audit_logs")
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String           @map("user_id")
+  groupId   String?          @map("group_id")
+  type      NotificationType
+  title     String
+  body      String
+  link      String?
+  readAt    DateTime?        @map("read_at")
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group Group? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+
+  @@map("notifications")
+}

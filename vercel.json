@@ -1,0 +1,22 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "npm run db:generate && npx prisma migrate deploy && npm run build -w client",
+  "installCommand": "npm install",
+  "outputDirectory": "client/dist",
+  "functions": {
+    "api/index.ts": {
+      "memory": 1024,
+      "maxDuration": 30,
+      "includeFiles": "node_modules/.prisma/**"
+    }
+  },
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api" },
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ],
+  "crons": [
+    { "path": "/api/v1/cron/close-rounds", "schedule": "0 0 * * *" },
+    { "path": "/api/v1/cron/open-rounds", "schedule": "0 1 * * *" },
+    { "path": "/api/v1/cron/send-reminders", "schedule": "0 8 * * *" }
+  ]
+}
