@@ -83,8 +83,8 @@ export function requireCronSecret(req: Request, res: Response, next: NextFunctio
   next();
 }
 
-/** Manual cron testing tools are unavailable on Vercel production deploys. */
-export function requireCronTesting(_req: Request, res: Response, next: NextFunction) {
+/** UAT/demo tools are unavailable on Vercel production deploys. */
+export function requireNonProductionDeploy(_req: Request, res: Response, next: NextFunction) {
   if (process.env.VERCEL_ENV === "production") {
     res.status(404).json({ error: "Not found" });
     return;
@@ -92,3 +92,6 @@ export function requireCronTesting(_req: Request, res: Response, next: NextFunct
 
   next();
 }
+
+/** @deprecated Use requireNonProductionDeploy */
+export const requireCronTesting = requireNonProductionDeploy;

@@ -284,7 +284,8 @@ export function GroupLobbyPage() {
     mutationFn: () => api.advanceRound(id!),
   });
 
-  const showDemoTools = import.meta.env.DEV;
+  const showDemoTools =
+    import.meta.env.DEV || import.meta.env.VITE_DEMO_TOOLS === "true";
 
   const sortedMembers = useMemo(() => {
     if (!data?.members) return [];
