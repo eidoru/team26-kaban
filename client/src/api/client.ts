@@ -685,7 +685,7 @@ export const api = {
       body: JSON.stringify(body ?? {}),
     }),
 
-  /** Dev/demo only — closes the current round immediately (requires non-production API). */
+  /** Dev/demo only — closes the current round immediately (unavailable on Vercel production). */
   advanceRound: (groupId: string) =>
     request<{
       ok: true;
@@ -693,7 +693,7 @@ export const api = {
       openedRound: number | null;
       completed: boolean;
       group: GroupDetail;
-    }>(`/dev/groups/${groupId}/advance-round`, { method: "POST", body: JSON.stringify({}) }),
+    }>(`/groups/${groupId}/advance-round`, { method: "POST", body: JSON.stringify({}) }),
 
   getCurrentRound: (groupId: string) =>
     request<{ currentRound: RoundSummary | null }>(`/groups/${groupId}/rounds/current`),

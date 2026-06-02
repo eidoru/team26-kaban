@@ -4,7 +4,7 @@ import { InviteTokenType, ObligationStatus, Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { createNotification, writeAuditLog } from "../lib/audit.js";
 import { resolveAppOrigin } from "../lib/origin.js";
-import { requireAuth } from "../middleware/auth.js";
+import { requireAuth, requireNonProductionDeploy } from "../middleware/auth.js";
 import { validateBody } from "../middleware/validate.js";
 import {
   loadGroup,
@@ -25,8 +25,10 @@ import {
   serializeGroup,
   serializeMember,
 } from "../services/groups.js";
+import { loadGroupDetailPayload } from "../services/groupDetail.js";
 import {
   activateGroup,
+  forceAdvanceGroupRound,
   serializeRound,
   setPayoutOrder,
 } from "../services/schedule.js";
@@ -61,6 +63,41 @@ import {
 import { getCompletionSummary, getMemberReliabilitySummaries, SummaryError } from "../services/summary.js";
 
 const router = Router();
+
+/** UAT/demo only: close the current round without waiting for the calendar. */
+router.post(
+  "/:id/advance-round",
+  requireNonProductionDeploy,
+  requireAuth,
+  loadGroup,
+  requireGroupManager,
+  async (req, res, next) => {
+    try {
+      const membership = req.membership!;
+      const { group: updatedGroup, ...result } = await forceAdvanceGroupRound(
+        req.group!.id,
+        req.user!.id,
+      );
+      await writeAuditLog({
+        groupId: req.group!.id,
+        actorId: req.user!.id,
+        action: "group.advance_round",
+        entityType: "group",
+        entityId: req.group!.id,
+        metadata: result,
+      });
+      const group = await loadGroupDetailPayload(updatedGroup, membership, req.user!.id);
+
+      res.json({ ok: true, ...result, group });
+    } catch (err) {
+      if (err instanceof GroupError) {
+        res.status(err.status).json({ error: err.message });
+        return;
+      }
+      next(err);
+    }
+  },
+);
 
 router.use(requireAuth);
 

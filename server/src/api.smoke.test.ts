@@ -96,3 +96,19 @@ describe("Cron advance-round environment gate", () => {
     expect(res.status).toBe(404);
   });
 });
+
+describe("Groups advance-round environment gate", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("returns 404 on Vercel production", async () => {
+    vi.stubEnv("VERCEL_ENV", "production");
+
+    const res = await request(app).post(
+      "/api/v1/groups/00000000-0000-0000-0000-000000000001/advance-round",
+    );
+
+    expect(res.status).toBe(404);
+  });
+});
