@@ -1,9 +1,11 @@
-import { useEffect } from "react";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
+import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { useAuth } from "../context/AuthContext";
+import { prefetchRealtimeToken } from "../lib/homeQueries";
 import { displayInitials } from "../lib/initials";
+import { useNotificationsRealtime } from "../lib/useGroupRealtime";
 import { navLinkClass, ui } from "../lib/ui";
 
 export function AppLayout() {
@@ -14,17 +16,23 @@ export function AppLayout() {
   const { data: notificationsData } = useQuery({
     queryKey: ["notifications"],
     queryFn: () => api.getNotifications(),
-    refetchInterval: 60_000,
     enabled: !!user,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
   });
 
   useEffect(() => {
-    if (!user) return;
-    void queryClient.prefetchQuery({
-      queryKey: ["home-overview"],
-      queryFn: () => api.getHomeOverview(),
-    });
-  }, [queryClient, user]);
+    if (user) prefetchRealtimeToken();
+  }, [user]);
+
+  useNotificationsRealtime({
+    userId: user?.id,
+    enabled: !!user,
+    onUpdate: () => {
+      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      void queryClient.invalidateQueries({ queryKey: ["home-overview"] });
+    },
+  });
 
   async function handleLogout() {
     await logout();

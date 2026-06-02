@@ -6,6 +6,7 @@ import { useAuth } from "../context/AuthContext";
 import { formatWhen } from "../lib/formatWhen";
 import { formatFrequency } from "../lib/frequency";
 import { displayInitials } from "../lib/initials";
+import { patchNotificationRead } from "../lib/homeQueries";
 import { statusBadgeClass, ui } from "../lib/ui";
 
 function SectionHeader({
@@ -18,10 +19,10 @@ function SectionHeader({
   action?: ReactNode;
 }) {
   return (
-    <div className="mb-3 flex items-start justify-between gap-3">
+    <div className="mb-4 flex items-start justify-between gap-3">
       <div className="min-w-0">
-        <h2 className="text-base font-medium text-slate-900">{title}</h2>
-        {subtitle && <p className="mt-0.5 text-sm text-slate-500">{subtitle}</p>}
+        <h2 className={ui.sectionHeader}>{title}</h2>
+        {subtitle && <p className={ui.sectionSubtitle}>{subtitle}</p>}
       </div>
       {action && <div className="shrink-0 pt-0.5">{action}</div>}
     </div>
@@ -52,6 +53,14 @@ function groupStatusDetail(group: GroupSummary): string {
   if (group.status === "active") {
     return `${group.slotCount} members · cycle in progress`;
   }
+  const collected = group.totalCollected != null ? Number(group.totalCollected) : null;
+  const debt = group.outstandingDebt != null ? Number(group.outstandingDebt) : null;
+  if (debt != null && debt > 0) {
+    return `${group.slotCount} members · ₱${debt.toLocaleString()} still owed`;
+  }
+  if (collected != null && collected > 0) {
+    return `${group.slotCount} members · ₱${collected.toLocaleString()} collected`;
+  }
   return `${group.slotCount} members · finished`;
 }
 
@@ -60,7 +69,25 @@ function formingFillPercent(group: GroupSummary): number {
   return Math.min(100, Math.round(((group.filledCount ?? 0) / group.slotCount) * 100));
 }
 
-function GroupCard({
+function HomeMetric({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+}) {
+  return (
+    <div className="rounded-xl border border-gray-100 bg-gray-50/80 px-4 py-3">
+      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="mt-1 text-xl font-medium tabular-nums text-slate-900">{value}</p>
+      {hint && <p className="mt-0.5 text-xs text-slate-500">{hint}</p>}
+    </div>
+  );
+}
+
+function GroupRow({
   group,
   onPrefetch,
   muted = false,
@@ -71,64 +98,51 @@ function GroupCard({
 }) {
   const amount = `₱${Number(group.contributionAmount).toLocaleString()}`;
   const freq = formatFrequency(group.frequency, group.frequencyDays);
+  const fillPercent = formingFillPercent(group);
 
   return (
     <Link
       to={`/groups/${group.id}`}
       onMouseEnter={() => onPrefetch(group.id)}
       onFocus={() => onPrefetch(group.id)}
-      className={muted ? ui.listItemMuted : ui.listItem}
+      className={`flex items-center gap-4 px-4 py-3.5 transition-colors hover:bg-slate-50 ${
+        muted ? "opacity-75" : ""
+      }`}
     >
-      <div className="flex items-start gap-3">
-        <span
-          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-sm font-medium text-white ${
-            muted ? "bg-slate-400" : "bg-emerald-900"
-          }`}
-          aria-hidden
-        >
-          {displayInitials(group.name)}
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-3">
-            <h3 className="truncate font-medium text-slate-900">{group.name}</h3>
-            <span className={`${statusBadgeClass(group.status)} shrink-0`}>
-              {statusLabel(group.status)}
-            </span>
-          </div>
-          <p className="mt-1.5 text-sm text-slate-600">
-            {group.role === "manager" && (
-              <>
-                <span className="font-medium text-emerald-800">Organizing</span>
-                <span className="text-slate-300"> · </span>
-              </>
-            )}
-            <span className="font-medium text-slate-800">{amount}</span>
-            <span className="text-slate-300"> · </span>
-            <span>{freq}</span>
-          </p>
-          <p className="mt-0.5 text-sm text-slate-500">{groupStatusDetail(group)}</p>
-          {group.status === "forming" && !muted && (
-            <div className="mt-3">
-              <div className="h-1.5 overflow-hidden rounded-full bg-gray-100">
-                <div
-                  className="h-full rounded-full bg-emerald-600 transition-all"
-                  style={{ width: `${formingFillPercent(group)}%` }}
-                />
-              </div>
-            </div>
+      <span
+        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-medium text-white ${
+          muted ? "bg-slate-400" : "bg-emerald-900"
+        }`}
+        aria-hidden
+      >
+        {displayInitials(group.name)}
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          <h3 className="truncate font-medium text-slate-900">{group.name}</h3>
+          {group.role === "manager" && (
+            <span className="text-xs font-medium text-emerald-700">Organizing</span>
           )}
         </div>
+        <p className="mt-0.5 truncate text-sm text-slate-500">
+          {amount} · {freq} · {groupStatusDetail(group)}
+        </p>
+        {group.status === "forming" && !muted && (
+          <div className="mt-2 max-w-xs">
+            <div className="h-1 overflow-hidden rounded-full bg-gray-100">
+              <div
+                className="h-full rounded-full bg-emerald-600 transition-all"
+                style={{ width: `${fillPercent}%` }}
+              />
+            </div>
+          </div>
+        )}
       </div>
+      <span className={`${statusBadgeClass(group.status)} shrink-0`}>{statusLabel(group.status)}</span>
+      <span className="shrink-0 text-slate-300" aria-hidden>
+        →
+      </span>
     </Link>
-  );
-}
-
-function StatChip({ label, value }: { label: string; value: string }) {
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm">
-      <span className="font-medium text-slate-900">{value}</span>
-      <span className="text-slate-500">{label}</span>
-    </span>
   );
 }
 
@@ -136,13 +150,13 @@ function AttentionItem({ item }: { item: HomeAttentionItem }) {
   return (
     <Link
       to={item.link}
-      className="flex items-start justify-between gap-3 rounded-xl border border-amber-100 bg-white px-4 py-3 transition-colors hover:border-amber-200"
+      className="flex items-start justify-between gap-3 border-l-2 border-amber-400 py-2 pl-4 pr-1 transition-colors hover:bg-amber-50/40"
     >
       <div className="min-w-0">
         <p className="text-sm font-medium text-slate-900">{item.title}</p>
         <p className="mt-0.5 text-sm text-slate-600">{item.body}</p>
       </div>
-      <span className="shrink-0 text-slate-400" aria-hidden>
+      <span className="shrink-0 pt-0.5 text-slate-400" aria-hidden>
         →
       </span>
     </Link>
@@ -156,30 +170,37 @@ function ActivityRow({
   item: NotificationItem;
   onNavigate: (link: string) => void;
 }) {
-  const inner = (
-    <>
-      <p className="text-sm font-medium text-slate-900">{item.title}</p>
-      <p className="mt-0.5 line-clamp-2 text-sm text-slate-600">{item.body}</p>
-      <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-400">
-        {item.groupName && <span>{item.groupName}</span>}
-        <time>{formatWhen(item.createdAt)}</time>
+  const content = (
+    <div className="flex gap-3">
+      <span
+        className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
+          item.isUnread ? "bg-emerald-600" : "bg-transparent"
+        }`}
+        aria-hidden
+      />
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-slate-900">{item.title}</p>
+        <p className="mt-0.5 line-clamp-1 text-sm text-slate-600">{item.body}</p>
+        <p className="mt-1 text-xs text-slate-400">
+          {item.groupName && <span>{item.groupName} · </span>}
+          <time>{formatWhen(item.createdAt)}</time>
+        </p>
       </div>
-    </>
+    </div>
   );
 
-  const className = `block w-full rounded-xl px-3 py-2.5 text-left transition-colors ${
-    item.isUnread ? "bg-emerald-50/70 hover:bg-emerald-50" : "hover:bg-slate-50"
-  }`;
+  const className =
+    "block w-full rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-slate-50";
 
   if (item.link) {
     return (
       <button type="button" onClick={() => onNavigate(item.link!)} className={className}>
-        {inner}
+        {content}
       </button>
     );
   }
 
-  return <div className={className}>{inner}</div>;
+  return <div className={className}>{content}</div>;
 }
 
 export function HomePage() {
@@ -188,16 +209,36 @@ export function HomePage() {
   const { user } = useAuth();
   const [pastExpanded, setPastExpanded] = useState(false);
 
-  const { data, isLoading, error } = useQuery({
+  const {
+    data: groupsData,
+    isLoading: groupsLoading,
+    error: groupsError,
+  } = useQuery({
+    queryKey: ["groups"],
+    queryFn: () => api.groups(),
+    staleTime: 60_000,
+  });
+
+  const { data: overviewData, error: overviewError } = useQuery({
     queryKey: ["home-overview"],
     queryFn: () => api.getHomeOverview(),
+    staleTime: 30_000,
+  });
+
+  const { data: notificationsData, isLoading: notificationsLoading } = useQuery({
+    queryKey: ["notifications"],
+    queryFn: () => api.getNotifications(),
+    staleTime: 30_000,
   });
 
   const markRead = useMutation({
     mutationFn: (id: string) => api.markNotificationRead(id),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["home-overview"] });
+    onMutate: (notificationId) => {
+      patchNotificationRead(queryClient, notificationId);
+    },
+    onError: () => {
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      void queryClient.invalidateQueries({ queryKey: ["home-overview"] });
     },
   });
 
@@ -205,89 +246,77 @@ export function HomePage() {
     void queryClient.prefetchQuery({
       queryKey: ["group", groupId],
       queryFn: () => api.getGroup(groupId),
+      staleTime: 60_000,
     });
   }
+
+  const recentActivity = (notificationsData?.notifications ?? []).slice(0, 6);
 
   function handleActivityNavigate(link: string, notificationId: string, isUnread: boolean) {
     if (isUnread) void markRead.mutate(notificationId);
     navigate(link);
   }
 
-  const groups = data?.groups ?? [];
+  const groups = groupsData?.groups ?? [];
   const ongoing = groups.filter((g) => g.status !== "completed");
   const past = groups.filter((g) => g.status === "completed");
-  const stats = data?.stats;
+  const stats = overviewData?.stats;
   const firstName = user?.displayName?.split(/\s+/)[0] ?? "there";
 
-  const actionCount =
-    (stats?.pendingConfirmations ?? 0) + (stats?.paymentsDue ?? 0) + (data?.attention.length ?? 0);
+  const metrics = [
+    stats && stats.paymentsDue > 0
+      ? { label: "Due now", value: String(stats.paymentsDue), hint: "payments this cycle" }
+      : null,
+    stats && stats.pendingConfirmations > 0
+      ? {
+          label: "To confirm",
+          value: String(stats.pendingConfirmations),
+          hint: "awaiting your review",
+        }
+      : null,
+    stats && stats.totalOwed != null && Number(stats.totalOwed) > 0
+      ? {
+          label: "Owed to you",
+          value: `₱${Number(stats.totalOwed).toLocaleString()}`,
+          hint: "outstanding obligations",
+        }
+      : null,
+    stats && stats.unreadNotifications > 0
+      ? { label: "Unread", value: String(stats.unreadNotifications), hint: "notifications" }
+      : null,
+  ].filter(Boolean) as { label: string; value: string; hint: string }[];
+
+  const subtitle =
+    ongoing.length === 0
+      ? "Create a paluwagan or join one with an invite link."
+      : stats && metrics.length > 0
+        ? `${ongoing.length} group${ongoing.length === 1 ? "" : "s"} · ${metrics.length} item${metrics.length === 1 ? "" : "s"} need attention`
+        : `${ongoing.length} ongoing paluwagan${ongoing.length === 1 ? "" : "s"}`;
 
   return (
     <div className="space-y-8">
-      <header className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+      <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className={ui.pageTitle}>Hello, {firstName}</h1>
-          <p className={ui.pageSubtitle}>
-            {ongoing.length === 0
-              ? "Create a paluwagan or join one with an invite link."
-              : `${ongoing.length} group${ongoing.length === 1 ? "" : "s"} need your attention.`}
-          </p>
-          {stats && groups.length > 0 && (
-            <div className="mt-4 flex flex-wrap gap-2">
-              {stats.activeGroups > 0 && (
-                <StatChip label="in cycle" value={String(stats.activeGroups)} />
-              )}
-              {stats.formingGroups > 0 && (
-                <StatChip label="forming" value={String(stats.formingGroups)} />
-              )}
-              {stats.unreadNotifications > 0 && (
-                <StatChip label="unread" value={String(stats.unreadNotifications)} />
-              )}
-              {stats.pendingConfirmations > 0 && (
-                <StatChip label="to confirm" value={String(stats.pendingConfirmations)} />
-              )}
-              {stats.paymentsDue > 0 && (
-                <StatChip label="due now" value={String(stats.paymentsDue)} />
-              )}
-              {stats.totalOwed != null && Number(stats.totalOwed) > 0 && (
-                <StatChip label="owed to you" value={`₱${Number(stats.totalOwed).toLocaleString()}`} />
-              )}
-            </div>
-          )}
+          <p className={ui.pageSubtitle}>{subtitle}</p>
         </div>
-        <Link to="/groups/new" className={`${ui.btnPrimarySm} shrink-0 self-start`}>
+        <Link to="/groups/new" className={`${ui.btnPrimarySm} shrink-0`}>
           New paluwagan
         </Link>
       </header>
 
-      {isLoading && <p className={ui.muted}>Loading…</p>}
-      {error && (
+      {groupsError && (
         <p className={ui.error}>
-          Failed to load dashboard. Check that the API and database are running.
+          Failed to load your groups. Check that the API and database are running.
         </p>
       )}
-
-      {!isLoading && !error && data && data.attention.length > 0 && (
-        <section className="rounded-2xl border border-amber-100 bg-amber-50/40 p-5">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <div>
-              <h2 className="text-base font-medium text-slate-900">Needs action</h2>
-              <p className="text-sm text-slate-600">
-                {actionCount} item{actionCount === 1 ? "" : "s"} across your groups
-              </p>
-            </div>
-          </div>
-          <ul className="space-y-2">
-            {data.attention.map((item) => (
-              <li key={item.id}>
-                <AttentionItem item={item} />
-              </li>
-            ))}
-          </ul>
-        </section>
+      {overviewError && !groupsError && (
+        <p className={ui.error}>Some dashboard details could not be loaded.</p>
       )}
 
-      {!isLoading && !error && groups.length === 0 && (
+      {groupsLoading && groups.length === 0 && <p className={ui.muted}>Loading your groups…</p>}
+
+      {!groupsLoading && !groupsError && groups.length === 0 && (
         <div className={ui.emptyState}>
           <p className="text-lg font-medium text-slate-900">No paluwagans yet</p>
           <p className={`mt-2 ${ui.muted}`}>
@@ -299,101 +328,104 @@ export function HomePage() {
         </div>
       )}
 
-      {groups.length > 0 && (
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_17rem] lg:items-start">
-          <div className="space-y-8">
-            {ongoing.length > 0 && (
-              <section>
-                <SectionHeader title="Your groups" />
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {ongoing.map((group) => (
-                    <GroupCard key={group.id} group={group} onPrefetch={prefetchGroup} />
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {past.length > 0 && (
-              <section>
-                <button
-                  type="button"
-                  onClick={() => setPastExpanded((v) => !v)}
-                  className="mb-3 flex w-full items-center justify-between text-left"
-                >
-                  <div>
-                    <h2 className="text-base font-medium text-slate-900">
-                      Completed{past.length > 1 ? ` (${past.length})` : ""}
-                    </h2>
-                    <p className="text-sm text-slate-500">Past paluwagans</p>
-                  </div>
-                  {past.length > 2 && (
-                    <span className={`${ui.link} shrink-0`}>{pastExpanded ? "Hide" : "Show all"}</span>
-                  )}
-                </button>
-                {(past.length <= 2 || pastExpanded) && (
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {past.map((group) => (
-                      <GroupCard key={group.id} group={group} onPrefetch={prefetchGroup} muted />
-                    ))}
-                  </div>
-                )}
-              </section>
-            )}
-          </div>
-
-          <aside className="space-y-6">
-            <section>
-              <SectionHeader
-                title="Recent activity"
-                action={
-                  <Link to="/notifications" className={ui.link}>
-                    All
-                  </Link>
-                }
-              />
-              <div className={ui.cardCompact}>
-                {!data || data.recentActivity.length === 0 ? (
-                  <p className={`${ui.muted} text-sm`}>No updates yet.</p>
-                ) : (
-                  <ul className="-mx-2 space-y-0.5">
-                    {data.recentActivity.map((item) => (
-                      <li key={item.id}>
-                        <ActivityRow
-                          item={item}
-                          onNavigate={(link) => handleActivityNavigate(link, item.id, item.isUnread)}
-                        />
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            </section>
-
-            {(stats?.totalOwed != null && Number(stats.totalOwed) > 0) ||
-            (stats?.pendingConfirmations ?? 0) > 0 ? (
-              <section className={ui.cardCompact}>
-                <h2 className="text-sm font-medium text-slate-900">Manager shortcuts</h2>
-                <ul className="mt-3 space-y-2 text-sm">
-                  {(stats?.pendingConfirmations ?? 0) > 0 && (
-                    <li>
-                      <span className="text-slate-600">
-                        {stats!.pendingConfirmations} payment
-                        {stats!.pendingConfirmations === 1 ? "" : "s"} waiting for confirmation
-                      </span>
-                    </li>
-                  )}
-                  {stats?.totalOwed != null && Number(stats.totalOwed) > 0 && (
-                    <li>
-                      <Link to="/manager/obligations" className={ui.link}>
-                        ₱{Number(stats.totalOwed).toLocaleString()} outstanding →
-                      </Link>
-                    </li>
-                  )}
-                </ul>
-              </section>
-            ) : null}
-          </aside>
+      {groups.length > 0 && metrics.length > 0 && (
+        <div className={`${ui.metricGrid2} sm:grid-cols-2 lg:grid-cols-4`}>
+          {metrics.map((metric) => (
+            <HomeMetric key={metric.label} {...metric} />
+          ))}
         </div>
+      )}
+
+      {!groupsLoading && !groupsError && overviewData && overviewData.attention.length > 0 && (
+        <section className={ui.sectionCard}>
+          <SectionHeader
+            title="Needs action"
+            subtitle={`${overviewData.attention.length} item${overviewData.attention.length === 1 ? "" : "s"}`}
+          />
+          <ul className="divide-y divide-gray-100">
+            {overviewData.attention.map((item) => (
+              <li key={item.id} className="first:pt-0 last:pb-0">
+                <AttentionItem item={item} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {ongoing.length > 0 && (
+        <section className={`${ui.sectionCard} p-0`}>
+          <div className="border-b border-gray-100 px-6 py-4">
+            <SectionHeader title="Your groups" subtitle={`${ongoing.length} active or forming`} />
+          </div>
+          <ul className="divide-y divide-gray-100">
+            {ongoing.map((group) => (
+              <li key={group.id}>
+                <GroupRow group={group} onPrefetch={prefetchGroup} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      <section className={ui.sectionCard}>
+        <SectionHeader
+          title="Recent activity"
+          subtitle={
+            notificationsData?.unreadCount
+              ? `${notificationsData.unreadCount} unread`
+              : "Latest updates across your groups"
+          }
+          action={
+            <Link to="/notifications" className={ui.link}>
+              View all
+            </Link>
+          }
+        />
+        {notificationsLoading ? (
+          <p className={`${ui.muted} text-sm`}>Loading activity…</p>
+        ) : recentActivity.length === 0 ? (
+          <p className={`${ui.muted} text-sm`}>No updates yet.</p>
+        ) : (
+          <ul className="max-h-64 divide-y divide-gray-50 overflow-y-auto">
+            {recentActivity.map((item) => (
+              <li key={item.id}>
+                <ActivityRow
+                  item={item}
+                  onNavigate={(link) => handleActivityNavigate(link, item.id, item.isUnread)}
+                />
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {past.length > 0 && (
+        <section className={`${ui.sectionCard} p-0`}>
+          <button
+            type="button"
+            onClick={() => setPastExpanded((v) => !v)}
+            className="flex w-full items-center justify-between px-6 py-4 text-left"
+          >
+            <div>
+              <h2 className={ui.sectionHeader}>
+                Completed{past.length > 1 ? ` (${past.length})` : ""}
+              </h2>
+              <p className={ui.sectionSubtitle}>Past paluwagans</p>
+            </div>
+            {past.length > 2 && (
+              <span className={`${ui.link} shrink-0`}>{pastExpanded ? "Hide" : "Show all"}</span>
+            )}
+          </button>
+          {(past.length <= 2 || pastExpanded) && (
+            <ul className="divide-y divide-gray-100 border-t border-gray-100">
+              {past.map((group) => (
+                <li key={group.id}>
+                  <GroupRow group={group} onPrefetch={prefetchGroup} muted />
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
       )}
     </div>
   );

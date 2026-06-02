@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { InviteTokenType, Prisma } from "@prisma/client";
+import { InviteTokenType, ObligationStatus, Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { createNotification, writeAuditLog } from "../lib/audit.js";
 import { resolveAppOrigin } from "../lib/origin.js";
@@ -20,6 +20,7 @@ import {
   GroupError,
   inviteExpiry,
   inviteUrl,
+  listUserGroups,
   resetPayoutOrderIfRosterIncomplete,
   serializeGroup,
   serializeMember,
@@ -41,6 +42,7 @@ import {
 import { getGroupAuditLog } from "../services/auditLog.js";
 import {
   settleMemberDebts,
+  coverObligationExternally,
   getGroupObligations,
   ObligationError,
 } from "../services/obligations.js";
@@ -64,39 +66,7 @@ router.use(requireAuth);
 
 router.get("/", async (req, res, next) => {
   try {
-    const memberships = await prisma.membership.findMany({
-      where: { userId: req.user!.id },
-      include: {
-        group: {
-          select: {
-            id: true,
-            name: true,
-            status: true,
-            contributionAmount: true,
-            frequency: true,
-            frequencyDays: true,
-            slotCount: true,
-            startDate: true,
-            shortfallInterestRatePercent: true,
-          },
-        },
-      },
-      orderBy: { updatedAt: "desc" },
-    });
-
-    const filledCounts = await countFilledSlotsByGroupIds(
-      memberships.map((m) => m.groupId),
-    );
-
-    const groups = memberships.map((m) => ({
-      ...serializeGroup(
-        m.group,
-        filledCounts.get(m.groupId) ?? 0,
-        m.isManager ? "manager" : "member",
-      ),
-      membershipId: m.id,
-    }));
-
+    const groups = await listUserGroups(req.user!.id);
     res.json({ groups });
   } catch (err) {
     next(err);
@@ -225,7 +195,7 @@ router.get("/:id", loadGroup, requireGroupMember, async (req, res, next) => {
   try {
     const group = req.group!;
 
-    const [members, rounds] = await Promise.all([
+    const [members, rounds, openDisputeCount, unsettledObligationCount] = await Promise.all([
       prisma.membership.findMany({
         where: { groupId: group.id },
         orderBy: [{ turnNumber: "asc" }, { createdAt: "asc" }],
@@ -235,6 +205,22 @@ router.get("/:id", loadGroup, requireGroupMember, async (req, res, next) => {
         : prisma.round.findMany({
             where: { groupId: group.id },
             orderBy: { number: "asc" },
+          }),
+      group.status === "forming"
+        ? Promise.resolve(0)
+        : prisma.dispute.count({
+            where: {
+              status: "open",
+              contribution: { round: { groupId: group.id } },
+            },
+          }),
+      group.status === "forming"
+        ? Promise.resolve(0)
+        : prisma.obligation.count({
+            where: {
+              sourceRound: { groupId: group.id },
+              status: { in: [ObligationStatus.unsettled, ObligationStatus.partially_settled] },
+            },
           }),
     ]);
 
@@ -246,11 +232,8 @@ router.get("/:id", loadGroup, requireGroupMember, async (req, res, next) => {
 
     let currentRound = null;
     let schedule: ReturnType<typeof serializeRound>[] = [];
-    let reliability: Awaited<ReturnType<typeof getMemberReliabilitySummaries>> = [];
 
     if (rounds.length > 0) {
-      reliability = await getMemberReliabilitySummaries(group.id);
-
       schedule = rounds.map((r) => ({
         ...serializeRound(r),
         recipientName: memberById.get(r.recipientMembershipId)?.displayName ?? "Unknown",
@@ -319,8 +302,20 @@ router.get("/:id", loadGroup, requireGroupMember, async (req, res, next) => {
       },
       currentRound,
       schedule,
-      reliability,
+      issueCounts: {
+        openDisputes: openDisputeCount,
+        unsettledObligations: unsettledObligationCount,
+      },
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get("/:id/member-reliability", loadGroup, requireGroupMember, async (req, res, next) => {
+  try {
+    const reliability = await getMemberReliabilitySummaries(req.group!.id);
+    res.json({ reliability });
   } catch (err) {
     next(err);
   }
@@ -341,28 +336,29 @@ router.post(
       const group = req.group!;
       assertForming(group);
 
-      const filledCount = await countFilledSlots(group.id);
-      if (filledCount >= group.slotCount) {
-        res.status(409).json({ error: "Group is full" });
-        return;
-      }
+      const membership = await prisma.$transaction(async (tx) => {
+        const filledCount = await tx.membership.count({ where: { groupId: group.id } });
+        if (filledCount >= group.slotCount) {
+          throw new GroupError(409, "Group is full");
+        }
 
-      const membership = await prisma.membership.create({
-        data: {
-          groupId: group.id,
-          displayName: req.body.displayName,
-          contact: req.body.contact ?? null,
-        },
+        return tx.membership.create({
+          data: {
+            groupId: group.id,
+            displayName: req.body.displayName,
+            contact: req.body.contact ?? null,
+          },
+        });
       });
 
-      await writeAuditLog({
+      void writeAuditLog({
         groupId: group.id,
         actorId: req.user!.id,
         action: "membership.placeholder_added",
         entityType: "membership",
         entityId: membership.id,
         metadata: { displayName: membership.displayName },
-      });
+      }).catch((err) => console.error("Failed to write audit log", err));
 
       res.status(201).json({ member: serializeMember(membership) });
     } catch (err) {
@@ -907,6 +903,35 @@ router.post(
         memberId,
         req.user!.id,
         req.body.amount,
+        req.body.note,
+      );
+      res.json(result);
+    } catch (err) {
+      if (err instanceof ObligationError) {
+        res.status(err.status).json({ error: err.message });
+        return;
+      }
+      next(err);
+    }
+  },
+);
+
+
+const coverExternallySchema = z.object({
+  note: z.string().min(1).max(500),
+});
+
+router.post(
+  "/:id/obligations/:oid/cover-externally",
+  loadGroup,
+  requireGroupManager,
+  validateBody(coverExternallySchema),
+  async (req, res, next) => {
+    try {
+      const result = await coverObligationExternally(
+        req.group!.id,
+        String(req.params.oid),
+        req.user!.id,
         req.body.note,
       );
       res.json(result);

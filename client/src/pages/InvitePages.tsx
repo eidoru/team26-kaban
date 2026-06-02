@@ -1,6 +1,6 @@
 import { type ReactNode, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ApiError,
   api,
@@ -10,6 +10,7 @@ import {
   type InvitePreview,
 } from "../api/client";
 import { useAuth } from "../context/AuthContext";
+import { invalidateHomeLists } from "../lib/homeQueries";
 import { formatFrequency } from "../lib/frequency";
 import { formatShortfallInterestRate } from "../lib/shortfallInterest";
 import { displayInitials } from "../lib/initials";
@@ -301,6 +302,7 @@ function InviteErrorState({
 export function InviteLandingPage() {
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { user, loading: authLoading } = useAuth();
   const [error, setError] = useState("");
 
@@ -319,6 +321,7 @@ export function InviteLandingPage() {
     try {
       const res = await join.mutateAsync();
       sessionStorage.removeItem(PENDING_INVITE_KEY);
+      invalidateHomeLists(queryClient);
       navigate(`/groups/${res.groupId}`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to join");
@@ -373,6 +376,7 @@ export function InviteLandingPage() {
 export function ClaimLandingPage() {
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { user, loading: authLoading } = useAuth();
   const [error, setError] = useState("");
 
@@ -391,6 +395,7 @@ export function ClaimLandingPage() {
     try {
       const res = await claim.mutateAsync();
       sessionStorage.removeItem(PENDING_INVITE_KEY);
+      invalidateHomeLists(queryClient);
       navigate(`/groups/${res.groupId}`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to claim seat");

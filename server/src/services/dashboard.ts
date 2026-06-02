@@ -15,13 +15,13 @@ export async function getGroupDashboard(groupId: string) {
 
   const today = startOfUtcDay(new Date());
 
-  const [currentRound, pendingConfirmations, openDisputes, obligations, members] =
+  const [currentRound, pendingConfirmations, openDisputes, obligations, members, groupRoundContext] =
     await Promise.all([
       prisma.round.findFirst({
         where: { groupId, status: RoundStatus.current },
         include: {
           recipientMembership: { select: { displayName: true } },
-          contributions: true,
+          contributions: { select: { status: true } },
         },
       }),
       prisma.contribution.count({
@@ -44,6 +44,7 @@ export async function getGroupDashboard(groupId: string) {
         include: { sourceRound: { select: { number: true } } },
       }),
       prisma.membership.count({ where: { groupId } }),
+      getGroupInterestRoundContext(prisma, groupId),
     ]);
 
   let overdueContributions = 0;
@@ -66,7 +67,6 @@ export async function getGroupDashboard(groupId: string) {
 
   let outstanding = new Prisma.Decimal(0);
   const terms = toShortfallInterestTerms(group);
-  const groupRoundContext = await getGroupInterestRoundContext(prisma, groupId);
   for (const o of obligations) {
     outstanding = outstanding.plus(
       getObligationTotalRemaining(o, terms, {
@@ -96,6 +96,53 @@ export async function getGroupDashboard(groupId: string) {
     totalOutstanding: outstanding.toString(),
     contributionAmount: group.contributionAmount.toString(),
   };
+}
+
+export async function getManagerTotalOutstanding(managerUserId: string): Promise<string> {
+  const managedGroups = await prisma.group.findMany({
+    where: { managerId: managerUserId, status: { in: [GroupStatus.active, GroupStatus.completed] } },
+    select: {
+      id: true,
+      shortfallInterestRatePercent: true,
+      frequency: true,
+      frequencyDays: true,
+    },
+  });
+
+  if (managedGroups.length === 0) return "0";
+
+  const groupIds = managedGroups.map((g) => g.id);
+  const groupById = new Map(managedGroups.map((g) => [g.id, g]));
+  const obligations = await prisma.obligation.findMany({
+    where: {
+      sourceRound: { groupId: { in: groupIds } },
+      status: { in: [ObligationStatus.unsettled, ObligationStatus.partially_settled] },
+    },
+    include: {
+      sourceRound: { select: { number: true, groupId: true } },
+    },
+  });
+
+  const roundContextByGroup = await getGroupInterestRoundContexts(prisma, groupIds);
+  let total = new Prisma.Decimal(0);
+
+  for (const o of obligations) {
+    const group = groupById.get(o.sourceRound.groupId);
+    if (!group) continue;
+    const terms = toShortfallInterestTerms(group);
+    const groupRoundContext = roundContextByGroup.get(o.sourceRound.groupId) ?? {
+      lastClosedRoundNumber: 0,
+      currentRoundNumber: null,
+    };
+    total = total.plus(
+      getObligationTotalRemaining(o, terms, {
+        sourceRoundNumber: o.sourceRound.number,
+        ...groupRoundContext,
+      }),
+    );
+  }
+
+  return total.toString();
 }
 
 export async function getManagerObligationsOverview(managerUserId: string) {

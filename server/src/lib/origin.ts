@@ -78,6 +78,13 @@ function vercelDeploymentOrigin(): string | null {
   return null;
 }
 
+/** CORS allowlist — ignores localhost CLIENT_ORIGIN on Vercel (see configuredClientOrigin). */
+export function resolveCorsOrigin(): boolean | string {
+  const clientOrigin = configuredClientOrigin();
+  if (clientOrigin) return clientOrigin;
+  return true;
+}
+
 /** Public app URL for invite links and notifications. */
 export function resolveAppOrigin(req?: Request): string {
   const clientOrigin = configuredClientOrigin();

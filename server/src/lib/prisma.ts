@@ -11,3 +11,9 @@ export const prisma =
 if (process.env.NODE_ENV !== "production") {
   globalForPrisma.prisma = prisma;
 }
+
+/** Interactive transactions (round close, activation) can run many queries against remote Postgres. */
+export const prismaTransactionOptions = {
+  maxWait: 15_000,
+  timeout: 60_000,
+};

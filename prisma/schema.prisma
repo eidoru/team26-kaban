@@ -205,9 +205,10 @@ model Obligation {
   debtorMembershipId String           @map("debtor_membership_id")
   sourceRoundId      String           @map("source_round_id")
   amount             Decimal          @db.Decimal(12, 2)
-  settledAmount      Decimal          @default(0) @map("settled_amount") @db.Decimal(12, 2)
-  status             ObligationStatus @default(unsettled)
-  externalCoverageNote String?        @map("external_coverage_note")
+  settledAmount          Decimal          @default(0) @map("settled_amount") @db.Decimal(12, 2)
+  interestSettledAmount  Decimal          @default(0) @map("interest_settled_amount") @db.Decimal(12, 2)
+  status                 ObligationStatus @default(unsettled)
+  externalCoverageNote   String?          @map("external_coverage_note")
   createdAt          DateTime         @default(now()) @map("created_at")
   updatedAt          DateTime         @updatedAt @map("updated_at")
 

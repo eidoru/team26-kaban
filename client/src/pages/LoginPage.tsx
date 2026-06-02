@@ -2,6 +2,7 @@ import { type FormEvent, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ApiError } from "../api/client";
 import { useAuth } from "../context/AuthContext";
+import { prefetchHomeData } from "../lib/homeQueries";
 import { ui } from "../lib/ui";
 import { resolvePendingInvite } from "./InvitePages";
 
@@ -19,6 +20,7 @@ export function LoginPage() {
     setSubmitting(true);
     try {
       await login(email, password);
+      prefetchHomeData();
       const handled = await resolvePendingInvite(navigate);
       if (!handled) navigate("/home");
     } catch (err) {

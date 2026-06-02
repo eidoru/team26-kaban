@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type NotificationItem } from "../api/client";
+import { patchAllNotificationsRead, patchNotificationRead } from "../lib/homeQueries";
 import { formatWhen } from "../lib/formatWhen";
 import { ui } from "../lib/ui";
 
@@ -13,17 +14,23 @@ export function NotificationsPage() {
 
   const markRead = useMutation({
     mutationFn: (id: string) => api.markNotificationRead(id),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["home-overview"] });
+    onMutate: (notificationId) => {
+      patchNotificationRead(queryClient, notificationId);
+    },
+    onError: () => {
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      void queryClient.invalidateQueries({ queryKey: ["home-overview"] });
     },
   });
 
   const markAllRead = useMutation({
     mutationFn: () => api.markAllNotificationsRead(),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["home-overview"] });
+    onMutate: () => {
+      patchAllNotificationsRead(queryClient);
+    },
+    onError: () => {
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      void queryClient.invalidateQueries({ queryKey: ["home-overview"] });
     },
   });
 

@@ -5,6 +5,7 @@ import {
   getRoundCloseObligationAmount,
   getShortfall,
   obligationStatusFromAmounts,
+  obligationStatusFromRemaining,
 } from "./obligations.js";
 
 const d = (n: number | string) => new Prisma.Decimal(n);
@@ -99,5 +100,15 @@ describe("obligationStatusFromAmounts", () => {
 
   it("marks unsettled obligations", () => {
     expect(obligationStatusFromAmounts(d(1000), d(0))).toBe("unsettled");
+  });
+});
+
+describe("obligationStatusFromRemaining", () => {
+  it("marks settled when nothing remains", () => {
+    expect(obligationStatusFromRemaining(d(500), d(100), d(0))).toBe("settled");
+  });
+
+  it("marks partially settled when interest was paid but principal remains", () => {
+    expect(obligationStatusFromRemaining(d(0), d(50), d(1000))).toBe("partially_settled");
   });
 });
