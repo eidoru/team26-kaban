@@ -2,6 +2,7 @@ import { Group, GroupStatus, Membership, Prisma } from "@prisma/client";
 import { createNotification, writeAuditLog } from "../lib/audit.js";
 import { resolveAppOrigin } from "../lib/origin.js";
 import { prisma } from "../lib/prisma.js";
+import { getCompletedGroupCardStats } from "./groupCardStats.js";
 
 export class GroupError extends Error {
   status: number;
@@ -142,6 +143,53 @@ export async function deleteFormingGroup(groupId: string, actorId: string): Prom
   }
 
   await prisma.group.delete({ where: { id: groupId } });
+}
+
+export async function listUserGroups(userId: string) {
+  const memberships = await prisma.membership.findMany({
+    where: { userId },
+    include: {
+      group: {
+        select: {
+          id: true,
+          name: true,
+          status: true,
+          contributionAmount: true,
+          frequency: true,
+          frequencyDays: true,
+          slotCount: true,
+          startDate: true,
+          shortfallInterestRatePercent: true,
+          _count: { select: { memberships: true } },
+        },
+      },
+    },
+    orderBy: { updatedAt: "desc" },
+  });
+
+  const completedIds = memberships
+    .filter((m) => m.group.status === GroupStatus.completed)
+    .map((m) => m.groupId);
+  const completedStats = await getCompletedGroupCardStats(completedIds);
+
+  return memberships.map((m) => {
+    const base = {
+      ...serializeGroup(
+        m.group,
+        m.group._count.memberships,
+        m.isManager ? "manager" : "member",
+      ),
+      membershipId: m.id,
+    };
+    if (m.group.status !== GroupStatus.completed) return base;
+    const stats = completedStats.get(m.groupId);
+    if (!stats) return base;
+    return {
+      ...base,
+      totalCollected: stats.totalCollected,
+      outstandingDebt: stats.outstandingDebt,
+    };
+  });
 }
 
 export function serializeGroup(

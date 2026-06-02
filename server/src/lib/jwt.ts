@@ -45,3 +45,24 @@ export function getRefreshTokenExpiry(): Date {
   };
   return new Date(Date.now() + value * multipliers[unit]);
 }
+
+const supabaseJwtSecret = process.env.SUPABASE_JWT_SECRET;
+
+/** Short-lived JWT so the client can subscribe to Supabase Realtime with RLS. */
+export function signSupabaseAccessToken(userId: string): string | null {
+  if (!supabaseJwtSecret) return null;
+  return jwt.sign(
+    {
+      sub: userId,
+      role: "authenticated",
+      aud: "authenticated",
+      iss: "supabase",
+    },
+    supabaseJwtSecret,
+    { expiresIn: "1h" },
+  );
+}
+
+export function isSupabaseRealtimeConfigured(): boolean {
+  return Boolean(supabaseJwtSecret && process.env.SUPABASE_URL);
+}

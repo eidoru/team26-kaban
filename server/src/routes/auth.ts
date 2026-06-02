@@ -6,7 +6,9 @@ import { prisma } from "../lib/prisma.js";
 import {
   generateOpaqueToken,
   getRefreshTokenExpiry,
+  isSupabaseRealtimeConfigured,
   signAccessToken,
+  signSupabaseAccessToken,
 } from "../lib/jwt.js";
 import { requireAuth } from "../middleware/auth.js";
 import { validateBody } from "../middleware/validate.js";
@@ -155,16 +157,26 @@ router.post("/refresh", authLimiter, validateBody(refreshSchema), async (req, re
     }
 
     const newRefreshToken = generateOpaqueToken();
-    await prisma.$transaction([
-      prisma.refreshToken.delete({ where: { id: stored.id } }),
-      prisma.refreshToken.create({
+    // Rotate atomically: only the request that actually deletes the stored token
+    // issues a new one. Concurrent refreshes (a common race on page load) that lose
+    // the delete get a clean 401 instead of an unhandled P2025 -> 500.
+    const rotated = await prisma.$transaction(async (tx) => {
+      const deleted = await tx.refreshToken.deleteMany({ where: { id: stored.id } });
+      if (deleted.count === 0) return false;
+      await tx.refreshToken.create({
         data: {
           token: newRefreshToken,
           userId: stored.userId,
           expiresAt: getRefreshTokenExpiry(),
         },
-      }),
-    ]);
+      });
+      return true;
+    });
+
+    if (!rotated) {
+      res.status(401).json({ error: "Invalid refresh token" });
+      return;
+    }
 
     res.json(authResponse(stored.user, newRefreshToken));
   } catch (err) {
@@ -309,5 +321,24 @@ router.patch(
     }
   },
 );
+
+router.get("/realtime-token", requireAuth, (req, res) => {
+  if (!isSupabaseRealtimeConfigured()) {
+    res.status(503).json({ error: "Realtime is not configured on the server" });
+    return;
+  }
+
+  const accessToken = signSupabaseAccessToken(req.user!.id);
+  if (!accessToken) {
+    res.status(503).json({ error: "Realtime is not configured on the server" });
+    return;
+  }
+
+  res.json({
+    accessToken,
+    expiresIn: 3600,
+    supabaseUrl: process.env.SUPABASE_URL,
+  });
+});
 
 export default router;

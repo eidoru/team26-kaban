@@ -116,17 +116,34 @@ export function computeAccruedInterest(
     .times(elapsedPeriods);
 }
 
+export function getNetAccruedInterest(
+  remainingPrincipal: Prisma.Decimal,
+  terms: ShortfallInterestTerms,
+  elapsedPeriods: number,
+  interestSettledAmount: Prisma.Decimal,
+): Prisma.Decimal {
+  const gross = computeAccruedInterest(remainingPrincipal, terms, elapsedPeriods);
+  const net = gross.minus(interestSettledAmount);
+  return net.gt(0) ? net : decimal(0);
+}
+
 export function getObligationTotalRemaining(
   obligation: {
     amount: Prisma.Decimal;
     settledAmount: Prisma.Decimal;
+    interestSettledAmount?: Prisma.Decimal;
   },
   terms: ShortfallInterestTerms,
   interestContext: ObligationInterestContext,
 ): Prisma.Decimal {
   const principalRemaining = getRemainingPrincipal(obligation.amount, obligation.settledAmount);
   const periods = countInterestPeriods(interestContext.sourceRoundNumber, interestContext);
-  const interest = computeAccruedInterest(principalRemaining, terms, periods);
+  const interest = getNetAccruedInterest(
+    principalRemaining,
+    terms,
+    periods,
+    obligation.interestSettledAmount ?? decimal(0),
+  );
   const total = principalRemaining.plus(interest);
   return total.gt(0) ? total : decimal(0);
 }

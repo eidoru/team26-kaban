@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type {
   AuditLogEntry,
+  CompletionSummary,
   DisputeEntry,
   GroupMember,
   LedgerEntry,
@@ -9,80 +10,12 @@ import type {
   RoundContribution,
   RoundSummary,
 } from "../api/client";
+import { formatFrequency } from "../lib/frequency";
 import { displayInitials } from "../lib/initials";
 import { statusBadgeClass, ui } from "../lib/ui";
 import { CopyableLink } from "../components/CopyableLink";
 
 export type CycleTab = "overview" | "schedule" | "ledger" | "issues" | "members" | "audit";
-
-export function CycleSidebar({
-  tabs,
-  active,
-  onSelect,
-}: {
-  tabs: { id: CycleTab; label: string; badge?: number }[];
-  active: CycleTab;
-  onSelect: (tab: CycleTab) => void;
-}) {
-  return (
-    <nav aria-label="Group sections">
-      <ul className="flex gap-1 overflow-x-auto pb-1 md:flex-col md:overflow-visible md:pb-0">
-        {tabs.map((tab) => {
-          const isActive = active === tab.id;
-          return (
-            <li key={tab.id} className="shrink-0 md:shrink">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={isActive}
-                onClick={() => onSelect(tab.id)}
-                className={`flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-left text-sm transition-colors ${
-                  isActive
-                    ? "bg-emerald-900 font-medium text-white"
-                    : "text-slate-600 hover:bg-slate-100"
-                }`}
-              >
-                <span>{tab.label}</span>
-                {tab.badge != null && tab.badge > 0 && (
-                  <span
-                    className={`inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1.5 py-0.5 text-xs leading-none ${
-                      isActive ? "bg-white/20 text-white" : "bg-red-600 text-white"
-                    }`}
-                  >
-                    {tab.badge > 99 ? "99+" : tab.badge}
-                  </span>
-                )}
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-    </nav>
-  );
-}
-
-export function CycleSectionLayout({
-  tabs,
-  active,
-  onSelect,
-  children,
-}: {
-  tabs: { id: CycleTab; label: string; badge?: number }[];
-  active: CycleTab;
-  onSelect: (tab: CycleTab) => void;
-  children: ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-6 md:flex-row md:gap-10">
-      <div className="md:w-40 md:shrink-0">
-        <CycleSidebar tabs={tabs} active={active} onSelect={onSelect} />
-      </div>
-      <div className="min-w-0 flex-1" role="tabpanel">
-        {children}
-      </div>
-    </div>
-  );
-}
 
 type StatCardTone = "neutral" | "success" | "warning" | "danger";
 
@@ -173,6 +106,132 @@ function StatCard({
   );
 }
 
+function formatCompletionDate(iso: string | null): string | null {
+  if (!iso) return null;
+  return new Date(iso).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function CompletionSummaryPanel({ summary }: { summary: CompletionSummary }) {
+  const amount = Number(summary.contributionAmount);
+  const collected = Number(summary.totalCollected);
+  const expected = Number(summary.totalExpected);
+  const outstanding = Number(summary.outstandingDebt);
+  const potPerRound = Number(summary.potPerRound);
+  const startLabel = formatCompletionDate(summary.startDate);
+  const endLabel = formatCompletionDate(summary.completedAt);
+  const freq = formatFrequency(summary.frequency, summary.frequencyDays);
+
+  return (
+    <div className="space-y-6 rounded-2xl border border-emerald-100 bg-gradient-to-b from-emerald-50/80 to-white p-5 sm:p-6">
+      <div>
+        <p className="text-xs font-medium uppercase tracking-wide text-emerald-800/70">Cycle complete</p>
+        <h2 className="mt-1 text-xl font-medium text-slate-900">{summary.groupName}</h2>
+        <p className="mt-2 text-sm text-slate-600">
+          {summary.memberCount} members · {freq} · ₱{amount.toLocaleString()} per member per round
+        </p>
+        {(startLabel || endLabel) && (
+          <p className="mt-1 text-sm text-slate-500">
+            {startLabel && `Started ${startLabel}`}
+            {startLabel && endLabel && " · "}
+            {endLabel && `Finished ${endLabel}`}
+            {summary.cycleDurationDays != null &&
+              ` · ${summary.cycleDurationDays} day${summary.cycleDurationDays === 1 ? "" : "s"}`}
+          </p>
+        )}
+      </div>
+
+      <div className={ui.metricGrid}>
+        <StatCard
+          label="Total collected"
+          value={`₱${collected.toLocaleString()}`}
+          hint={
+            expected > 0
+              ? `${summary.collectionRate}% of ₱${expected.toLocaleString()} expected`
+              : undefined
+          }
+          tone="success"
+          icon="wallet"
+        />
+        <StatCard
+          label="Collection rate"
+          value={`${summary.collectionRate}%`}
+          hint={`${summary.confirmedContributions} of ${summary.totalContributions} contributions confirmed`}
+          tone={summary.collectionRate >= 100 ? "success" : "warning"}
+          icon="check"
+        />
+        <StatCard
+          label="Outstanding debt"
+          value={`₱${outstanding.toLocaleString()}`}
+          hint={
+            summary.unsettledObligations > 0
+              ? `${summary.unsettledObligations} unsettled obligation${summary.unsettledObligations === 1 ? "" : "s"}`
+              : outstanding > 0
+                ? "Includes accrued interest where applicable"
+                : "All shortfalls settled"
+          }
+          tone={outstanding > 0 ? "danger" : "neutral"}
+          icon="wallet"
+        />
+        <StatCard
+          label="Disputes"
+          value={`${summary.resolvedDisputes} resolved`}
+          hint={
+            summary.openDisputes > 0
+              ? `${summary.openDisputes} still open`
+              : summary.resolvedDisputes > 0
+                ? "All disputes closed"
+                : "None raised"
+          }
+          tone={summary.openDisputes > 0 ? "warning" : "neutral"}
+          icon="alert"
+        />
+      </div>
+
+      <div>
+        <section className={ui.sectionCard}>
+          <h3 className={ui.sectionHeader}>Payout order</h3>
+          <p className={ui.sectionSubtitle}>
+            {summary.roundsCompleted} rounds · ₱{potPerRound.toLocaleString()} pot each
+          </p>
+          <ol className="mt-3 space-y-2">
+            {summary.payoutRecipients.map((round) => (
+              <li
+                key={round.roundNumber}
+                className="flex items-center gap-3 rounded-xl border border-gray-100 bg-white px-3 py-2.5"
+              >
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-sm font-medium text-slate-700">
+                  {round.roundNumber}
+                </span>
+                <span className={ui.avatarInitialsSm} aria-hidden>
+                  {displayInitials(round.recipientName)}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium text-slate-900">{round.recipientName}</p>
+                  <p className="text-xs text-slate-500">Due {round.dueDate}</p>
+                </div>
+                <p className="shrink-0 text-sm font-medium tabular-nums text-slate-800">
+                  ₱{Number(round.potAmount).toLocaleString()}
+                </p>
+              </li>
+            ))}
+          </ol>
+        </section>
+      </div>
+
+      {outstanding > 0 && (
+        <p className="rounded-xl border border-red-100 bg-red-50/50 px-4 py-3 text-sm text-red-900">
+          ₱{outstanding.toLocaleString()} remains owed to the organizer. Check the Issues tab for unsettled
+          obligations and settlement options.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function EmptyTabState({ title, description }: { title: string; description: string }) {
   return (
     <div className={`${ui.emptyState} py-8`}>
@@ -240,8 +299,290 @@ function obligationStatusLabel(status: string) {
   return "Unsettled";
 }
 
+function obligationStatusBadge(status: string) {
+  if (status === "settled") return ui.badgeActive;
+  if (status === "partially_settled") return ui.badgeForming;
+  return "rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-xs font-normal text-red-800";
+}
+
 function disputeStatusLabel(status: string) {
   return status === "resolved" ? "Resolved" : "Open";
+}
+
+function disputeStatusBadge(status: string) {
+  if (status === "resolved") return ui.badgeActive;
+  return ui.badgeForming;
+}
+
+const issueActionBtn = "inline-flex min-w-[7.5rem] items-center justify-center";
+
+function ObligationTableRow({
+  obligation,
+  isManager,
+  actionPending,
+  onSettleMemberDebts,
+  onCoverObligationExternally,
+}: {
+  obligation: ObligationEntry;
+  isManager: boolean;
+  actionPending: string | null;
+  onSettleMemberDebts: (memberId: string, memberName: string) => void;
+  onCoverObligationExternally: (obligationId: string, memberName: string) => void;
+}) {
+  const hasInterest = Number(obligation.accruedInterest) > 0;
+
+  return (
+    <tr className={ui.tableRow}>
+      <td className="px-4 py-3">
+        <div className="flex items-center gap-2.5">
+          <span className={ui.avatarInitialsSm} aria-hidden>
+            {displayInitials(obligation.displayName)}
+          </span>
+          <div className="min-w-0">
+            <p className="truncate font-medium text-slate-900">{obligation.displayName}</p>
+            {obligation.isPlaceholder && (
+              <p className="text-xs text-slate-500">Placeholder</p>
+            )}
+          </div>
+        </div>
+      </td>
+      <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-600">
+        R{obligation.roundNumber} · {obligation.roundDueDate}
+      </td>
+      <td className="px-4 py-3 text-right">
+        <div className="font-medium tabular-nums text-slate-900">
+          ₱{Number(obligation.remaining).toLocaleString()}
+        </div>
+        {hasInterest && (
+          <p className="mt-0.5 text-xs text-slate-500">
+            ₱{Number(obligation.principalRemaining).toLocaleString()} principal + ₱
+            {Number(obligation.accruedInterest).toLocaleString()} interest
+          </p>
+        )}
+        {obligation.externalCoverageNote && (
+          <p className="mt-1 text-xs text-amber-800">{obligation.externalCoverageNote}</p>
+        )}
+      </td>
+      <td className="px-4 py-3">
+        <span className={obligationStatusBadge(obligation.status)}>
+          {obligationStatusLabel(obligation.status)}
+        </span>
+      </td>
+      {isManager && (
+        <td className="px-4 py-3">
+          {obligation.status !== "settled" && (
+            <div className="flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => onSettleMemberDebts(obligation.debtorMembershipId, obligation.displayName)}
+                disabled={actionPending === `settle-${obligation.debtorMembershipId}`}
+                className={`${issueActionBtn} border border-transparent ${ui.btnPrimarySm}`}
+              >
+                {actionPending === `settle-${obligation.debtorMembershipId}` ? "…" : "Settle"}
+              </button>
+              <button
+                type="button"
+                onClick={() => onCoverObligationExternally(obligation.id, obligation.displayName)}
+                disabled={actionPending === `cover-${obligation.id}`}
+                className={`${issueActionBtn} ${ui.btnSecondarySm}`}
+              >
+                {actionPending === `cover-${obligation.id}` ? "…" : "Cover externally"}
+              </button>
+            </div>
+          )}
+        </td>
+      )}
+    </tr>
+  );
+}
+
+function DisputeRow({
+  dispute,
+  isManager,
+  actionPending,
+  onResolveDispute,
+  muted = false,
+}: {
+  dispute: DisputeEntry;
+  isManager: boolean;
+  actionPending: string | null;
+  onResolveDispute: (disputeId: string) => void;
+  muted?: boolean;
+}) {
+  return (
+    <li
+      className={`flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4 ${
+        muted ? "opacity-70" : ""
+      }`}
+    >
+      <div className="flex min-w-0 flex-1 items-start gap-2.5">
+        <span className={ui.avatarInitialsSm} aria-hidden>
+          {displayInitials(dispute.memberDisplayName)}
+        </span>
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="truncate font-medium text-slate-900">{dispute.memberDisplayName}</p>
+            <span className={disputeStatusBadge(dispute.status)}>{disputeStatusLabel(dispute.status)}</span>
+          </div>
+          <p className="mt-0.5 text-sm text-slate-500">
+            Round {dispute.roundNumber} · ₱{Number(dispute.contributionAmount).toLocaleString()} · Raised by{" "}
+            {dispute.raisedByName}
+          </p>
+          {dispute.note && <p className="mt-2 text-sm text-slate-700">{dispute.note}</p>}
+          {dispute.resolution && (
+            <p className="mt-2 text-sm text-emerald-800">Resolved: {dispute.resolution}</p>
+          )}
+        </div>
+      </div>
+      {isManager && dispute.status === "open" && (
+        <button
+          type="button"
+          onClick={() => onResolveDispute(dispute.id)}
+          disabled={actionPending === `resolve-${dispute.id}`}
+          className={`${issueActionBtn} shrink-0 ${ui.btnPrimarySm}`}
+        >
+          {actionPending === `resolve-${dispute.id}` ? "…" : "Resolve"}
+        </button>
+      )}
+    </li>
+  );
+}
+
+function IssuesPanel({
+  obligations,
+  disputes,
+  isManager,
+  actionPending,
+  onSettleMemberDebts,
+  onCoverObligationExternally,
+  onResolveDispute,
+}: {
+  obligations: ObligationEntry[];
+  disputes: DisputeEntry[];
+  isManager: boolean;
+  actionPending: string | null;
+  onSettleMemberDebts: (memberId: string, memberName: string) => void;
+  onCoverObligationExternally: (obligationId: string, memberName: string) => void;
+  onResolveDispute: (disputeId: string) => void;
+}) {
+  const openObligations = obligations.filter((o) => o.status !== "settled");
+  const openDisputes = disputes.filter((d) => d.status === "open");
+  const resolvedDisputes = disputes.filter((d) => d.status === "resolved");
+  const totalOutstanding = openObligations.reduce((sum, o) => sum + Number(o.remaining), 0);
+
+  if (openObligations.length === 0 && disputes.length === 0) {
+    return (
+      <EmptyTabState
+        title="No open issues"
+        description="Shortfalls are recorded automatically when a round closes. Payment disputes appear here."
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {(openObligations.length > 0 || openDisputes.length > 0) && (
+        <section className={ui.sectionCard}>
+          <h2 className={ui.sectionHeader}>At a glance</h2>
+          <dl className={`${ui.metricGrid2} mt-4`}>
+            {openObligations.length > 0 && (
+              <div>
+                <dt className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                  Outstanding debt
+                </dt>
+                <dd className="mt-1 text-2xl font-medium tabular-nums text-slate-900">
+                  ₱{totalOutstanding.toLocaleString()}
+                </dd>
+                <dd className="mt-0.5 text-sm text-slate-500">
+                  {openObligations.length} obligation{openObligations.length === 1 ? "" : "s"}
+                </dd>
+              </div>
+            )}
+            {openDisputes.length > 0 && (
+              <div>
+                <dt className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                  Open disputes
+                </dt>
+                <dd className="mt-1 text-2xl font-medium text-slate-900">{openDisputes.length}</dd>
+                <dd className="mt-0.5 text-sm text-slate-500">Awaiting resolution</dd>
+              </div>
+            )}
+          </dl>
+        </section>
+      )}
+
+      {openObligations.length > 0 && (
+        <section className={ui.sectionCard}>
+          <h2 className={ui.sectionHeader}>Outstanding obligations</h2>
+          <p className={ui.sectionSubtitle}>
+            Recorded when a round closes. Unpaid balances are owed to the organizer; interest may
+            accrue each period until settled.
+          </p>
+          <div className={ui.tableWrap}>
+            <table className="w-full min-w-[34rem] text-left text-sm">
+              <thead className={ui.tableHead}>
+                <tr>
+                  <th className="px-4 py-2.5 font-normal">Member</th>
+                  <th className="px-4 py-2.5 font-normal">Round</th>
+                  <th className="px-4 py-2.5 text-right font-normal">Remaining</th>
+                  <th className="px-4 py-2.5 font-normal">Status</th>
+                  {isManager && <th className="px-4 py-2.5 text-right font-normal">Actions</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {openObligations.map((obligation) => (
+                  <ObligationTableRow
+                    key={obligation.id}
+                    obligation={obligation}
+                    isManager={isManager}
+                    actionPending={actionPending}
+                    onSettleMemberDebts={onSettleMemberDebts}
+                    onCoverObligationExternally={onCoverObligationExternally}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {openDisputes.length > 0 && (
+        <section className={ui.sectionCard}>
+          <h2 className={ui.sectionHeader}>Open disputes</h2>
+          <p className={ui.sectionSubtitle}>Payment disagreements raised during the cycle.</p>
+          <ul className="mt-4 divide-y divide-gray-100 overflow-hidden rounded-xl border border-gray-100">
+            {openDisputes.map((dispute) => (
+              <DisputeRow
+                key={dispute.id}
+                dispute={dispute}
+                isManager={isManager}
+                actionPending={actionPending}
+                onResolveDispute={onResolveDispute}
+              />
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {resolvedDisputes.length > 0 && (
+        <section className={ui.sectionCard}>
+          <h2 className={ui.sectionHeader}>Resolved disputes</h2>
+          <ul className="mt-4 divide-y divide-gray-100 overflow-hidden rounded-xl border border-gray-100">
+            {resolvedDisputes.map((dispute) => (
+              <DisputeRow
+                key={dispute.id}
+                dispute={dispute}
+                isManager={isManager}
+                actionPending={actionPending}
+                onResolveDispute={onResolveDispute}
+                muted
+              />
+            ))}
+          </ul>
+        </section>
+      )}
+    </div>
+  );
 }
 
 function auditCategoryClass(category: string) {
@@ -599,6 +940,7 @@ export interface GroupCycleTabsProps {
   dashboard?: {
     pendingConfirmations: number;
     openDisputes: number;
+    outstandingObligations: number;
     totalOutstanding: string;
     memberCount: number;
     currentRound: {
@@ -608,16 +950,9 @@ export interface GroupCycleTabsProps {
       isOverdue: boolean;
     } | null;
   };
-  completionSummary?: {
-    roundsCompleted: number;
-    totalCollected: string;
-    confirmedContributions: number;
-    totalContributions: number;
-    outstandingDebt: string;
-    unsettledObligations: number;
-    resolvedDisputes: number;
-    openDisputes: number;
-  };
+  completionSummary?: CompletionSummary;
+  completionSummaryLoading?: boolean;
+  completionSummaryError?: boolean;
   obligations: ObligationEntry[];
   disputes: DisputeEntry[];
   ledgerEntries: LedgerEntry[];
@@ -628,7 +963,11 @@ export interface GroupCycleTabsProps {
   onRecordPayment: (contributionId: string, expectedAmount: string) => void;
   onRaiseDispute: (contributionId: string, memberName: string) => void;
   onSettleMemberDebts: (memberId: string, memberName: string) => void;
+  onCoverObligationExternally: (obligationId: string, memberName: string) => void;
   onResolveDispute: (disputeId: string) => void;
+  onAdvanceRound?: () => void;
+  advanceRoundPending?: boolean;
+  showDemoTools?: boolean;
   claimUrls?: Record<string, string>;
   onClaimInvite?: (membershipId: string) => void;
   claimPending?: boolean;
@@ -648,6 +987,8 @@ export function GroupCycleTabPanels(props: GroupCycleTabsProps) {
     reliabilityByMember,
     dashboard,
     completionSummary,
+    completionSummaryLoading,
+    completionSummaryError,
     obligations,
     disputes,
     ledgerEntries,
@@ -658,7 +999,11 @@ export function GroupCycleTabPanels(props: GroupCycleTabsProps) {
     onRecordPayment,
     onRaiseDispute,
     onSettleMemberDebts,
+    onCoverObligationExternally,
     onResolveDispute,
+    onAdvanceRound,
+    advanceRoundPending = false,
+    showDemoTools = false,
     claimUrls = {},
     onClaimInvite,
     claimPending = false,
@@ -678,40 +1023,18 @@ export function GroupCycleTabPanels(props: GroupCycleTabsProps) {
 
     return (
       <div className="space-y-6">
-        {isCompleted && completionSummary && (
-          <div className="rounded-xl border border-gray-100 bg-slate-50 p-5">
-            <h2 className="text-base font-medium text-slate-900">Cycle complete</h2>
-            <p className="mt-1 text-sm text-slate-600">
-              {completionSummary.roundsCompleted} rounds · ₱
-              {Number(completionSummary.totalCollected).toLocaleString()} collected
-            </p>
-            <div className="mt-4 grid gap-3 sm:grid-cols-3">
-              <StatCard
-                label="Confirmed payments"
-                value={`${completionSummary.confirmedContributions} of ${completionSummary.totalContributions}`}
-                tone="success"
-                icon="check"
-              />
-              <StatCard
-                label="Outstanding debt"
-                value={`₱${Number(completionSummary.outstandingDebt).toLocaleString()}`}
-                tone={Number(completionSummary.outstandingDebt) > 0 ? "danger" : "neutral"}
-                icon="wallet"
-              />
-              <StatCard
-                label="Disputes"
-                value={`${completionSummary.resolvedDisputes} resolved`}
-                hint={
-                  completionSummary.openDisputes > 0
-                    ? `${completionSummary.openDisputes} still open`
-                    : "All resolved"
-                }
-                tone={completionSummary.openDisputes > 0 ? "warning" : "neutral"}
-                icon="alert"
-              />
-            </div>
+        {isCompleted && completionSummaryLoading && (
+          <div className={`${ui.emptyState} py-8`}>
+            <p className="font-medium text-slate-900">Loading completion summary…</p>
           </div>
         )}
+        {isCompleted && completionSummaryError && !completionSummary && (
+          <div className={`${ui.emptyState} py-8`}>
+            <p className="font-medium text-slate-900">Could not load completion summary</p>
+            <p className={`mt-2 text-sm ${ui.muted}`}>Refresh the page to try again.</p>
+          </div>
+        )}
+        {isCompleted && completionSummary && <CompletionSummaryPanel summary={completionSummary} />}
 
         {currentRound ? (
           <>
@@ -776,7 +1099,7 @@ export function GroupCycleTabPanels(props: GroupCycleTabsProps) {
             )}
 
             {isManager && isActive && dashboard && (
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className={ui.metricGrid2}>
                 <StatCard
                   label="Pending confirmations"
                   value={String(dashboard.pendingConfirmations)}
@@ -794,7 +1117,11 @@ export function GroupCycleTabPanels(props: GroupCycleTabsProps) {
                 <StatCard
                   label="Outstanding debt"
                   value={`₱${Number(dashboard.totalOutstanding).toLocaleString()}`}
-                  hint={Number(dashboard.totalOutstanding) > 0 ? "Across all rounds" : "Fully settled"}
+                  hint={
+                    Number(dashboard.totalOutstanding) > 0
+                      ? `${dashboard.outstandingObligations} obligation${dashboard.outstandingObligations === 1 ? "" : "s"} across all rounds`
+                      : "Fully settled"
+                  }
                   tone={Number(dashboard.totalOutstanding) > 0 ? "danger" : "success"}
                   icon="wallet"
                 />
@@ -813,8 +1140,28 @@ export function GroupCycleTabPanels(props: GroupCycleTabsProps) {
               </div>
             )}
 
+            {showDemoTools && isManager && isActive && currentRound && onAdvanceRound && (
+              <section className={`${ui.sectionCard} border-amber-100 bg-amber-50/40`}>
+                <h3 className={ui.sectionHeader}>Demo tools</h3>
+                <p className={ui.sectionSubtitle}>
+                  Close Round {currentRound.number} immediately and open the next payout — no need to wait
+                  for the due date.
+                </p>
+                <div className={ui.actionBar}>
+                  <button
+                    type="button"
+                    onClick={onAdvanceRound}
+                    disabled={advanceRoundPending}
+                    className={ui.btnSecondary}
+                  >
+                    {advanceRoundPending ? "Advancing…" : "Advance round"}
+                  </button>
+                </div>
+              </section>
+            )}
+
             <section>
-              <h3 className="mb-3 text-sm font-medium text-slate-900">Contributions</h3>
+              <h3 className={`mb-3 ${ui.sectionHeader}`}>Contributions</h3>
               {contributions.length > 0 ? (
                 <ContributionsList
                   contributions={contributions}
@@ -882,116 +1229,16 @@ export function GroupCycleTabPanels(props: GroupCycleTabsProps) {
   }
 
   if (cycleTab === "issues") {
-    const openObligations = obligations.filter((o) => o.status !== "settled");
-    const hasObligations = openObligations.length > 0;
-    const hasDisputes = disputes.length > 0;
-
-    if (!hasObligations && !hasDisputes) {
-      return (
-        <EmptyTabState
-          title="No open issues"
-          description="Shortfalls are recorded automatically when a round closes. Payment disputes appear here."
-        />
-      );
-    }
-
     return (
-      <div className="space-y-8">
-        {hasObligations && (
-          <section>
-            <h2 className="text-base font-medium text-slate-900">Outstanding obligations</h2>
-            <p className="mt-1 text-sm text-slate-500">
-              Recorded automatically when a round closes. Each shortfall is owed to the organizer;
-              interest accrues each round period on unpaid principal until settled.
-            </p>
-            <div className="mt-3 max-w-full overflow-x-auto rounded-2xl border border-gray-100 bg-white">
-              <table className="min-w-full text-sm">
-                <thead className="border-b border-gray-100 bg-gray-50 text-left text-slate-600">
-                  <tr>
-                    <th className="px-4 py-2 font-medium">Member</th>
-                    <th className="px-4 py-2 font-medium">Round</th>
-                    <th className="px-4 py-2 font-medium">Remaining</th>
-                    <th className="px-4 py-2 font-medium">Status</th>
-                    {isManager && <th className="px-4 py-2 font-medium">Actions</th>}
-                  </tr>
-                </thead>
-                <tbody>
-                  {openObligations.map((o) => (
-                    <tr key={o.id} className="border-b border-gray-50 last:border-0">
-                      <td className="px-4 py-2">{o.displayName}</td>
-                      <td className="px-4 py-2">
-                        R{o.roundNumber} · {o.roundDueDate}
-                      </td>
-                      <td className="px-4 py-2">
-                        <div className="font-medium">₱{Number(o.remaining).toLocaleString()}</div>
-                        {Number(o.accruedInterest) > 0 && (
-                          <p className="mt-0.5 text-xs text-slate-500">
-                            ₱{Number(o.principalRemaining).toLocaleString()} principal + ₱
-                            {Number(o.accruedInterest).toLocaleString()} interest
-                          </p>
-                        )}
-                      </td>
-                      <td className="px-4 py-2">{obligationStatusLabel(o.status)}</td>
-                      {isManager && (
-                        <td className="px-4 py-2">
-                          <div className="flex flex-wrap gap-2">
-                            {o.status !== "settled" && (
-                              <button
-                                type="button"
-                                onClick={() => onSettleMemberDebts(o.debtorMembershipId, o.displayName)}
-                                disabled={actionPending === `settle-${o.debtorMembershipId}`}
-                                className={ui.btnPrimarySm}
-                              >
-                                Settle
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        )}
-
-        {hasDisputes && (
-          <section>
-            <h2 className="text-base font-medium text-slate-900">Disputes</h2>
-            <ul className="mt-3 space-y-2">
-              {disputes.map((d) => (
-                <li key={d.id} className={ui.cardFlat}>
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="font-medium text-slate-900">
-                        Round {d.roundNumber} · {d.memberDisplayName}
-                      </p>
-                      <p className="mt-1 text-sm text-slate-600">
-                        ₱{Number(d.contributionAmount).toLocaleString()} · {disputeStatusLabel(d.status)}
-                      </p>
-                      {d.note && <p className="mt-2 text-sm text-slate-700">{d.note}</p>}
-                      {d.resolution && (
-                        <p className="mt-2 text-sm text-emerald-800">Resolved: {d.resolution}</p>
-                      )}
-                    </div>
-                    {isManager && d.status === "open" && (
-                      <button
-                        type="button"
-                        onClick={() => onResolveDispute(d.id)}
-                        disabled={actionPending === `resolve-${d.id}`}
-                        className={ui.btnPrimarySm}
-                      >
-                        Resolve
-                      </button>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-      </div>
+      <IssuesPanel
+        obligations={obligations}
+        disputes={disputes}
+        isManager={isManager}
+        actionPending={actionPending}
+        onSettleMemberDebts={onSettleMemberDebts}
+        onCoverObligationExternally={onCoverObligationExternally}
+        onResolveDispute={onResolveDispute}
+      />
     );
   }
 

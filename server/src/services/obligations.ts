@@ -1,11 +1,10 @@
 import { ContributionSource, GroupStatus, ObligationStatus, Prisma } from "@prisma/client";
-import { createNotification } from "../lib/audit.js";
 import { prisma } from "../lib/prisma.js";
 import { GroupError } from "./groups.js";
 import {
-  computeAccruedInterest,
   countInterestPeriods,
   getGroupInterestRoundContext,
+  getNetAccruedInterest,
   getObligationTotalRemaining,
   getRemainingPrincipal,
   splitSettlementPayment,
@@ -36,6 +35,18 @@ export function obligationStatusFromAmounts(
 ): ObligationStatus {
   if (settledAmount.gte(amount)) return ObligationStatus.settled;
   if (settledAmount.gt(0)) return ObligationStatus.partially_settled;
+  return ObligationStatus.unsettled;
+}
+
+export function obligationStatusFromRemaining(
+  settledAmount: Prisma.Decimal,
+  interestSettledAmount: Prisma.Decimal,
+  totalRemaining: Prisma.Decimal,
+): ObligationStatus {
+  if (totalRemaining.lte(0)) return ObligationStatus.settled;
+  if (settledAmount.gt(0) || interestSettledAmount.gt(0)) {
+    return ObligationStatus.partially_settled;
+  }
   return ObligationStatus.unsettled;
 }
 
@@ -76,6 +87,7 @@ export function serializeObligation(
     sourceRoundId: string;
     amount: Prisma.Decimal;
     settledAmount: Prisma.Decimal;
+    interestSettledAmount: Prisma.Decimal;
     status: ObligationStatus;
     externalCoverageNote: string | null;
     createdAt: Date;
@@ -90,7 +102,7 @@ export function serializeObligation(
       : 0;
   const accruedInterest =
     terms != null && interestContext != null
-      ? computeAccruedInterest(principalRemaining, terms, periods)
+      ? getNetAccruedInterest(principalRemaining, terms, periods, o.interestSettledAmount)
       : decimal(0);
   const totalRemaining =
     terms != null && interestContext != null
@@ -103,6 +115,7 @@ export function serializeObligation(
     sourceRoundId: o.sourceRoundId,
     amount: o.amount.toString(),
     settledAmount: o.settledAmount.toString(),
+    interestSettledAmount: o.interestSettledAmount.toString(),
     principalRemaining: principalRemaining.toString(),
     accruedInterest: accruedInterest.toString(),
     remaining: totalRemaining.gt(0) ? totalRemaining.toString() : "0",
@@ -113,72 +126,92 @@ export function serializeObligation(
 }
 
 /** Create obligations for unpaid / partially paid contributions when a round closes. */
-export async function processRoundShortfall(tx: Tx, roundId: string, actorId?: string) {
-  const round = await tx.round.findUnique({
-    where: { id: roundId },
-    include: {
-      group: true,
-      contributions: {
-        include: {
-          membership: { select: { displayName: true, userId: true } },
-        },
-      },
-    },
-  });
-  if (!round) {
-    return {
-      created: 0,
-      totalShortfall: "0",
-      notifications: null as RoundShortfallNotifications | null,
+export async function processRoundShortfall(
+  tx: Tx,
+  round: {
+    id: string;
+    number: number;
+    groupId: string;
+    group: {
+      name: string;
+      contributionAmount: Prisma.Decimal;
+      shortfallInterestRatePercent: Prisma.Decimal;
+      frequency: import("@prisma/client").GroupFrequency;
+      frequencyDays: number | null;
     };
-  }
-
+    contributions: {
+      membershipId: string;
+      status: string;
+      amount: Prisma.Decimal;
+      source: ContributionSource;
+      membership: { displayName: string; userId: string | null; isManager: boolean };
+    }[];
+  },
+  actorId?: string,
+) {
   const expected = round.group.contributionAmount;
   let created = 0;
   let totalShortfall = decimal(0);
   const debtorNotifications: { userId: string; amount: string }[] = [];
 
+  const existingDebtors = new Set(
+    (
+      await tx.obligation.findMany({
+        where: { sourceRoundId: round.id },
+        select: { debtorMembershipId: true },
+      })
+    ).map((o) => o.debtorMembershipId),
+  );
+
+  const pendingCreates: {
+    contribution: (typeof round.contributions)[number];
+    owed: Prisma.Decimal;
+  }[] = [];
+
   for (const contribution of round.contributions) {
+    if (contribution.membership.isManager) continue; // manager cannot owe themselves
     const owed = getRoundCloseObligationAmount(expected, contribution);
     if (owed.lte(0)) continue;
+    if (existingDebtors.has(contribution.membershipId)) continue;
+    pendingCreates.push({ contribution, owed });
+  }
 
-    const existing = await tx.obligation.findFirst({
-      where: {
-        debtorMembershipId: contribution.membershipId,
-        sourceRoundId: round.id,
-      },
-    });
-    if (existing) continue;
-
-    const obligation = await tx.obligation.create({
-      data: {
-        debtorMembershipId: contribution.membershipId,
-        sourceRoundId: round.id,
-        amount: owed,
-      },
-    });
-
-    await tx.auditLog.create({
-      data: {
-        groupId: round.groupId,
-        actorId: actorId ?? null,
-        action: "obligation.created",
-        entityType: "obligation",
-        entityId: obligation.id,
-        metadata: {
-          roundNumber: round.number,
-          membershipId: contribution.membershipId,
-          memberDisplayName: contribution.membership.displayName,
-          shortfall: owed.toString(),
-          contributionStatus: contribution.status,
-          contributionSource: contribution.source,
-          managerRecorded: contribution.source === ContributionSource.organizer,
+  const results = await Promise.all(
+    pendingCreates.map(async ({ contribution, owed }) => {
+      const obligation = await tx.obligation.create({
+        data: {
+          debtorMembershipId: contribution.membershipId,
+          sourceRoundId: round.id,
+          amount: owed,
         },
-      },
-    });
+      });
 
-    totalShortfall = totalShortfall.plus(owed);
-    created++;
+      await tx.auditLog.create({
+        data: {
+          groupId: round.groupId,
+          actorId: actorId ?? null,
+          action: "obligation.created",
+          entityType: "obligation",
+          entityId: obligation.id,
+          metadata: {
+            roundNumber: round.number,
+            membershipId: contribution.membershipId,
+            memberDisplayName: contribution.membership.displayName,
+            shortfall: owed.toString(),
+            contributionStatus: contribution.status,
+            contributionSource: contribution.source,
+            managerRecorded: contribution.source === ContributionSource.organizer,
+          },
+        },
+      });
+
+      return { contribution, owed };
+    }),
+  );
+
+  created = results.length;
+  totalShortfall = results.reduce((sum, { owed }) => sum.plus(owed), decimal(0));
+  for (const { contribution, owed } of results) {
     if (contribution.membership.userId) {
       debtorNotifications.push({
         userId: contribution.membership.userId,
@@ -223,8 +256,17 @@ export async function notifyRoundShortfalls(payload: RoundShortfallNotifications
     select: { userId: true },
   });
 
+  const notifications: {
+    userId: string;
+    groupId: string;
+    type: "general";
+    title: string;
+    body: string;
+    link: string;
+  }[] = [];
+
   if (manager?.userId) {
-    await createNotification({
+    notifications.push({
       userId: manager.userId,
       groupId: payload.groupId,
       type: "general",
@@ -234,13 +276,12 @@ export async function notifyRoundShortfalls(payload: RoundShortfallNotifications
     });
   }
 
+  const rate = Number(payload.shortfallInterestRatePercent);
+  const interestNote =
+    rate > 0 ? ` Interest of ${rate}% per round period applies until paid.` : "";
+
   for (const debtor of payload.debtors) {
-    const rate = Number(payload.shortfallInterestRatePercent);
-    const interestNote =
-      rate > 0
-        ? ` Interest of ${rate}% per round period applies until paid.`
-        : "";
-    await createNotification({
+    notifications.push({
       userId: debtor.userId,
       groupId: payload.groupId,
       type: "general",
@@ -248,6 +289,10 @@ export async function notifyRoundShortfalls(payload: RoundShortfallNotifications
       body: `You owe ₱${Number(debtor.amount).toLocaleString()} to the organizer for round ${payload.roundNumber}.${interestNote}`,
       link: `/groups/${payload.groupId}`,
     });
+  }
+
+  if (notifications.length > 0) {
+    await prisma.notification.createMany({ data: notifications });
   }
 }
 
@@ -293,16 +338,31 @@ export async function applyFifoSettlement(
     if (remaining.lte(0)) break;
 
     const principalRemaining = getRemainingPrincipal(obligation.amount, obligation.settledAmount);
-    if (principalRemaining.lte(0)) continue;
-
+    const interestContext = {
+      sourceRoundNumber: obligation.sourceRound.number,
+      ...groupRoundContext,
+    };
     const periods = countInterestPeriods(obligation.sourceRound.number, groupRoundContext);
-    const interestDue = computeAccruedInterest(principalRemaining, terms, periods);
+    const interestDue = getNetAccruedInterest(
+      principalRemaining,
+      terms,
+      periods,
+      obligation.interestSettledAmount,
+    );
     const totalDue = principalRemaining.plus(interestDue);
     if (totalDue.lte(0)) continue;
 
     const slice = remaining.lte(totalDue) ? remaining : totalDue;
-    const { principalPaid } = splitSettlementPayment(slice, principalRemaining, interestDue);
+    const { interestPaid, principalPaid } = splitSettlementPayment(slice, principalRemaining, interestDue);
     const newSettled = obligation.settledAmount.plus(principalPaid);
+    const newInterestSettled = obligation.interestSettledAmount.plus(interestPaid);
+    const updatedForTotal = {
+      amount: obligation.amount,
+      settledAmount: newSettled,
+      interestSettledAmount: newInterestSettled,
+    };
+    const totalRemaining = getObligationTotalRemaining(updatedForTotal, terms, interestContext);
+    const newStatus = obligationStatusFromRemaining(newSettled, newInterestSettled, totalRemaining);
 
     await tx.settlement.create({
       data: {
@@ -316,7 +376,8 @@ export async function applyFifoSettlement(
       where: { id: obligation.id },
       data: {
         settledAmount: newSettled,
-        status: obligationStatus(obligation.amount, newSettled),
+        interestSettledAmount: newInterestSettled,
+        status: newStatus,
       },
     });
 
@@ -369,6 +430,71 @@ export async function settleMemberDebts(
   return prisma.$transaction(async (tx) =>
     applyFifoSettlement(tx, groupId, debtorMembershipId, decimal(amount), actorId, note),
   );
+}
+
+/** Manager records that they fronted the round pot for a member's shortfall; debt remains until settled. */
+export async function coverObligationExternally(
+  groupId: string,
+  obligationId: string,
+  actorId: string,
+  note: string,
+) {
+  const obligation = await prisma.obligation.findFirst({
+    where: { id: obligationId, sourceRound: { groupId } },
+    include: {
+      debtorMembership: { select: { displayName: true } },
+      sourceRound: { select: { number: true, group: true } },
+    },
+  });
+  if (!obligation) throw new ObligationError(404, "Obligation not found");
+  if (obligation.status === ObligationStatus.settled) {
+    throw new ObligationError(409, "This obligation is already settled");
+  }
+
+  const group = obligation.sourceRound.group;
+  const terms = toShortfallInterestTerms(group);
+  const groupRoundContext = await getGroupInterestRoundContext(prisma, groupId);
+  const principalRemaining = getRemainingPrincipal(obligation.amount, obligation.settledAmount);
+  const periods = countInterestPeriods(obligation.sourceRound.number, groupRoundContext);
+  const accruedInterest = getNetAccruedInterest(
+    principalRemaining,
+    terms,
+    periods,
+    obligation.interestSettledAmount,
+  );
+
+  const trimmedNote = note.trim();
+  if (!trimmedNote) throw new ObligationError(400, "A note is required when covering externally");
+
+  const coverageNote = obligation.externalCoverageNote
+    ? `${obligation.externalCoverageNote}\n${trimmedNote}`
+    : trimmedNote;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.obligation.update({
+      where: { id: obligationId },
+      data: { externalCoverageNote: coverageNote },
+    });
+
+    await tx.auditLog.create({
+      data: {
+        groupId,
+        actorId,
+        action: "obligation.covered_externally",
+        entityType: "obligation",
+        entityId: obligationId,
+        metadata: {
+          roundNumber: obligation.sourceRound.number,
+          memberDisplayName: obligation.debtorMembership.displayName,
+          principalRemaining: principalRemaining.toString(),
+          accruedInterest: accruedInterest.toString(),
+          note: trimmedNote,
+        },
+      },
+    });
+  });
+
+  return { obligationId, externalCoverageNote: coverageNote };
 }
 
 export async function getGroupObligations(groupId: string) {

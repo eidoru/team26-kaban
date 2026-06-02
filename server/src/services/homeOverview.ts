@@ -1,8 +1,7 @@
 import { ContributionStatus, GroupStatus, RoundStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
-import { getManagerObligationsOverview } from "./dashboard.js";
-import { countFilledSlotsByGroupIds, serializeGroup } from "./groups.js";
-import { countUnreadNotifications, listUserNotifications } from "./notifications.js";
+import { getManagerTotalOutstanding } from "./dashboard.js";
+import { countUnreadNotifications } from "./notifications.js";
 import { startOfUtcDay } from "./schedule.js";
 
 export type AttentionKind =
@@ -39,20 +38,20 @@ interface DueContribution {
   isOverdue: boolean;
 }
 
-async function getFormingGroupDetails(
-  memberships: Array<{
-    groupId: string;
-    isManager: boolean;
-    group: {
-      id: string;
-      name: string;
-      status: string;
-      slotCount: number;
-      startDate: Date | null;
-    };
-  }>,
-  filledCounts: Map<string, number>,
-): Promise<FormingGroupDetail[]> {
+type HomeMembership = {
+  groupId: string;
+  isManager: boolean;
+  group: {
+    id: string;
+    name: string;
+    status: string;
+    slotCount: number;
+    startDate: Date | null;
+    _count: { memberships: number };
+  };
+};
+
+async function getFormingGroupDetails(memberships: HomeMembership[]): Promise<FormingGroupDetail[]> {
   const formingManaged = memberships.filter(
     (m) => m.isManager && m.group.status === GroupStatus.forming,
   );
@@ -72,7 +71,7 @@ async function getFormingGroupDetails(
   }
 
   return formingManaged.map((m) => {
-    const filled = filledCounts.get(m.groupId) ?? 0;
+    const filled = m.group._count.memberships;
     const openSlots = Math.max(0, m.group.slotCount - filled);
     const members = membersByGroup.get(m.groupId) ?? [];
     const needsPayoutOrder = members.some((mem) => mem.turnNumber === null);
@@ -87,49 +86,40 @@ async function getFormingGroupDetails(
   });
 }
 
-async function countPendingConfirmations(managerUserId: string): Promise<number> {
-  return prisma.contribution.count({
-    where: {
-      status: ContributionStatus.reported,
-      round: {
-        status: RoundStatus.current,
-        group: {
-          managerId: managerUserId,
-          status: GroupStatus.active,
-        },
-      },
-    },
-  });
-}
-
-async function getFirstGroupWithPendingConfirmations(
+async function getPendingConfirmationsInfo(
   managerUserId: string,
-): Promise<{ groupId: string; groupName: string } | null> {
-  const row = await prisma.contribution.findFirst({
-    where: {
-      status: ContributionStatus.reported,
-      round: {
-        status: RoundStatus.current,
-        group: {
-          managerId: managerUserId,
-          status: GroupStatus.active,
-        },
+): Promise<{ count: number; confirmGroup: { groupId: string; groupName: string } | null }> {
+  const where = {
+    status: ContributionStatus.reported,
+    round: {
+      status: RoundStatus.current,
+      group: {
+        managerId: managerUserId,
+        status: GroupStatus.active,
       },
     },
-    select: {
-      round: {
-        select: {
-          group: { select: { id: true, name: true } },
-        },
-      },
-    },
-    orderBy: { reportedAt: "asc" },
-  });
+  };
 
-  if (!row) return null;
+  const [count, row] = await Promise.all([
+    prisma.contribution.count({ where }),
+    prisma.contribution.findFirst({
+      where,
+      select: {
+        round: {
+          select: {
+            group: { select: { id: true, name: true } },
+          },
+        },
+      },
+      orderBy: { reportedAt: "asc" },
+    }),
+  ]);
+
   return {
-    groupId: row.round.group.id,
-    groupName: row.round.group.name,
+    count,
+    confirmGroup: row
+      ? { groupId: row.round.group.id, groupName: row.round.group.name }
+      : null,
   };
 }
 
@@ -250,59 +240,40 @@ export async function getHomeOverview(userId: string) {
           id: true,
           name: true,
           status: true,
-          contributionAmount: true,
-          frequency: true,
-          frequencyDays: true,
           slotCount: true,
           startDate: true,
-          managerId: true,
-          shortfallInterestRatePercent: true,
+          _count: { select: { memberships: true } },
         },
       },
     },
     orderBy: { updatedAt: "desc" },
   });
 
-  const groupIds = memberships.map((m) => m.groupId);
-  const filledCounts = await countFilledSlotsByGroupIds(groupIds);
-
-  const groups = memberships.map((m) => ({
-    ...serializeGroup(
-      m.group,
-      filledCounts.get(m.groupId) ?? 0,
-      m.isManager ? "manager" : "member",
-    ),
-    membershipId: m.id,
-  }));
-
-  const pendingConfirmationsPromise = countPendingConfirmations(userId);
+  const managesAnyGroup = memberships.some((m) => m.isManager);
 
   const [
-    recentActivity,
     unreadNotifications,
-    obligationsOverview,
-    pendingConfirmations,
+    totalOutstanding,
+    pendingConfirmationsInfo,
     dueContributions,
     formingDetails,
   ] = await Promise.all([
-    listUserNotifications(userId, 8),
     countUnreadNotifications(userId),
-    getManagerObligationsOverview(userId),
-    pendingConfirmationsPromise,
+    managesAnyGroup ? getManagerTotalOutstanding(userId) : Promise.resolve("0"),
+    getPendingConfirmationsInfo(userId),
     getMemberDueContributions(userId),
-    getFormingGroupDetails(memberships, filledCounts),
+    getFormingGroupDetails(memberships),
   ]);
 
-  const confirmGroup =
-    pendingConfirmations > 0 ? await getFirstGroupWithPendingConfirmations(userId) : null;
+  const { count: pendingConfirmations, confirmGroup } = pendingConfirmationsInfo;
 
-  const activeGroups = groups.filter((g) => g.status === GroupStatus.active).length;
-  const formingGroups = groups.filter((g) => g.status === GroupStatus.forming).length;
+  const activeGroups = memberships.filter((m) => m.group.status === GroupStatus.active).length;
+  const formingGroups = memberships.filter((m) => m.group.status === GroupStatus.forming).length;
+  const completedGroups = memberships.filter((m) => m.group.status === GroupStatus.completed).length;
 
   const totalOwed =
-    obligationsOverview.totalOutstanding !== "0" &&
-    Number.parseFloat(obligationsOverview.totalOutstanding) > 0
-      ? obligationsOverview.totalOutstanding
+    totalOutstanding !== "0" && Number.parseFloat(totalOutstanding) > 0
+      ? totalOutstanding
       : null;
 
   const attention = buildAttentionItems({
@@ -317,13 +288,12 @@ export async function getHomeOverview(userId: string) {
     stats: {
       activeGroups,
       formingGroups,
+      completedGroups,
       unreadNotifications,
       totalOwed,
       pendingConfirmations,
       paymentsDue: dueContributions.length,
     },
     attention,
-    recentActivity,
-    groups,
   };
 }

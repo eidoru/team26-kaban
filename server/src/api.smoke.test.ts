@@ -34,6 +34,11 @@ describe("API smoke", () => {
     expect(res.status).toBe(401);
   });
 
+  it("GET /api/v1/auth/realtime-token requires authentication", async () => {
+    const res = await request(app).get("/api/v1/auth/realtime-token");
+    expect(res.status).toBe(401);
+  });
+
   it("POST /api/v1/auth/register rejects invalid email", async () => {
     const res = await request(app)
       .post("/api/v1/auth/register")

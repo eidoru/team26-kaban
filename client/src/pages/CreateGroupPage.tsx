@@ -1,13 +1,16 @@
 import { type FormEvent, type ReactNode, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { useMutation } from "@tanstack/react-query";
-import { ApiError, api } from "../api/client";
+import { useNavigate } from "react-router-dom";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { ApiError, api, type GroupDetail } from "../api/client";
+import { invalidateHomeLists } from "../lib/homeQueries";
+import { groupQueryKey } from "../lib/groupQueries";
 import { formatFrequency, type GroupFrequencyValue } from "../lib/frequency";
 import {
   formatShortfallInterestHint,
   formatShortfallInterestRate,
 } from "../lib/shortfallInterest";
-import { statusBadgeClass, ui } from "../lib/ui";
+import { ui } from "../lib/ui";
+import { GroupHeader } from "../components/GroupChrome";
 
 const PRESET_FREQUENCIES = [
   { value: "weekly", label: "Weekly" },
@@ -34,10 +37,10 @@ function FormSection({
   children: ReactNode;
 }) {
   return (
-    <section className="space-y-4">
+    <section className={`${ui.sectionCard} space-y-4`}>
       <div>
-        <h2 className="text-sm font-medium text-slate-900">{title}</h2>
-        {description && <p className="mt-0.5 text-sm text-slate-500">{description}</p>}
+        <h2 className={ui.sectionHeader}>{title}</h2>
+        {description && <p className={ui.sectionSubtitle}>{description}</p>}
       </div>
       {children}
     </section>
@@ -46,6 +49,7 @@ function FormSection({
 
 export function CreateGroupPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [name, setName] = useState("");
   const [contributionAmount, setContributionAmount] = useState("");
   const [frequency, setFrequency] = useState<GroupFrequencyValue>("monthly");
@@ -110,29 +114,60 @@ export function CreateGroupPage() {
     }
     try {
       const data = await mutation.mutateAsync();
+      queryClient.setQueryData<GroupDetail>(groupQueryKey(data.group.id), {
+        group: { ...data.group, role: "manager" },
+        members: [],
+        pending: {
+          payoutOrder: true,
+          startDateMissing: !startDate,
+          openSlots: Math.max(0, parseInt(slotCount, 10) - 1),
+          unclaimedSeats: 0,
+          cycleStarted: false,
+          canActivate: false,
+        },
+        currentRound: null,
+        schedule: [],
+        issueCounts: { openDisputes: 0, unsettledObligations: 0 },
+      });
+      invalidateHomeLists(queryClient);
       navigate(`/groups/${data.group.id}`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to create group");
     }
   }
 
+  const headerFacts = [
+    { label: "Contribution", value: summary.contribution },
+    { label: "Schedule", value: summary.frequency },
+    { label: "Roster", value: summary.roster },
+    { label: "Starts", value: summary.startDate },
+  ];
+
   return (
     <div className="min-w-0">
-      <Link to="/home" className={ui.backLink}>
-        <span className={ui.backLinkArrow}>←</span>
-        Home
-      </Link>
+      <GroupHeader title="Create paluwagan" phase="create" facts={headerFacts} />
 
-      <header className="mb-8 mt-2">
-        <h1 className={ui.pageTitle}>Create paluwagan</h1>
-        <p className={ui.pageSubtitle}>
-          Set the terms for your group. You can invite members and adjust the start date before
-          activating.
-        </p>
-      </header>
+      <div className="flex flex-col gap-6 md:flex-row md:gap-10">
+        <aside className="space-y-4 md:order-last md:w-60 md:shrink-0 md:self-start lg:sticky lg:top-24">
+          <div className={ui.sectionCard}>
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Preview</p>
+            <h2 className="mt-1 truncate text-base font-medium text-slate-900">
+              {name.trim() || "New paluwagan"}
+            </h2>
+            <dl className="mt-4">
+              <SummaryRow label="Contribution" value={summary.contribution} />
+              <SummaryRow label="Schedule" value={summary.frequency} />
+              <SummaryRow label="Roster" value={summary.roster} />
+              <SummaryRow label="Starts" value={summary.startDate} />
+              <SummaryRow label="Shortfall interest" value={summary.shortfallInterest} />
+            </dl>
+          </div>
+          <p className="text-sm text-slate-500">
+            After creating, fill the roster, set payout order, then activate to open Round 1.
+          </p>
+        </aside>
 
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_17rem] lg:items-start">
-        <form onSubmit={handleSubmit} className={`${ui.cardCompact} space-y-8`}>
+        <form onSubmit={handleSubmit} className="min-w-0 flex-1 space-y-6">
           {error && <p className={ui.error}>{error}</p>}
 
           <FormSection title="Group name" description="How members will recognize this paluwagan.">
@@ -150,8 +185,6 @@ export function CreateGroupPage() {
               />
             </div>
           </FormSection>
-
-          <hr className="border-gray-100" />
 
           <FormSection
             title="Contributions & roster"
@@ -193,8 +226,6 @@ export function CreateGroupPage() {
             </div>
           </FormSection>
 
-          <hr className="border-gray-100" />
-
           <FormSection
             title="Shortfall interest"
             description="If a member underpays when a round closes, they owe the organizer. Interest accrues on the unpaid balance until settled."
@@ -222,8 +253,6 @@ export function CreateGroupPage() {
               </p>
             </div>
           </FormSection>
-
-          <hr className="border-gray-100" />
 
           <FormSection title="Schedule" description="Round 1 is due on the start date.">
             <div className="space-y-6">
@@ -278,33 +307,12 @@ export function CreateGroupPage() {
             </div>
           </FormSection>
 
-          <div className="flex justify-end border-t border-gray-100 pt-6">
+          <div className="flex justify-end">
             <button type="submit" disabled={mutation.isPending} className={ui.btnPrimary}>
               {mutation.isPending ? "Creating…" : "Create paluwagan"}
             </button>
           </div>
         </form>
-
-        <aside className="space-y-6 lg:sticky lg:top-24">
-          <div className={ui.cardCompact}>
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="min-w-0 flex-1 truncate text-base font-medium text-slate-900">
-                {name.trim() || "New paluwagan"}
-              </h2>
-              <span className={`${statusBadgeClass("forming")} shrink-0`}>Forming</span>
-            </div>
-            <dl className="mt-4">
-              <SummaryRow label="Contribution" value={summary.contribution} />
-              <SummaryRow label="Schedule" value={summary.frequency} />
-              <SummaryRow label="Roster" value={summary.roster} />
-              <SummaryRow label="Starts" value={summary.startDate} />
-              <SummaryRow label="Shortfall interest" value={summary.shortfallInterest} />
-            </dl>
-          </div>
-          <p className="text-sm text-slate-500">
-            After creating, fill the roster, set payout order, then activate to open Round 1.
-          </p>
-        </aside>
       </div>
     </div>
   );

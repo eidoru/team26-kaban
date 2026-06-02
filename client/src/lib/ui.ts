@@ -57,6 +57,21 @@ export const ui = {
   tableWrap: "mt-3 overflow-x-auto rounded-2xl border border-gray-100 bg-white",
   tableHead: "border-b border-gray-100 bg-gray-50 text-left text-sm font-normal text-slate-500",
   tableRow: "border-b border-gray-50 last:border-0",
+  // Shared section + layout primitives (uniform across all paluwagan phases)
+  sectionCard:
+    "rounded-2xl border border-gray-100 bg-white p-6 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.05),0_2px_8px_-2px_rgba(0,0,0,0.03)]",
+  sectionHeader: "text-base font-medium text-slate-900",
+  sectionSubtitle: "mt-0.5 text-sm text-slate-500",
+  metricGrid: "grid gap-3 sm:grid-cols-2 lg:grid-cols-4",
+  metricGrid2: "grid gap-3 sm:grid-cols-2",
+  factStrip: "mt-4 flex flex-wrap gap-x-8 gap-y-2",
+  actionBar: "flex flex-wrap justify-end gap-2 border-t border-gray-100 pt-4",
+  sidebarNav: "flex gap-1 overflow-x-auto pb-1 md:flex-col md:overflow-visible md:pb-0",
+  sidebarNavItem:
+    "flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-left text-sm transition-colors",
+  sidebarNavItemActive: "bg-emerald-900 font-medium text-white",
+  sidebarNavItemIdle: "text-slate-600 hover:bg-slate-100",
+  sidebarNavItemDisabled: "cursor-not-allowed text-slate-300",
 } as const;
 
 export function statusBadgeClass(status: string): string {

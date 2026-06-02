@@ -1,6 +1,7 @@
 import { Group, GroupFrequency, GroupStatus, Prisma, RoundStatus } from "@prisma/client";
-import { prisma } from "../lib/prisma.js";
+import { prisma, prismaTransactionOptions } from "../lib/prisma.js";
 import { writeAuditLog } from "../lib/audit.js";
+import { notifyGroupChange } from "../lib/realtimeNotify.js";
 import { GroupError } from "./groups.js";
 import { processRoundShortfall, notifyRoundShortfalls, type RoundShortfallNotifications } from "./obligations.js";
 
@@ -54,75 +55,80 @@ export async function setPayoutOrder(
   method: "random" | "manual",
   manualOrder?: { membershipId: string; turnNumber: number }[],
 ) {
-  const group = await prisma.group.findUnique({ where: { id: groupId } });
-  if (!group) throw new GroupError(404, "Group not found");
-  if (group.status !== GroupStatus.forming) {
-    throw new GroupError(409, "Payout order can only be set while the group is forming");
-  }
+  const memberRecords = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${groupId}))`;
 
-  const members = await prisma.membership.findMany({ where: { groupId } });
-  if (members.length < group.slotCount) {
-    throw new GroupError(409, "All slots must be filled before setting payout order");
-  }
-
-  let assignments: { membershipId: string; turnNumber: number }[];
-
-  if (method === "random") {
-    assignments = shuffle(members).map((m, i) => ({
-      membershipId: m.id,
-      turnNumber: i + 1,
-    }));
-  } else {
-    if (!manualOrder || manualOrder.length !== members.length) {
-      throw new GroupError(400, "Manual order must assign every member exactly once");
-    }
-    const turnNumbers = manualOrder.map((o) => o.turnNumber);
-    const unique = new Set(turnNumbers);
-    if (unique.size !== members.length || turnNumbers.some((n) => n < 1 || n > members.length)) {
-      throw new GroupError(400, "Turn numbers must be unique and range from 1 to N");
-    }
-    const memberIds = new Set(members.map((m) => m.id));
-    if (!manualOrder.every((o) => memberIds.has(o.membershipId))) {
-      throw new GroupError(400, "Invalid membership in payout order");
-    }
-    assignments = manualOrder;
-  }
-
-  await prisma.$transaction(async (tx) => {
-    const allMembers = await tx.membership.findMany({ where: { groupId } });
-
-    // Stage temporary negative turn numbers so we never collide on (group_id, turn_number)
-    // while reordering — safer than null for unique indexes across Postgres versions.
-    for (let i = 0; i < allMembers.length; i++) {
-      await tx.membership.update({
-        where: { id: allMembers[i].id },
-        data: { turnNumber: -(i + 1) },
-      });
+    const group = await tx.group.findUnique({ where: { id: groupId } });
+    if (!group) throw new GroupError(404, "Group not found");
+    if (group.status !== GroupStatus.forming) {
+      throw new GroupError(409, "Payout order can only be set while the group is forming");
     }
 
-    for (const a of assignments) {
-      await tx.membership.update({
-        where: { id: a.membershipId },
-        data: { turnNumber: a.turnNumber },
-      });
-    }
-    await tx.auditLog.create({
-      data: {
-        groupId,
-        actorId,
-        action: "group.payout_order_set",
-        entityType: "group",
-        entityId: groupId,
-        metadata: { method },
-      },
+    const members = await tx.membership.findMany({
+      where: { groupId },
+      orderBy: { id: "asc" },
     });
-  });
+    if (members.length < group.slotCount) {
+      throw new GroupError(409, "All slots must be filled before setting payout order");
+    }
 
-  const updated = await prisma.membership.findMany({
-    where: { groupId },
-    orderBy: { turnNumber: "asc" },
-  });
-  return updated;
+    let assignments: { membershipId: string; turnNumber: number }[];
+
+    if (method === "random") {
+      assignments = shuffle(members).map((member, index) => ({
+        membershipId: member.id,
+        turnNumber: index + 1,
+      }));
+    } else {
+      if (!manualOrder || manualOrder.length !== members.length) {
+        throw new GroupError(400, "Manual order must assign every member exactly once");
+      }
+      const turnNumbers = manualOrder.map((order) => order.turnNumber);
+      const unique = new Set(turnNumbers);
+      if (unique.size !== members.length || turnNumbers.some((n) => n < 1 || n > members.length)) {
+        throw new GroupError(400, "Turn numbers must be unique and range from 1 to N");
+      }
+      const memberIds = new Set(members.map((member) => member.id));
+      if (!manualOrder.every((order) => memberIds.has(order.membershipId))) {
+        throw new GroupError(400, "Invalid membership in payout order");
+      }
+      assignments = manualOrder;
+    }
+
+    // NULL turn numbers are excluded from the unique index, so we can assign in one pass.
+    await tx.membership.updateMany({
+      where: { groupId },
+      data: { turnNumber: null },
+    });
+
+    for (const assignment of assignments) {
+      await tx.membership.update({
+        where: { id: assignment.membershipId },
+        data: { turnNumber: assignment.turnNumber },
+      });
+    }
+
+    const memberById = new Map(members.map((member) => [member.id, member]));
+    return assignments
+      .slice()
+      .sort((a, b) => a.turnNumber - b.turnNumber)
+      .map((assignment) => {
+        const member = memberById.get(assignment.membershipId);
+        if (!member) throw new GroupError(500, "Payout order assignment missing member");
+        return { ...member, turnNumber: assignment.turnNumber };
+      });
+  }, prismaTransactionOptions);
+
+  void writeAuditLog({
+    groupId,
+    actorId,
+    action: "group.payout_order_set",
+    entityType: "group",
+    entityId: groupId,
+    metadata: { method },
+  }).catch((err) => console.error("Failed to write audit log", err));
+
+  return memberRecords;
 }
 
 export async function openRound(tx: Tx, roundId: string, expectedAmount: Prisma.Decimal) {
@@ -219,6 +225,10 @@ export async function activateGroup(
         metadata: { startDate: startDate!.toISOString(), rounds: sorted.length },
       },
     });
+  }, prismaTransactionOptions);
+
+  void notifyGroupChange(groupId, "rounds").catch((err) => {
+    console.error("Failed to broadcast group activation", err);
   });
 
   return prisma.group.findUniqueOrThrow({ where: { id: groupId } });
@@ -226,20 +236,30 @@ export async function activateGroup(
 
 export async function closeRoundById(roundId: string, actorId?: string) {
   let shortfallNotifications: RoundShortfallNotifications | null = null;
+  let notifyGroupId: string | null = null;
 
   await prisma.$transaction(async (tx) => {
     const round = await tx.round.findUnique({
       where: { id: roundId },
-      include: { group: true },
+      include: {
+        group: true,
+        contributions: {
+          include: {
+            membership: { select: { displayName: true, userId: true, isManager: true } },
+          },
+        },
+      },
     });
     if (!round || round.status !== RoundStatus.current) return;
+
+    notifyGroupId = round.groupId;
 
     await tx.round.update({
       where: { id: round.id },
       data: { status: RoundStatus.closed, closedAt: new Date() },
     });
 
-    const shortfall = await processRoundShortfall(tx, round.id, actorId);
+    const shortfall = await processRoundShortfall(tx, round, actorId);
     shortfallNotifications = shortfall.notifications;
 
     await tx.auditLog.create({
@@ -288,10 +308,18 @@ export async function closeRoundById(roundId: string, actorId?: string) {
         },
       });
     }
-  });
+  }, prismaTransactionOptions);
 
   if (shortfallNotifications) {
-    await notifyRoundShortfalls(shortfallNotifications);
+    void notifyRoundShortfalls(shortfallNotifications).catch((err) => {
+      console.error("Failed to send round shortfall notifications", err);
+    });
+  }
+
+  if (notifyGroupId) {
+    void notifyGroupChange(notifyGroupId, "rounds").catch((err) => {
+      console.error("Failed to broadcast round change", err);
+    });
   }
 }
 
@@ -299,6 +327,7 @@ export type ForceAdvanceResult = {
   closedRound: number;
   openedRound: number | null;
   completed: boolean;
+  group: Group;
 };
 
 /** Close the current round immediately, regardless of due date (UAT / manual cron). */
@@ -322,15 +351,18 @@ export async function forceAdvanceGroupRound(
   const closedRound = current.number;
   await closeRoundById(current.id, actorId);
 
-  const updatedGroup = await prisma.group.findUniqueOrThrow({ where: { id: groupId } });
-  const nextCurrent = await prisma.round.findFirst({
-    where: { groupId, status: RoundStatus.current },
-  });
+  const [updatedGroup, nextCurrent] = await Promise.all([
+    prisma.group.findUniqueOrThrow({ where: { id: groupId } }),
+    prisma.round.findFirst({
+      where: { groupId, status: RoundStatus.current },
+    }),
+  ]);
 
   return {
     closedRound,
     openedRound: nextCurrent?.number ?? null,
     completed: updatedGroup.status === GroupStatus.completed,
+    group: updatedGroup,
   };
 }
 

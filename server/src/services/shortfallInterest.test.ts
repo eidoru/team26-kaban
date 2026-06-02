@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   computeAccruedInterest,
   countInterestPeriods,
+  getNetAccruedInterest,
   getObligationTotalRemaining,
   getRemainingPrincipal,
   resolveInterestAccrualRound,
@@ -73,6 +74,15 @@ describe("computeAccruedInterest", () => {
   });
 });
 
+describe("getNetAccruedInterest", () => {
+  it("reduces gross interest by amount already paid toward interest", () => {
+    const gross = computeAccruedInterest(d(1000), monthlyTerms, 2);
+    expect(gross.toString()).toBe("100");
+    expect(getNetAccruedInterest(d(1000), monthlyTerms, 2, d(40)).toString()).toBe("60");
+    expect(getNetAccruedInterest(d(1000), monthlyTerms, 2, d(100)).toString()).toBe("0");
+  });
+});
+
 describe("getObligationTotalRemaining", () => {
   it("includes principal and accrued interest", () => {
     const total = getObligationTotalRemaining(
@@ -89,6 +99,24 @@ describe("getObligationTotalRemaining", () => {
     );
     // 800 principal + 5% of 800 for one started round = 40
     expect(total.toString()).toBe("840");
+  });
+
+  it("subtracts interest already settled from total remaining", () => {
+    const total = getObligationTotalRemaining(
+      {
+        amount: d(1000),
+        settledAmount: d(0),
+        interestSettledAmount: d(40),
+      },
+      monthlyTerms,
+      {
+        sourceRoundNumber: 1,
+        lastClosedRoundNumber: 1,
+        currentRoundNumber: 2,
+      },
+    );
+    // 1000 principal + 50 gross interest - 40 paid = 1010
+    expect(total.toString()).toBe("1010");
   });
 });
 

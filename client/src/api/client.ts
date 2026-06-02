@@ -1,10 +1,30 @@
-const API_BASE = import.meta.env.VITE_API_URL ?? "/api/v1";
+function resolveApiBase(): string {
+  const configured = import.meta.env.VITE_API_URL as string | undefined;
+  if (!configured) return "/api/v1";
+  try {
+    const { hostname } = new URL(configured, "http://localhost");
+    if (hostname === "localhost" || hostname === "127.0.0.1") {
+      return "/api/v1";
+    }
+  } catch {
+    return "/api/v1";
+  }
+  return configured;
+}
+
+const API_BASE = resolveApiBase();
 
 export interface User {
   id: string;
   email: string;
   displayName: string;
   contact?: string | null;
+}
+
+export interface RealtimeTokenResponse {
+  accessToken: string;
+  expiresIn: number;
+  supabaseUrl: string;
 }
 
 export interface UserActivityStats {
@@ -39,6 +59,8 @@ export interface GroupSummary {
   openSlots?: number;
   role: "manager" | "member";
   membershipId: string;
+  totalCollected?: string;
+  outstandingDebt?: string;
 }
 
 export interface GroupMember {
@@ -105,16 +127,27 @@ export interface CompletionSummary {
   startDate: string | null;
   contributionAmount: string;
   frequency: string;
+  frequencyDays?: number | null;
+  shortfallInterestRatePercent: string;
   memberCount: number;
   roundsCompleted: number;
   totalContributions: number;
   confirmedContributions: number;
+  collectionRate: number;
+  potPerRound: string;
+  totalExpected: string;
   totalCollected: string;
+  cycleDurationDays: number | null;
   openDisputes: number;
   resolvedDisputes: number;
   unsettledObligations: number;
   outstandingDebt: string;
-  payoutRecipients: { roundNumber: number; recipientName: string; dueDate: string }[];
+  payoutRecipients: {
+    roundNumber: number;
+    recipientName: string;
+    dueDate: string;
+    potAmount: string;
+  }[];
   memberReliability: MemberReliability[];
 }
 
@@ -149,14 +182,13 @@ export interface HomeOverview {
   stats: {
     activeGroups: number;
     formingGroups: number;
+    completedGroups: number;
     unreadNotifications: number;
     totalOwed: string | null;
     pendingConfirmations: number;
     paymentsDue: number;
   };
   attention: HomeAttentionItem[];
-  recentActivity: NotificationItem[];
-  groups: GroupSummary[];
 }
 
 export interface ManagerObligationsOverview {
@@ -203,6 +235,7 @@ export interface ObligationEntry {
   sourceRoundId: string;
   amount: string;
   settledAmount: string;
+  interestSettledAmount: string;
   principalRemaining: string;
   accruedInterest: string;
   remaining: string;
@@ -262,6 +295,10 @@ export interface GroupDetail {
   };
   currentRound: RoundSummary | null;
   schedule: RoundSummary[];
+  issueCounts?: {
+    openDisputes: number;
+    unsettledObligations: number;
+  };
   reliability?: MemberReliability[];
 }
 
@@ -380,6 +417,42 @@ export function setStoredUser(user: User) {
   storage.setItem(USER_KEY, JSON.stringify(user));
 }
 
+function isAccessTokenExpired(accessToken: string): boolean {
+  try {
+    const payload = JSON.parse(atob(accessToken.split(".")[1] ?? "")) as { exp?: number };
+    if (!payload.exp) return true;
+    return payload.exp * 1000 <= Date.now() + 30_000;
+  } catch {
+    return true;
+  }
+}
+
+/** Revalidate stored session without redundant /me + /refresh round-trips. */
+export async function restoreSession(): Promise<User | null> {
+  const tokens = getStoredTokens();
+  if (!tokens) return null;
+
+  if (tokens.accessToken && !isAccessTokenExpired(tokens.accessToken)) {
+    try {
+      const { user } = await api.me();
+      setStoredUser(user);
+      return user;
+    } catch (err) {
+      if (!(err instanceof ApiError && err.status === 401)) throw err;
+    }
+  }
+
+  if (tokens.refreshToken) {
+    const accessToken = await refreshAccessToken();
+    if (accessToken) {
+      return getStoredUser();
+    }
+  }
+
+  clearAuth();
+  return null;
+}
+
 export const PENDING_INVITE_KEY = "kaban_pending_invite";
 
 let refreshInFlight: Promise<string | null> | null = null;
@@ -412,6 +485,29 @@ async function refreshAccessToken(): Promise<string | null> {
   } finally {
     refreshInFlight = null;
   }
+}
+
+async function publicPost<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    let message = `Request failed (${res.status})`;
+    try {
+      const err = JSON.parse(text) as { error?: string; details?: unknown };
+      message = err.error ?? message;
+      throw new ApiError(res.status, message, err.details);
+    } catch (e) {
+      if (e instanceof ApiError) throw e;
+      throw new ApiError(res.status, message);
+    }
+  }
+
+  return res.json() as Promise<T>;
 }
 
 async function request<T>(path: string, options: RequestInit = {}, retry = true): Promise<T> {
@@ -472,11 +568,9 @@ export const api = {
     password: string;
     displayName: string;
     contact?: string;
-  }) =>
-    request<AuthResponse>("/auth/register", { method: "POST", body: JSON.stringify(body) }, false),
+  }) => publicPost<AuthResponse>("/auth/register", body),
 
-  login: (body: { email: string; password: string }) =>
-    request<AuthResponse>("/auth/login", { method: "POST", body: JSON.stringify(body) }, false),
+  login: (body: { email: string; password: string }) => publicPost<AuthResponse>("/auth/login", body),
 
   logout: (tokens: { refreshToken: string; accessToken?: string }) => {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -495,6 +589,8 @@ export const api = {
   },
 
   me: () => request<{ user: User }>("/auth/me"),
+
+  getRealtimeToken: () => request<RealtimeTokenResponse>("/auth/realtime-token"),
 
   getProfileActivity: () => request<{ activity: UserActivityStats }>("/auth/me/activity"),
 
@@ -532,6 +628,9 @@ export const api = {
     }),
 
   getGroup: (id: string) => request<GroupDetail>(`/groups/${id}`),
+
+  getMemberReliability: (groupId: string) =>
+    request<{ reliability: MemberReliability[] }>(`/groups/${groupId}/member-reliability`),
 
   addPlaceholder: (groupId: string, body: { displayName: string; contact?: string }) =>
     request<{ member: GroupMember }>(`/groups/${groupId}/members`, {
@@ -586,6 +685,16 @@ export const api = {
       body: JSON.stringify(body ?? {}),
     }),
 
+  /** Dev/demo only — closes the current round immediately (requires non-production API). */
+  advanceRound: (groupId: string) =>
+    request<{
+      ok: true;
+      closedRound: number;
+      openedRound: number | null;
+      completed: boolean;
+      group: GroupDetail;
+    }>(`/dev/groups/${groupId}/advance-round`, { method: "POST", body: JSON.stringify({}) }),
+
   getCurrentRound: (groupId: string) =>
     request<{ currentRound: RoundSummary | null }>(`/groups/${groupId}/rounds/current`),
 
@@ -616,6 +725,12 @@ export const api = {
   settleMemberDebts: (groupId: string, memberId: string, body: { amount: number; note?: string }) =>
     request<{ applied: string; unapplied: string; slices: unknown[] }>(
       `/groups/${groupId}/members/${memberId}/settle`,
+      { method: "POST", body: JSON.stringify(body) },
+    ),
+
+  coverObligationExternally: (groupId: string, obligationId: string, body: { note: string }) =>
+    request<{ obligationId: string; externalCoverageNote: string }>(
+      `/groups/${groupId}/obligations/${obligationId}/cover-externally`,
       { method: "POST", body: JSON.stringify(body) },
     ),
 

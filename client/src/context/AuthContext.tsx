@@ -1,5 +1,13 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { api, clearAuth, getStoredTokens, getStoredUser, setStoredUser, storeAuth, ApiError, type User } from "../api/client";
+import {
+  api,
+  clearAuth,
+  getStoredTokens,
+  getStoredUser,
+  restoreSession,
+  storeAuth,
+  type User,
+} from "../api/client";
 
 interface AuthContextValue {
   user: User | null;
@@ -27,21 +35,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(initialLoadingState);
 
   const refreshUser = useCallback(async () => {
-    const tokens = getStoredTokens();
-    if (!tokens) {
-      setUser(null);
-      return;
-    }
-    try {
-      const { user: me } = await api.me();
-      setUser(me);
-      setStoredUser(me);
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 401) {
-        clearAuth();
-        setUser(null);
-      }
-    }
+    const me = await restoreSession();
+    setUser(me);
   }, []);
 
   useEffect(() => {
@@ -59,6 +54,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [refreshUser]);
 
   const login = useCallback(async (email: string, password: string, remember = true) => {
+    clearAuth();
     const data = await api.login({ email, password });
     storeAuth(data, remember);
     setUser(data.user);
@@ -71,6 +67,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       displayName: string;
       contact?: string;
     }) => {
+      clearAuth();
       const data = await api.register(input);
       storeAuth(data);
       setUser(data.user);

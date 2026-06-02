@@ -10,13 +10,14 @@ import notificationsRoutes from "./routes/notifications.js";
 import homeRoutes from "./routes/home.js";
 import devRoutes from "./routes/dev.js";
 import { errorHandler } from "./middleware/errorHandler.js";
+import { resolveCorsOrigin } from "./lib/origin.js";
 
 const app = express();
 
 app.use(helmet());
 app.use(
   cors({
-    origin: process.env.CLIENT_ORIGIN ?? true,
+    origin: resolveCorsOrigin(),
     credentials: true,
   }),
 );
