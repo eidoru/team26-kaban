@@ -1,4 +1,11 @@
-import { ContributionSource, GroupStatus, ObligationStatus, Prisma } from "@prisma/client";
+import {
+  ContributionSource,
+  GroupStatus,
+  ObligationStatus,
+  Prisma,
+  SettlementClaimStatus,
+} from "@prisma/client";
+import { createNotification, writeAuditLog } from "../lib/audit.js";
 import { prisma } from "../lib/prisma.js";
 import { GroupError } from "./groups.js";
 import {
@@ -503,16 +510,23 @@ export async function getGroupObligations(groupId: string) {
     throw new ObligationError(404, "Group has not started yet");
   }
 
-  const obligations = await prisma.obligation.findMany({
-    where: { sourceRound: { groupId } },
-    include: {
-      debtorMembership: { select: { displayName: true, userId: true } },
-      sourceRound: { select: { number: true, dueDate: true } },
-      settlements: { orderBy: { createdAt: "asc" } },
-    },
-    orderBy: [{ createdAt: "asc" }],
-  });
+  const [obligations, pendingClaims] = await Promise.all([
+    prisma.obligation.findMany({
+      where: { sourceRound: { groupId } },
+      include: {
+        debtorMembership: { select: { displayName: true, userId: true } },
+        sourceRound: { select: { number: true, dueDate: true } },
+        settlements: { orderBy: { createdAt: "asc" } },
+      },
+      orderBy: [{ createdAt: "asc" }],
+    }),
+    prisma.settlementClaim.findMany({
+      where: { status: SettlementClaimStatus.pending, debtorMembership: { groupId } },
+      select: { debtorMembershipId: true },
+    }),
+  ]);
 
+  const pendingClaimDebtorIds = new Set(pendingClaims.map((c) => c.debtorMembershipId));
   const terms = toShortfallInterestTerms(group);
   const groupRoundContext = await getGroupInterestRoundContext(prisma, groupId);
 
@@ -525,6 +539,7 @@ export async function getGroupObligations(groupId: string) {
     isPlaceholder: o.debtorMembership.userId === null,
     roundNumber: o.sourceRound.number,
     roundDueDate: o.sourceRound.dueDate.toISOString().slice(0, 10),
+    hasPendingClaim: pendingClaimDebtorIds.has(o.debtorMembershipId),
     settlements: o.settlements.map((s) => ({
       id: s.id,
       amount: s.amount.toString(),
@@ -536,4 +551,308 @@ export async function getGroupObligations(groupId: string) {
 
 export function getExpectedContribution(groupContributionAmount: Prisma.Decimal) {
   return groupContributionAmount;
+}
+
+/**
+ * Whether a member may submit a self-reported settlement claim against their own debt.
+ * Managers settle debts directly (settleMemberDebts) and don't go through this claim flow.
+ */
+export function canSubmitSettlementClaim(opts: {
+  isManager: boolean;
+  viewerMembershipId: string;
+  debtorMembershipId: string;
+  hasOpenClaim: boolean;
+  hasOutstandingDebt: boolean;
+}): boolean {
+  if (opts.isManager) return false;
+  if (opts.viewerMembershipId !== opts.debtorMembershipId) return false;
+  if (opts.hasOpenClaim) return false;
+  if (!opts.hasOutstandingDebt) return false;
+  return true;
+}
+
+/** Only the manager can review a claim, and only while it's still pending. */
+export function canReviewSettlementClaim(opts: {
+  isManager: boolean;
+  claimStatus: SettlementClaimStatus;
+}): boolean {
+  return opts.isManager && opts.claimStatus === SettlementClaimStatus.pending;
+}
+
+export function serializeSettlementClaim(c: {
+  id: string;
+  debtorMembershipId: string;
+  amount: Prisma.Decimal;
+  note: string | null;
+  proofUrl: string | null;
+  status: SettlementClaimStatus;
+  reviewNote: string | null;
+  reviewedAt: Date | null;
+  createdAt: Date;
+}) {
+  return {
+    id: c.id,
+    debtorMembershipId: c.debtorMembershipId,
+    amount: c.amount.toString(),
+    note: c.note,
+    proofUrl: c.proofUrl,
+    status: c.status,
+    reviewNote: c.reviewNote,
+    reviewedAt: c.reviewedAt?.toISOString() ?? null,
+    createdAt: c.createdAt.toISOString(),
+  };
+}
+
+export async function getGroupSettlementClaims(groupId: string) {
+  const claims = await prisma.settlementClaim.findMany({
+    where: { debtorMembership: { groupId } },
+    include: {
+      debtorMembership: { select: { displayName: true, userId: true } },
+    },
+    orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+  });
+
+  return claims.map((c) => ({
+    ...serializeSettlementClaim(c),
+    memberDisplayName: c.debtorMembership.displayName,
+    isPlaceholder: c.debtorMembership.userId === null,
+  }));
+}
+
+/** Sum of principal + accrued interest still owed across a debtor's open obligations in a group. */
+async function getDebtorOutstandingTotal(
+  groupId: string,
+  debtorMembershipId: string,
+): Promise<Prisma.Decimal> {
+  const group = await prisma.group.findUnique({
+    where: { id: groupId },
+    select: { shortfallInterestRatePercent: true, frequency: true, frequencyDays: true },
+  });
+  if (!group) throw new ObligationError(404, "Group not found");
+  const terms = toShortfallInterestTerms(group);
+  const groupRoundContext = await getGroupInterestRoundContext(prisma, groupId);
+
+  const obligations = await prisma.obligation.findMany({
+    where: {
+      debtorMembershipId,
+      status: { not: ObligationStatus.settled },
+      sourceRound: { groupId },
+    },
+    include: { sourceRound: { select: { number: true } } },
+  });
+
+  return obligations.reduce(
+    (sum, o) =>
+      sum.plus(
+        getObligationTotalRemaining(o, terms, {
+          sourceRoundNumber: o.sourceRound.number,
+          ...groupRoundContext,
+        }),
+      ),
+    decimal(0),
+  );
+}
+
+/** Member self-reports a payment against their own debt. Doesn't move money until a manager confirms it. */
+export async function submitSettlementClaim(
+  groupId: string,
+  debtorMembershipId: string,
+  actorUserId: string,
+  input: { amount: number; note?: string; proofUrl?: string },
+) {
+  const [debtor, group] = await Promise.all([
+    prisma.membership.findFirst({ where: { id: debtorMembershipId, groupId } }),
+    prisma.group.findUnique({ where: { id: groupId }, select: { name: true } }),
+  ]);
+  if (!debtor) throw new ObligationError(404, "Member not found");
+  if (!group) throw new ObligationError(404, "Group not found");
+  if (debtor.userId !== actorUserId) {
+    throw new ObligationError(403, "You can only submit a claim for your own debt");
+  }
+
+  const [existingClaim, totalRemaining] = await Promise.all([
+    prisma.settlementClaim.findFirst({
+      where: { debtorMembershipId, status: SettlementClaimStatus.pending },
+    }),
+    getDebtorOutstandingTotal(groupId, debtorMembershipId),
+  ]);
+
+  if (
+    !canSubmitSettlementClaim({
+      isManager: debtor.isManager,
+      viewerMembershipId: debtorMembershipId,
+      debtorMembershipId,
+      hasOpenClaim: !!existingClaim,
+      hasOutstandingDebt: totalRemaining.gt(0),
+    })
+  ) {
+    if (debtor.isManager) {
+      throw new ObligationError(403, "Managers settle debts directly and don't submit claims");
+    }
+    if (existingClaim) {
+      throw new ObligationError(409, "A settlement claim is already pending review");
+    }
+    throw new ObligationError(409, "You have no outstanding debt to settle");
+  }
+
+  const amount = decimal(input.amount);
+  if (amount.lte(0)) {
+    throw new ObligationError(400, "Amount must be greater than zero");
+  }
+  if (amount.gt(totalRemaining)) {
+    throw new ObligationError(400, "Amount cannot exceed your outstanding balance");
+  }
+
+  const claim = await prisma.settlementClaim.create({
+    data: {
+      debtorMembershipId,
+      amount,
+      note: input.note ?? null,
+      proofUrl: input.proofUrl ?? null,
+    },
+  });
+
+  await writeAuditLog({
+    groupId,
+    actorId: actorUserId,
+    action: "settlement_claim.submitted",
+    entityType: "settlement_claim",
+    entityId: claim.id,
+    metadata: {
+      debtorMembershipId,
+      memberDisplayName: debtor.displayName,
+      amount: amount.toString(),
+    },
+  });
+
+  const managerMembership = await prisma.membership.findFirst({
+    where: { groupId, isManager: true, userId: { not: null } },
+  });
+  if (managerMembership?.userId) {
+    await createNotification({
+      userId: managerMembership.userId,
+      groupId,
+      type: "general",
+      title: `${group.name}: payment reported for review`,
+      body: `${debtor.displayName} reported paying ₱${amount.toNumber().toLocaleString()} toward their outstanding debt.`,
+      link: `/groups/${groupId}`,
+    });
+  }
+
+  return serializeSettlementClaim(claim);
+}
+
+/** Manager confirms or rejects a member's self-reported settlement claim. */
+export async function reviewSettlementClaim(
+  groupId: string,
+  claimId: string,
+  actorUserId: string,
+  decision: "confirm" | "reject",
+  reviewNote?: string,
+) {
+  const claim = await prisma.settlementClaim.findFirst({
+    where: { id: claimId, debtorMembership: { groupId } },
+    include: {
+      debtorMembership: { select: { displayName: true, userId: true } },
+    },
+  });
+  if (!claim) throw new ObligationError(404, "Settlement claim not found");
+  if (!canReviewSettlementClaim({ isManager: true, claimStatus: claim.status })) {
+    throw new ObligationError(409, "This claim is no longer pending");
+  }
+
+  const now = new Date();
+
+  if (decision === "reject") {
+    const updatedClaim = await prisma.$transaction(async (tx) => {
+      const updated = await tx.settlementClaim.update({
+        where: { id: claimId },
+        data: {
+          status: SettlementClaimStatus.rejected,
+          reviewNote: reviewNote ?? null,
+          reviewedAt: now,
+        },
+      });
+      await tx.auditLog.create({
+        data: {
+          groupId,
+          actorId: actorUserId,
+          action: "settlement_claim.rejected",
+          entityType: "settlement_claim",
+          entityId: claimId,
+          metadata: {
+            debtorMembershipId: claim.debtorMembershipId,
+            memberDisplayName: claim.debtorMembership.displayName,
+            amount: claim.amount.toString(),
+            reviewNote: reviewNote ?? null,
+          },
+        },
+      });
+      return updated;
+    });
+
+    if (claim.debtorMembership.userId) {
+      await createNotification({
+        userId: claim.debtorMembership.userId,
+        groupId,
+        type: "general",
+        title: "Payment claim rejected",
+        body: `Your reported payment of ₱${Number(claim.amount).toLocaleString()} was not confirmed by the organizer.${
+          reviewNote ? ` Note: ${reviewNote}` : ""
+        }`,
+        link: `/groups/${groupId}`,
+      });
+    }
+
+    return { claim: serializeSettlementClaim(updatedClaim), settlement: null };
+  }
+
+  const result = await prisma.$transaction(async (tx) => {
+    const settlement = await applyFifoSettlement(
+      tx,
+      groupId,
+      claim.debtorMembershipId,
+      claim.amount,
+      actorUserId,
+      claim.note ?? undefined,
+    );
+    const updatedClaim = await tx.settlementClaim.update({
+      where: { id: claimId },
+      data: {
+        status: SettlementClaimStatus.confirmed,
+        reviewNote: reviewNote ?? null,
+        reviewedAt: now,
+      },
+    });
+    await tx.auditLog.create({
+      data: {
+        groupId,
+        actorId: actorUserId,
+        action: "settlement_claim.confirmed",
+        entityType: "settlement_claim",
+        entityId: claimId,
+        metadata: {
+          debtorMembershipId: claim.debtorMembershipId,
+          memberDisplayName: claim.debtorMembership.displayName,
+          amount: claim.amount.toString(),
+          applied: settlement.applied,
+          unapplied: settlement.unapplied,
+        },
+      },
+    });
+    return { claim: updatedClaim, settlement };
+  });
+
+  if (claim.debtorMembership.userId) {
+    await createNotification({
+      userId: claim.debtorMembership.userId,
+      groupId,
+      type: "general",
+      title: "Payment confirmed",
+      body: `Your reported payment of ₱${Number(result.settlement.applied).toLocaleString()} was confirmed and applied to your debt.`,
+      link: `/groups/${groupId}`,
+    });
+  }
+
+  return { claim: serializeSettlementClaim(result.claim), settlement: result.settlement };
 }

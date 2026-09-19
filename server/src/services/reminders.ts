@@ -17,7 +17,6 @@ async function notifyOnce(params: {
   title: string;
   body: string;
   link: string;
-  dedupeKey: string;
 }) {
   const since = startOfUtcDay(new Date());
   const existing = await prisma.notification.findFirst({
@@ -25,7 +24,13 @@ async function notifyOnce(params: {
       userId: params.userId,
       groupId: params.groupId,
       type: params.type,
-      title: params.title,
+      // Match on body, not title: titles are reused across distinct reminders
+      // (e.g. every "outstanding debt" notice for a group shares one title),
+      // while the body carries the round-specific detail that actually tells
+      // two reminders apart. Matching on title alone silently swallowed every
+      // obligation reminder after the first for members who owed on more than
+      // one round in the same group.
+      body: params.body,
       createdAt: { gte: since },
     },
   });
@@ -87,7 +92,6 @@ export async function sendDueReminders(): Promise<{ sent: number }> {
             title,
             body,
             link,
-            dedupeKey: `${c.id}-${isOverdue ? "overdue" : "due"}`,
           })
         ) {
           sent++;
@@ -108,7 +112,6 @@ export async function sendDueReminders(): Promise<{ sent: number }> {
           title: `${group.name}: your payout round`,
           body: `Round ${currentRound.number} closes tomorrow — you are scheduled to receive the pot.`,
           link,
-          dedupeKey: `turn-${currentRound.id}`,
         })
       ) {
         sent++;
@@ -164,7 +167,6 @@ export async function sendDueReminders(): Promise<{ sent: number }> {
         title: `${group.name}: outstanding debt`,
         body: `You still owe ₱${Number(remaining).toLocaleString()} from round ${o.sourceRound.number}.`,
         link: `/groups/${group.id}`,
-        dedupeKey: `obligation-${o.id}`,
       })
     ) {
       sent++;

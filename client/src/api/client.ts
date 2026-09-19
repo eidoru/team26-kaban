@@ -246,7 +246,22 @@ export interface ObligationEntry {
   isPlaceholder: boolean;
   roundNumber: number;
   roundDueDate: string;
+  hasPendingClaim: boolean;
   settlements: ObligationSettlement[];
+}
+
+export interface SettlementClaimEntry {
+  id: string;
+  debtorMembershipId: string;
+  amount: string;
+  note: string | null;
+  proofUrl: string | null;
+  status: "pending" | "confirmed" | "rejected";
+  reviewNote: string | null;
+  reviewedAt: string | null;
+  createdAt: string;
+  memberDisplayName: string;
+  isPlaceholder: boolean;
 }
 
 export interface LedgerEntry extends RoundContribution {
@@ -283,7 +298,7 @@ export interface RoundSummary {
 }
 
 export interface GroupDetail {
-  group: Omit<GroupSummary, "membershipId"> & { membershipId?: string };
+  group: GroupSummary;
   members: GroupMember[];
   pending: {
     payoutOrder: boolean;
@@ -732,6 +747,25 @@ export const api = {
     request<{ obligationId: string; externalCoverageNote: string }>(
       `/groups/${groupId}/obligations/${obligationId}/cover-externally`,
       { method: "POST", body: JSON.stringify(body) },
+    ),
+
+  getSettlementClaims: (groupId: string) =>
+    request<{ claims: SettlementClaimEntry[] }>(`/groups/${groupId}/settlement-claims`),
+
+  submitSettlementClaim: (groupId: string, body: { amount: number; note?: string; proofUrl?: string }) =>
+    request<{ claim: SettlementClaimEntry }>(`/groups/${groupId}/settlement-claims`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  reviewSettlementClaim: (
+    groupId: string,
+    claimId: string,
+    body: { decision: "confirm" | "reject"; reviewNote?: string },
+  ) =>
+    request<{ claim: SettlementClaimEntry; settlement: { applied: string; unapplied: string } | null }>(
+      `/groups/${groupId}/settlement-claims/${claimId}/review`,
+      { method: "PATCH", body: JSON.stringify(body) },
     ),
 
   getLedger: (groupId: string) => request<{ entries: LedgerEntry[] }>(`/groups/${groupId}/ledger`),

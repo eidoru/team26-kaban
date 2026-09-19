@@ -46,6 +46,9 @@ import {
   settleMemberDebts,
   coverObligationExternally,
   getGroupObligations,
+  getGroupSettlementClaims,
+  submitSettlementClaim,
+  reviewSettlementClaim,
   ObligationError,
 } from "../services/obligations.js";
 import {
@@ -319,11 +322,14 @@ router.get("/:id", loadGroup, requireGroupMember, async (req, res, next) => {
     }
 
     res.json({
-      group: serializeGroup(
-        group,
-        filledCount,
-        req.membership!.isManager ? "manager" : "member",
-      ),
+      group: {
+        ...serializeGroup(
+          group,
+          filledCount,
+          req.membership!.isManager ? "manager" : "member",
+        ),
+        membershipId: req.membership!.id,
+      },
       members: members.map(serializeMember),
       pending: {
         payoutOrder: needsPayoutOrder,
@@ -970,6 +976,80 @@ router.post(
         String(req.params.oid),
         req.user!.id,
         req.body.note,
+      );
+      res.json(result);
+    } catch (err) {
+      if (err instanceof ObligationError) {
+        res.status(err.status).json({ error: err.message });
+        return;
+      }
+      next(err);
+    }
+  },
+);
+
+router.get("/:id/settlement-claims", loadGroup, requireGroupMember, async (req, res, next) => {
+  try {
+    const claims = await getGroupSettlementClaims(req.group!.id);
+    res.json({ claims });
+  } catch (err) {
+    if (err instanceof ObligationError) {
+      res.status(err.status).json({ error: err.message });
+      return;
+    }
+    next(err);
+  }
+});
+
+const submitSettlementClaimSchema = z.object({
+  amount: z.number().positive(),
+  note: z.string().max(500).optional(),
+  proofUrl: z.string().url().max(500).optional(),
+});
+
+router.post(
+  "/:id/settlement-claims",
+  loadGroup,
+  requireGroupMember,
+  validateBody(submitSettlementClaimSchema),
+  async (req, res, next) => {
+    try {
+      // Always the caller's own membership — a member can never submit a claim for someone else.
+      const claim = await submitSettlementClaim(
+        req.group!.id,
+        req.membership!.id,
+        req.user!.id,
+        req.body,
+      );
+      res.json({ claim });
+    } catch (err) {
+      if (err instanceof ObligationError) {
+        res.status(err.status).json({ error: err.message });
+        return;
+      }
+      next(err);
+    }
+  },
+);
+
+const reviewSettlementClaimSchema = z.object({
+  decision: z.enum(["confirm", "reject"]),
+  reviewNote: z.string().max(500).optional(),
+});
+
+router.patch(
+  "/:id/settlement-claims/:claimId/review",
+  loadGroup,
+  requireGroupManager,
+  validateBody(reviewSettlementClaimSchema),
+  async (req, res, next) => {
+    try {
+      const result = await reviewSettlementClaim(
+        req.group!.id,
+        String(req.params.claimId),
+        req.user!.id,
+        req.body.decision,
+        req.body.reviewNote,
       );
       res.json(result);
     } catch (err) {

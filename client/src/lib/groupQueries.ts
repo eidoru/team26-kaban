@@ -84,6 +84,7 @@ export function invalidateGroupShell(queryClient: QueryClient, groupId: string) 
 
 export function invalidateGroupIssues(queryClient: QueryClient, groupId: string) {
   void queryClient.invalidateQueries({ queryKey: ["obligations", groupId] });
+  void queryClient.invalidateQueries({ queryKey: ["settlement-claims", groupId] });
   void queryClient.invalidateQueries({ queryKey: ["disputes", groupId] });
   void queryClient.invalidateQueries({ queryKey: ["dashboard", groupId] });
   void queryClient.invalidateQueries({ queryKey: groupQueryKey(groupId) });

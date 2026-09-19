@@ -1,6 +1,8 @@
-import { ContributionSource, Prisma } from "@prisma/client";
+import { ContributionSource, Prisma, SettlementClaimStatus } from "@prisma/client";
 import { describe, expect, it } from "vitest";
 import {
+  canReviewSettlementClaim,
+  canSubmitSettlementClaim,
   getPaidAmount,
   getRoundCloseObligationAmount,
   getShortfall,
@@ -110,5 +112,58 @@ describe("obligationStatusFromRemaining", () => {
 
   it("marks partially settled when interest was paid but principal remains", () => {
     expect(obligationStatusFromRemaining(d(0), d(50), d(1000))).toBe("partially_settled");
+  });
+});
+
+describe("canSubmitSettlementClaim", () => {
+  const base = {
+    isManager: false,
+    viewerMembershipId: "mem-a",
+    debtorMembershipId: "mem-a",
+    hasOpenClaim: false,
+    hasOutstandingDebt: true,
+  };
+
+  it("allows a member to claim a payment against their own outstanding debt", () => {
+    expect(canSubmitSettlementClaim(base)).toBe(true);
+  });
+
+  it("denies managers", () => {
+    expect(canSubmitSettlementClaim({ ...base, isManager: true })).toBe(false);
+  });
+
+  it("denies claiming on someone else's debt", () => {
+    expect(canSubmitSettlementClaim({ ...base, debtorMembershipId: "mem-b" })).toBe(false);
+  });
+
+  it("denies when a claim is already pending review", () => {
+    expect(canSubmitSettlementClaim({ ...base, hasOpenClaim: true })).toBe(false);
+  });
+
+  it("denies when there is no outstanding debt", () => {
+    expect(canSubmitSettlementClaim({ ...base, hasOutstandingDebt: false })).toBe(false);
+  });
+});
+
+describe("canReviewSettlementClaim", () => {
+  it("allows a manager to review a pending claim", () => {
+    expect(
+      canReviewSettlementClaim({ isManager: true, claimStatus: SettlementClaimStatus.pending }),
+    ).toBe(true);
+  });
+
+  it("denies non-managers", () => {
+    expect(
+      canReviewSettlementClaim({ isManager: false, claimStatus: SettlementClaimStatus.pending }),
+    ).toBe(false);
+  });
+
+  it("denies reviewing a claim that's already been decided", () => {
+    expect(
+      canReviewSettlementClaim({ isManager: true, claimStatus: SettlementClaimStatus.confirmed }),
+    ).toBe(false);
+    expect(
+      canReviewSettlementClaim({ isManager: true, claimStatus: SettlementClaimStatus.rejected }),
+    ).toBe(false);
   });
 });

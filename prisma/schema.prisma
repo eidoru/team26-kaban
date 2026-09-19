@@ -54,6 +54,12 @@ enum DisputeStatus {
   resolved
 }
 
+enum SettlementClaimStatus {
+  pending
+  confirmed
+  rejected
+}
+
 enum NotificationType {
   member_left
   chair_claimed
@@ -137,6 +143,7 @@ model Membership {
   roundsWon     Round[]        @relation("RoundRecipient")
   inviteTokens  InviteToken[]
   disputes      Dispute[]
+  settlementClaims SettlementClaim[] @relation("SettlementClaimDebtor")
 
   @@unique([groupId, userId])
   @@unique([groupId, turnNumber])
@@ -242,6 +249,31 @@ model Settlement {
   obligation Obligation @relation(fields: [obligationId], references: [id], onDelete: Cascade)
 
   @@map("settlements")
+}
+
+/**
+ * A member's self-reported claim to have paid down their own outstanding debt. Does not move
+ * money on its own — only when a manager confirms it does it get applied (via the same FIFO
+ * settlement logic used for manager-direct settlements), producing ordinary Settlement rows.
+ * Scoped to the debtor rather than a single Obligation because confirmation settles FIFO across
+ * all of that member's open obligations, same as a manager-direct settlement does.
+ */
+model SettlementClaim {
+  id                 String                 @id @default(uuid())
+  debtorMembershipId String                 @map("debtor_membership_id")
+  amount             Decimal                @db.Decimal(12, 2)
+  note               String?
+  proofUrl           String?                @map("proof_url")
+  status             SettlementClaimStatus  @default(pending)
+  reviewNote         String?                @map("review_note")
+  reviewedAt         DateTime?              @map("reviewed_at")
+  createdAt          DateTime               @default(now()) @map("created_at")
+  updatedAt          DateTime               @updatedAt @map("updated_at")
+
+  debtorMembership Membership @relation("SettlementClaimDebtor", fields: [debtorMembershipId], references: [id], onDelete: Cascade)
+
+  @@index([debtorMembershipId, status])
+  @@map("settlement_claims")
 }
 
 model Dispute {

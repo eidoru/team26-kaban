@@ -135,6 +135,14 @@ export function GroupLobbyPage() {
     ...groupSupplementalQueryOptions,
   });
 
+  const { data: settlementClaimsData } = useQuery({
+    queryKey: ["settlement-claims", id],
+    queryFn: () => api.getSettlementClaims(id!),
+    enabled: !!id && groupLoaded && cycleStarted && cycleTab === "issues",
+    retry: shouldRetryGroupQuery,
+    ...groupSupplementalQueryOptions,
+  });
+
   const { data: dashboardData } = useQuery({
     queryKey: ["dashboard", id],
     queryFn: () => api.getDashboard(id!),
@@ -468,6 +476,60 @@ export function GroupLobbyPage() {
       invalidateIssues();
     } catch (err) {
       setFormError(err instanceof ApiError ? err.message : "Failed to record external coverage");
+    } finally {
+      setActionPending(null);
+    }
+  }
+
+  async function handleSubmitSettlementClaim() {
+    setFormError("");
+    const result = await dialog.settleDebt({
+      title: "Report a payment",
+      description: "Tell the organizer how much you paid toward your outstanding debt.",
+      submitLabel: "Submit for review",
+    });
+    if (result == null) return;
+    setActionPending("submit-settlement-claim");
+    try {
+      await api.submitSettlementClaim(id!, { amount: result.amount, note: result.note });
+      invalidateIssues();
+    } catch (err) {
+      setFormError(err instanceof ApiError ? err.message : "Failed to submit payment for review");
+    } finally {
+      setActionPending(null);
+    }
+  }
+
+  async function handleReviewSettlementClaim(claimId: string, decision: "confirm" | "reject") {
+    setFormError("");
+    let reviewNote: string | undefined;
+    if (decision === "reject") {
+      const note = await dialog.prompt({
+        title: "Reject payment claim",
+        description: "Let the member know why this reported payment wasn't confirmed.",
+        label: "Reason",
+        required: true,
+        multiline: true,
+        submitLabel: "Reject claim",
+      });
+      if (note == null || !note.trim()) return;
+      reviewNote = note.trim();
+    } else {
+      const confirmed = await dialog.confirm({
+        title: "Confirm payment?",
+        description: "This applies the reported amount to the member's outstanding debt.",
+        confirmLabel: "Confirm payment",
+        cancelLabel: "Cancel",
+      });
+      if (!confirmed) return;
+    }
+
+    setActionPending(`review-claim-${claimId}`);
+    try {
+      await api.reviewSettlementClaim(id!, claimId, { decision, reviewNote });
+      invalidateIssues();
+    } catch (err) {
+      setFormError(err instanceof ApiError ? err.message : "Failed to review payment claim");
     } finally {
       setActionPending(null);
     }
@@ -865,10 +927,12 @@ export function GroupLobbyPage() {
             completionSummaryLoading={completionSummaryLoading}
             completionSummaryError={completionSummaryError}
             obligations={obligationsData?.obligations ?? []}
+            settlementClaims={settlementClaimsData?.claims ?? []}
             disputes={disputesData?.disputes ?? []}
             ledgerEntries={ledgerData?.entries ?? []}
             auditEntries={auditData?.entries ?? []}
             actionPending={actionPending}
+            viewerMembershipId={group.membershipId}
             onReportPayment={(cid, amount) => void handleReportPayment(cid, amount)}
             onConfirmPayment={(cid) => void handleConfirmPayment(cid)}
             onRecordPayment={(cid, amount) => void handleRecordPayment(cid, amount)}
@@ -876,6 +940,10 @@ export function GroupLobbyPage() {
             onSettleMemberDebts={(memberId, name) => void handleSettleMemberDebts(memberId, name)}
             onCoverObligationExternally={(oid, name) => void handleCoverObligationExternally(oid, name)}
             onResolveDispute={(disputeId) => void handleResolveDispute(disputeId)}
+            onSubmitSettlementClaim={() => void handleSubmitSettlementClaim()}
+            onReviewSettlementClaim={(claimId, decision) =>
+              void handleReviewSettlementClaim(claimId, decision)
+            }
             onAdvanceRound={() => void handleAdvanceRound()}
             advanceRoundPending={advanceRound.isPending}
             showDemoTools={showDemoTools}

@@ -10,7 +10,7 @@ function decimal(value: number | string): Prisma.Decimal {
   return new Prisma.Decimal(value);
 }
 
-function resolvePaidAmount(
+export function resolvePaidAmount(
   expected: Prisma.Decimal,
   amountInput?: number,
 ): Prisma.Decimal {
@@ -23,6 +23,16 @@ function resolvePaidAmount(
     throw new ContributionError(400, "Amount cannot exceed the expected contribution");
   }
   return paid;
+}
+
+/**
+ * Whether the viewer may (re-)report this contribution. A member can report their own
+ * contribution while it's pending, and can still revise (top up) the amount while it's
+ * reported but not yet confirmed by the manager. Once confirmed it's terminal.
+ */
+export function canReportContribution(status: ContributionStatus, isOwn: boolean): boolean {
+  if (!isOwn) return false;
+  return status === ContributionStatus.pending || status === ContributionStatus.reported;
 }
 
 export function serializeContribution(c: {
@@ -88,8 +98,11 @@ export async function reportContribution(
   if (existing.membership.userId !== actorUserId) {
     throw new ContributionError(403, "You can only report your own contribution");
   }
-  if (existing.status !== ContributionStatus.pending) {
-    throw new ContributionError(409, "This contribution has already been reported or confirmed");
+  if (!canReportContribution(existing.status, true)) {
+    throw new ContributionError(
+      409,
+      "This contribution has already been confirmed and can no longer be changed",
+    );
   }
 
   const expected = existing.round.group.contributionAmount;
@@ -285,7 +298,7 @@ export function contributionActions(
 ) {
   const isOwn = membership.userId === viewerUserId;
   return {
-    canReport: c.status === "pending" && isOwn,
+    canReport: canReportContribution(c.status, isOwn),
     canConfirm: isManager && c.status === "reported",
     canRecord: isManager && c.status === "pending" && membership.userId === null,
   };

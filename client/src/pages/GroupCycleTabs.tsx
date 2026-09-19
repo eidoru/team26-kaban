@@ -9,6 +9,7 @@ import type {
   ObligationEntry,
   RoundContribution,
   RoundSummary,
+  SettlementClaimEntry,
 } from "../api/client";
 import { formatFrequency } from "../lib/frequency";
 import { displayInitials } from "../lib/initials";
@@ -314,22 +315,39 @@ function disputeStatusBadge(status: string) {
   return ui.badgeForming;
 }
 
+function settlementClaimStatusLabel(status: string) {
+  if (status === "confirmed") return "Confirmed";
+  if (status === "rejected") return "Rejected";
+  return "Pending review";
+}
+
+function settlementClaimStatusBadge(status: string) {
+  if (status === "confirmed") return ui.badgeActive;
+  if (status === "rejected") return "rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-xs font-normal text-red-800";
+  return ui.badgeForming;
+}
+
 const issueActionBtn = "inline-flex min-w-[7.5rem] items-center justify-center";
 
 function ObligationTableRow({
   obligation,
   isManager,
+  viewerMembershipId,
   actionPending,
   onSettleMemberDebts,
   onCoverObligationExternally,
+  onSubmitSettlementClaim,
 }: {
   obligation: ObligationEntry;
   isManager: boolean;
+  viewerMembershipId?: string;
   actionPending: string | null;
   onSettleMemberDebts: (memberId: string, memberName: string) => void;
   onCoverObligationExternally: (obligationId: string, memberName: string) => void;
+  onSubmitSettlementClaim: () => void;
 }) {
   const hasInterest = Number(obligation.accruedInterest) > 0;
+  const isOwnDebt = !isManager && obligation.debtorMembershipId === viewerMembershipId;
 
   return (
     <tr className={ui.tableRow}>
@@ -368,9 +386,9 @@ function ObligationTableRow({
           {obligationStatusLabel(obligation.status)}
         </span>
       </td>
-      {isManager && (
+      {(isManager || isOwnDebt) && (
         <td className="px-4 py-3">
-          {obligation.status !== "settled" && (
+          {obligation.status !== "settled" && isManager && (
             <div className="flex flex-wrap justify-end gap-2">
               <button
                 type="button"
@@ -388,6 +406,22 @@ function ObligationTableRow({
               >
                 {actionPending === `cover-${obligation.id}` ? "…" : "Cover externally"}
               </button>
+            </div>
+          )}
+          {obligation.status !== "settled" && isOwnDebt && (
+            <div className="flex justify-end">
+              {obligation.hasPendingClaim ? (
+                <span className={ui.badgeForming}>Payment pending review</span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => onSubmitSettlementClaim()}
+                  disabled={actionPending === "submit-settlement-claim"}
+                  className={`${issueActionBtn} border border-transparent ${ui.btnPrimarySm}`}
+                >
+                  {actionPending === "submit-settlement-claim" ? "…" : "Pay"}
+                </button>
+              )}
             </div>
           )}
         </td>
@@ -448,29 +482,104 @@ function DisputeRow({
   );
 }
 
+function SettlementClaimRow({
+  claim,
+  isManager,
+  actionPending,
+  onReviewSettlementClaim,
+  muted = false,
+}: {
+  claim: SettlementClaimEntry;
+  isManager: boolean;
+  actionPending: string | null;
+  onReviewSettlementClaim: (claimId: string, decision: "confirm" | "reject") => void;
+  muted?: boolean;
+}) {
+  return (
+    <li
+      className={`flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4 ${
+        muted ? "opacity-70" : ""
+      }`}
+    >
+      <div className="flex min-w-0 flex-1 items-start gap-2.5">
+        <span className={ui.avatarInitialsSm} aria-hidden>
+          {displayInitials(claim.memberDisplayName)}
+        </span>
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="truncate font-medium text-slate-900">{claim.memberDisplayName}</p>
+            <span className={settlementClaimStatusBadge(claim.status)}>
+              {settlementClaimStatusLabel(claim.status)}
+            </span>
+          </div>
+          <p className="mt-0.5 text-sm text-slate-500">
+            Reported ₱{Number(claim.amount).toLocaleString()}
+          </p>
+          {claim.note && <p className="mt-2 text-sm text-slate-700">{claim.note}</p>}
+          {claim.reviewNote && (
+            <p className="mt-2 text-sm text-emerald-800">Review note: {claim.reviewNote}</p>
+          )}
+        </div>
+      </div>
+      {isManager && claim.status === "pending" && (
+        <div className="flex shrink-0 gap-2">
+          <button
+            type="button"
+            onClick={() => onReviewSettlementClaim(claim.id, "confirm")}
+            disabled={actionPending === `review-claim-${claim.id}`}
+            className={`${issueActionBtn} border border-transparent ${ui.btnPrimarySm}`}
+          >
+            {actionPending === `review-claim-${claim.id}` ? "…" : "Confirm"}
+          </button>
+          <button
+            type="button"
+            onClick={() => onReviewSettlementClaim(claim.id, "reject")}
+            disabled={actionPending === `review-claim-${claim.id}`}
+            className={`${issueActionBtn} ${ui.btnSecondarySm}`}
+          >
+            {actionPending === `review-claim-${claim.id}` ? "…" : "Reject"}
+          </button>
+        </div>
+      )}
+    </li>
+  );
+}
+
 function IssuesPanel({
   obligations,
+  settlementClaims,
   disputes,
   isManager,
   actionPending,
+  viewerMembershipId,
   onSettleMemberDebts,
   onCoverObligationExternally,
   onResolveDispute,
+  onSubmitSettlementClaim,
+  onReviewSettlementClaim,
 }: {
   obligations: ObligationEntry[];
+  settlementClaims: SettlementClaimEntry[];
   disputes: DisputeEntry[];
   isManager: boolean;
   actionPending: string | null;
+  viewerMembershipId?: string;
   onSettleMemberDebts: (memberId: string, memberName: string) => void;
   onCoverObligationExternally: (obligationId: string, memberName: string) => void;
   onResolveDispute: (disputeId: string) => void;
+  onSubmitSettlementClaim: () => void;
+  onReviewSettlementClaim: (claimId: string, decision: "confirm" | "reject") => void;
 }) {
   const openObligations = obligations.filter((o) => o.status !== "settled");
   const openDisputes = disputes.filter((d) => d.status === "open");
   const resolvedDisputes = disputes.filter((d) => d.status === "resolved");
+  const pendingClaims = settlementClaims.filter((c) => c.status === "pending");
+  const reviewedClaims = settlementClaims.filter((c) => c.status !== "pending");
   const totalOutstanding = openObligations.reduce((sum, o) => sum + Number(o.remaining), 0);
+  const hasActionsColumn =
+    isManager || openObligations.some((o) => o.debtorMembershipId === viewerMembershipId);
 
-  if (openObligations.length === 0 && disputes.length === 0) {
+  if (openObligations.length === 0 && disputes.length === 0 && settlementClaims.length === 0) {
     return (
       <EmptyTabState
         title="No open issues"
@@ -526,7 +635,7 @@ function IssuesPanel({
                   <th className="px-4 py-2.5 font-normal">Round</th>
                   <th className="px-4 py-2.5 text-right font-normal">Remaining</th>
                   <th className="px-4 py-2.5 font-normal">Status</th>
-                  {isManager && <th className="px-4 py-2.5 text-right font-normal">Actions</th>}
+                  {hasActionsColumn && <th className="px-4 py-2.5 text-right font-normal">Actions</th>}
                 </tr>
               </thead>
               <tbody>
@@ -535,14 +644,55 @@ function IssuesPanel({
                     key={obligation.id}
                     obligation={obligation}
                     isManager={isManager}
+                    viewerMembershipId={viewerMembershipId}
                     actionPending={actionPending}
                     onSettleMemberDebts={onSettleMemberDebts}
                     onCoverObligationExternally={onCoverObligationExternally}
+                    onSubmitSettlementClaim={onSubmitSettlementClaim}
                   />
                 ))}
               </tbody>
             </table>
           </div>
+        </section>
+      )}
+
+      {pendingClaims.length > 0 && (
+        <section className={ui.sectionCard}>
+          <h2 className={ui.sectionHeader}>Payments awaiting review</h2>
+          <p className={ui.sectionSubtitle}>
+            Members reported these payments toward their debt. Confirming applies the amount;
+            rejecting leaves the debt unchanged.
+          </p>
+          <ul className="mt-4 divide-y divide-gray-100 overflow-hidden rounded-xl border border-gray-100">
+            {pendingClaims.map((claim) => (
+              <SettlementClaimRow
+                key={claim.id}
+                claim={claim}
+                isManager={isManager}
+                actionPending={actionPending}
+                onReviewSettlementClaim={onReviewSettlementClaim}
+              />
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {reviewedClaims.length > 0 && (
+        <section className={ui.sectionCard}>
+          <h2 className={ui.sectionHeader}>Reviewed payments</h2>
+          <ul className="mt-4 divide-y divide-gray-100 overflow-hidden rounded-xl border border-gray-100">
+            {reviewedClaims.map((claim) => (
+              <SettlementClaimRow
+                key={claim.id}
+                claim={claim}
+                isManager={isManager}
+                actionPending={actionPending}
+                onReviewSettlementClaim={onReviewSettlementClaim}
+                muted
+              />
+            ))}
+          </ul>
         </section>
       )}
 
@@ -750,7 +900,11 @@ function ContributionRow({
                 disabled={actionPending === contribution.id}
                 className={`${contributionActionBtn} ${ui.btnPrimarySm}`}
               >
-                {actionPending === contribution.id ? "…" : "Report paid"}
+                {actionPending === contribution.id
+                  ? "…"
+                  : contribution.status === "reported"
+                    ? "Update payment"
+                    : "Report paid"}
               </button>
             )}
             {contribution.canConfirm && (
@@ -954,10 +1108,12 @@ export interface GroupCycleTabsProps {
   completionSummaryLoading?: boolean;
   completionSummaryError?: boolean;
   obligations: ObligationEntry[];
+  settlementClaims: SettlementClaimEntry[];
   disputes: DisputeEntry[];
   ledgerEntries: LedgerEntry[];
   auditEntries: AuditLogEntry[];
   actionPending: string | null;
+  viewerMembershipId?: string;
   onReportPayment: (contributionId: string, expectedAmount: string) => void;
   onConfirmPayment: (contributionId: string) => void;
   onRecordPayment: (contributionId: string, expectedAmount: string) => void;
@@ -965,6 +1121,8 @@ export interface GroupCycleTabsProps {
   onSettleMemberDebts: (memberId: string, memberName: string) => void;
   onCoverObligationExternally: (obligationId: string, memberName: string) => void;
   onResolveDispute: (disputeId: string) => void;
+  onSubmitSettlementClaim: () => void;
+  onReviewSettlementClaim: (claimId: string, decision: "confirm" | "reject") => void;
   onAdvanceRound?: () => void;
   advanceRoundPending?: boolean;
   showDemoTools?: boolean;
@@ -990,10 +1148,12 @@ export function GroupCycleTabPanels(props: GroupCycleTabsProps) {
     completionSummaryLoading,
     completionSummaryError,
     obligations,
+    settlementClaims,
     disputes,
     ledgerEntries,
     auditEntries,
     actionPending,
+    viewerMembershipId,
     onReportPayment,
     onConfirmPayment,
     onRecordPayment,
@@ -1001,6 +1161,8 @@ export function GroupCycleTabPanels(props: GroupCycleTabsProps) {
     onSettleMemberDebts,
     onCoverObligationExternally,
     onResolveDispute,
+    onSubmitSettlementClaim,
+    onReviewSettlementClaim,
     onAdvanceRound,
     advanceRoundPending = false,
     showDemoTools = false,
@@ -1232,12 +1394,16 @@ export function GroupCycleTabPanels(props: GroupCycleTabsProps) {
     return (
       <IssuesPanel
         obligations={obligations}
+        settlementClaims={settlementClaims}
         disputes={disputes}
         isManager={isManager}
         actionPending={actionPending}
+        viewerMembershipId={viewerMembershipId}
         onSettleMemberDebts={onSettleMemberDebts}
         onCoverObligationExternally={onCoverObligationExternally}
         onResolveDispute={onResolveDispute}
+        onSubmitSettlementClaim={onSubmitSettlementClaim}
+        onReviewSettlementClaim={onReviewSettlementClaim}
       />
     );
   }

@@ -395,6 +395,51 @@ function formatAction(
         details,
       };
     }
+    case "settlement_claim.submitted": {
+      const name = metaString(metadata, "memberDisplayName");
+      const amount = metaString(metadata, "amount");
+      if (name) details.push(`Member: ${name}`);
+      if (amount) details.push(`Claimed amount: ₱${Number(amount).toLocaleString()}`);
+      details.push("Awaiting manager review");
+      return {
+        category: "obligation",
+        title: "Settlement claim submitted",
+        summary:
+          name && amount
+            ? `${name} reported paying ₱${Number(amount).toLocaleString()} toward their debt`
+            : "A member reported a debt payment for review",
+        details,
+      };
+    }
+    case "settlement_claim.confirmed": {
+      const name = metaString(metadata, "memberDisplayName");
+      const applied = metaString(metadata, "applied");
+      if (name) details.push(`Member: ${name}`);
+      if (applied) details.push(`Applied: ₱${Number(applied).toLocaleString()}`);
+      details.push("Confirmed claim settled via FIFO");
+      return {
+        category: "obligation",
+        title: "Settlement claim confirmed",
+        summary: name
+          ? `Manager confirmed ${name}'s reported payment`
+          : "Manager confirmed a member's reported payment",
+        details,
+      };
+    }
+    case "settlement_claim.rejected": {
+      const name = metaString(metadata, "memberDisplayName");
+      const reviewNote = metaString(metadata, "reviewNote");
+      if (name) details.push(`Member: ${name}`);
+      if (reviewNote) details.push(`Note: ${reviewNote}`);
+      return {
+        category: "obligation",
+        title: "Settlement claim rejected",
+        summary: name
+          ? `Manager rejected ${name}'s reported payment`
+          : "Manager rejected a member's reported payment",
+        details,
+      };
+    }
     default:
       return {
         category: log.entityType,
