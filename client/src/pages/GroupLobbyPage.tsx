@@ -1,21 +1,28 @@
 ﻿import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ApiError, api, type GroupDetail, type GroupMember, type MemberReliability } from "../api/client";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { CloudOff } from "lucide-react";
+import { ApiError, api, type GroupDetail, type GroupMember } from "../api/client";
 import { useDialog } from "../context/DialogContext";
 import { formatFrequency } from "../lib/frequency";
-import { clearGroupQueries, deferContributionSideEffects, deferStructureSideEffects, groupQueryKey, groupSupplementalQueryOptions, invalidateGroupIssues, invalidateGroupShell, isGroupNotFoundError, mergeCurrentRoundIntoGroupCache, OPTIMISTIC_MEMBER_ID, patchConfirmedContribution, patchGroupCurrentRoundContribution, patchMemberAdded, patchMemberRemoved, patchPayoutOrder, patchRecordedContribution, patchReportedContribution, applyManualTurnOrder, refreshGroupView, shuffleMemberTurnOrder, shouldRetryGroupQuery } from "../lib/groupQueries";
+import { dueHint, formatDueDate } from "../lib/dates";
+import { useDemoToolsSetting } from "../lib/devTools";
+import { clearGroupQueries, deferContributionSideEffects, deferStructureSideEffects, groupQueryKey, groupSupplementalQueryOptions, invalidateGroupIssues, invalidateGroupShell, isGroupNotFoundError, mergeCurrentRoundIntoGroupCache, OPTIMISTIC_MEMBER_ID, patchConfirmedContribution, patchGroupCurrentRoundContribution, patchMemberAdded, patchMemberRemoved, patchPayoutOrder, patchRecordedContribution, patchReportedContribution, patchStartDate, applyManualTurnOrder, refreshGroupView, shuffleMemberTurnOrder, shouldRetryGroupQuery } from "../lib/groupQueries";
 import { isSupabaseRealtimeConfigured } from "../lib/supabaseClient";
 import { isRealtimeFallbackNeeded, useGroupRealtime, type GroupRealtimeScope } from "../lib/useGroupRealtime";
 import { ui } from "../lib/ui";
+import { Celebration } from "../components/Celebration";
 import { GroupCycleTabPanels, type CycleTab } from "./GroupCycleTabs";
 import {
   GroupHeader,
+  GroupPageSkeleton,
   GroupSectionLayout,
   type GroupFact,
   type GroupPhase,
 } from "../components/GroupChrome";
 import { FormingManagerPanel, FormingMemberPanel, formatGroupDate } from "./FormingPhase";
+
+const CYCLE_TABS: CycleTab[] = ["overview", "schedule", "ledger", "issues", "audit"];
 
 export function GroupLobbyPage() {
   const { id } = useParams<{ id: string }>();
@@ -31,17 +38,19 @@ export function GroupLobbyPage() {
   const [startDate, setStartDate] = useState("");
   const [manualOrder, setManualOrder] = useState<Record<string, number>>({});
   const [payoutDraftActive, setPayoutDraftActive] = useState(false);
-  const [cycleTab, setCycleTab] = useState<CycleTab>("overview");
+  const [activating, setActivating] = useState(false);
+  // Keyed by group id so the celebration never leaks onto another group's page.
+  const [launchedGroupId, setLaunchedGroupId] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
 
   useEffect(() => {
-    setCycleTab("overview");
     setPayoutDraftActive(false);
     setManualOrder({});
   }, [id]);
 
-  const { data, isPending, error } = useQuery({
+  const { data, isPending, error, refetch, isFetching } = useQuery({
     queryKey: ["group", id],
-    queryFn: () => api.getGroup(id!),
+    queryFn: ({ signal }) => api.getGroup(id!, signal),
     enabled: !!id,
     retry: shouldRetryGroupQuery,
     staleTime: 60_000,
@@ -58,6 +67,17 @@ export function GroupLobbyPage() {
   const cycleStarted = groupLoaded && data.group.status !== "forming";
 
   const isManagerView = data?.group.role === "manager";
+
+  // The active tab lives in the URL (?tab=issues), so it survives refreshes and can be linked to;
+  // opening another group has no ?tab and lands on the default.
+  const requestedTab = searchParams.get("tab") as CycleTab | null;
+  const cycleTab: CycleTab =
+    requestedTab && CYCLE_TABS.includes(requestedTab) && (requestedTab !== "audit" || isManagerView)
+      ? requestedTab
+      : "overview";
+  function setCycleTab(tab: CycleTab) {
+    setSearchParams(tab === "overview" ? {} : { tab }, { replace: true });
+  }
 
   const handleGroupRealtimeUpdate = useCallback(
     (scope: GroupRealtimeScope) => {
@@ -111,9 +131,16 @@ export function GroupLobbyPage() {
     ...groupSupplementalQueryOptions,
   });
 
-  const { data: auditData } = useQuery({
+  const {
+    data: auditData,
+    fetchNextPage: fetchOlderAudit,
+    hasNextPage: hasOlderAudit,
+    isFetchingNextPage: loadingOlderAudit,
+  } = useInfiniteQuery({
     queryKey: ["audit-log", id],
-    queryFn: () => api.getAuditLog(id!),
+    queryFn: ({ pageParam }) => api.getAuditLog(id!, pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.entries.at(-1)?.id : undefined),
     enabled: !!id && groupLoaded && cycleStarted && isManagerView && cycleTab === "audit",
     retry: shouldRetryGroupQuery,
     ...groupSupplementalQueryOptions,
@@ -163,14 +190,6 @@ export function GroupLobbyPage() {
     queryKey: ["completion-summary", id],
     queryFn: () => api.getCompletionSummary(id!),
     enabled: !!id && groupLoaded && isCompleted && cycleTab === "overview",
-    retry: shouldRetryGroupQuery,
-    ...groupSupplementalQueryOptions,
-  });
-
-  const { data: reliabilityData } = useQuery({
-    queryKey: ["member-reliability", id],
-    queryFn: () => api.getMemberReliability(id!),
-    enabled: !!id && groupLoaded && cycleStarted && cycleTab === "members",
     retry: shouldRetryGroupQuery,
     ...groupSupplementalQueryOptions,
   });
@@ -292,8 +311,7 @@ export function GroupLobbyPage() {
     mutationFn: () => api.advanceRound(id!),
   });
 
-  const showDemoTools =
-    import.meta.env.DEV || import.meta.env.VITE_DEMO_TOOLS === "true";
+  const [showDemoTools] = useDemoToolsSetting();
 
   const sortedMembers = useMemo(() => {
     if (!data?.members) return [];
@@ -305,18 +323,21 @@ export function GroupLobbyPage() {
     });
   }, [data?.members]);
 
-  if (isPending && !data) return <p className={ui.muted}>Loading group…</p>;
+  if (isPending && !data) return <GroupPageSkeleton />;
   if (groupUnavailable) return <p className={ui.muted}>This paluwagan is no longer available…</p>;
   if (error || !data) {
     return (
-      <div>
-        <p className={ui.error}>
-          {error instanceof ApiError ? error.message : "Failed to load group"}
+      <div className={`${ui.emptyState} flex flex-col items-center`} role="alert">
+        <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-danger-600" aria-hidden>
+          <CloudOff className="h-6 w-6" />
+        </span>
+        <p className="font-heading mt-3 text-lg font-bold text-ink-900">Couldn&apos;t load this paluwagan</p>
+        <p className={`mt-1 max-w-sm text-sm ${ui.muted}`}>
+          {error instanceof ApiError ? error.message : "Check your connection, then try again."}
         </p>
-        <Link to="/home" className={`mt-4 inline-block ${ui.backLink}`}>
-          <span className={ui.backLinkArrow}>←</span>
-          Back to home
-        </Link>
+        <button type="button" onClick={() => void refetch()} disabled={isFetching} className={`mt-5 ${ui.btnPrimarySm}`}>
+          {isFetching ? "Retrying…" : "Try again"}
+        </button>
       </div>
     );
   }
@@ -325,8 +346,6 @@ export function GroupLobbyPage() {
   const isManager = group.role === "manager";
   const isForming = group.status === "forming";
   const isActive = group.status === "active";
-  const reliability = reliabilityData?.reliability ?? [];
-  const reliabilityByMember = new Map(reliability.map((r: MemberReliability) => [r.membershipId, r]));
   const displayStartDate =
     startDate || (group.startDate ? String(group.startDate).slice(0, 10) : "");
 
@@ -730,33 +749,55 @@ export function GroupLobbyPage() {
       return;
     }
 
+    // The order being submitted is exactly what's already on screen (the manual/randomized
+    // draft), so lock it in visually right away rather than waiting on the round trip.
+    const previous = queryClient.getQueryData<GroupDetail>(groupQueryKey(id));
+    const orderByMembership = new Map(order.map((entry) => [entry.membershipId, entry.turnNumber]));
+    const optimisticMembers = data.members.map((member) => ({
+      ...member,
+      turnNumber: orderByMembership.get(member.id) ?? member.turnNumber,
+    }));
+    patchPayoutOrder(queryClient, id, optimisticMembers);
+
     try {
       const result = await persistPayoutOrder.mutateAsync(order);
       patchPayoutOrder(queryClient, id, result.members);
       deferStructureSideEffects(queryClient, id);
       syncManualOrderFromMembers(result.members);
+      // Only unlock once the server has actually confirmed it — flipping this before the
+      // request resolves lets "Edit order" reopen a draft while the old request is still in
+      // flight, surfacing its leftover "Locking in…" state and risking it overwriting the
+      // new edit once it finally resolves.
       setPayoutDraftActive(false);
     } catch (err) {
+      if (previous) queryClient.setQueryData(groupQueryKey(id), previous);
+      setPayoutDraftActive(true);
       setFormError(err instanceof ApiError ? err.message : "Failed to lock in payout order");
     }
   }
 
   async function handleSaveStartDate() {
     setFormError("");
-    if (!displayStartDate) {
+    if (!displayStartDate || !id) {
       setFormError("Choose a start date");
       return;
     }
+    const previous = queryClient.getQueryData<GroupDetail>(groupQueryKey(id));
+    patchStartDate(queryClient, id, displayStartDate);
     try {
       await saveStartDate.mutateAsync(displayStartDate);
       invalidateStructure();
     } catch (err) {
+      if (previous) queryClient.setQueryData(groupQueryKey(id), previous);
       setFormError(err instanceof ApiError ? err.message : "Failed to save start date");
     }
   }
 
+  // Randomizing or dragging writes real turn numbers into the cache as a *draft* before
+  // anything is persisted, so `pending.payoutOrder` alone can look satisfied too early.
+  // Only a locked-in order (draft cleared by handleLockInPayoutOrder) counts.
   const readyToActivate =
-    pending.openSlots === 0 && !pending.payoutOrder && !!displayStartDate;
+    pending.openSlots === 0 && !pending.payoutOrder && !payoutDraftActive && !!displayStartDate;
 
   const rosterFilled = group.filledCount ?? members.length;
   const rosterFillPercent =
@@ -764,13 +805,19 @@ export function GroupLobbyPage() {
 
   async function handleActivate() {
     setFormError("");
+    // activate.isPending alone would flip false as soon as the activate request settles,
+    // before the refetch below lands — the button would revert to idle while the page is
+    // still showing the stale Forming view. Keep it pending through both steps.
+    setActivating(true);
     try {
       await activate.mutateAsync(displayStartDate ? { startDate: displayStartDate } : undefined);
       await refreshGroupView(queryClient, id!);
-      void queryClient.invalidateQueries({ queryKey: ["member-reliability", id] });
+      setLaunchedGroupId(id!);
       void queryClient.invalidateQueries({ queryKey: ["audit-log", id] });
     } catch (err) {
       setFormError(err instanceof ApiError ? err.message : "Failed to activate group");
+    } finally {
+      setActivating(false);
     }
   }
 
@@ -794,7 +841,6 @@ export function GroupLobbyPage() {
       void queryClient.invalidateQueries({ queryKey: ["ledger", id] });
       void queryClient.invalidateQueries({ queryKey: ["obligations", id] });
       void queryClient.invalidateQueries({ queryKey: ["disputes", id] });
-      void queryClient.invalidateQueries({ queryKey: ["member-reliability", id] });
       void queryClient.invalidateQueries({ queryKey: ["audit-log", id] });
       void queryClient.invalidateQueries({ queryKey: ["completion-summary", id] });
       if (completed) {
@@ -817,21 +863,31 @@ export function GroupLobbyPage() {
     { id: "schedule", label: "Schedule" },
     { id: "ledger", label: "Ledger" },
     { id: "issues", label: "Issues", badge: issuesCount },
-    { id: "members", label: "Members" },
     ...(isManager ? [{ id: "audit" as const, label: "Audit log" }] : []),
   ];
 
   const phase: GroupPhase = isForming ? "forming" : isActive ? "active" : "completed";
   const headerFacts: GroupFact[] = [
-    { label: "Contribution", value: `₱${Number(group.contributionAmount).toLocaleString()}` },
-    { label: "Schedule", value: formatFrequency(group.frequency, group.frequencyDays) },
+    {
+      label: "Contribution",
+      value: `₱${Number(group.contributionAmount).toLocaleString()} ${formatFrequency(
+        group.frequency,
+        group.frequencyDays,
+      ).toLowerCase()}`,
+    },
     { label: "Roster", value: `${group.filledCount ?? members.length} / ${group.slotCount}` },
   ];
   if (isActive && currentRound) {
-    headerFacts.push({
-      label: "Current round",
-      value: `#${currentRound.number} · due ${currentRound.dueDate}`,
-    });
+    const hint = dueHint(currentRound.dueDate);
+    headerFacts.push(
+      { label: "Round", value: `${currentRound.number} of ${schedule.length || group.slotCount}` },
+      {
+        label: "Next due",
+        value: formatDueDate(currentRound.dueDate),
+        hint: hint?.label,
+        hintTone: hint?.overdue ? "danger" : "muted",
+      },
+    );
   } else if (isForming && displayStartDate) {
     headerFacts.push({ label: "Starts", value: formatGroupDate(displayStartDate) });
   }
@@ -871,7 +927,7 @@ export function GroupLobbyPage() {
               groupInvitePending={groupInvite.isPending}
               lockingInPayout={persistPayoutOrder.isPending}
               saveStartDatePending={saveStartDate.isPending}
-              activatePending={activate.isPending}
+              activatePending={activating}
               deleteGroupPending={deleteGroup.isPending}
               onAddNameChange={setAddName}
               onAddContactChange={setAddContact}
@@ -906,6 +962,14 @@ export function GroupLobbyPage() {
         </div>
       )}
 
+      {cycleStarted && launchedGroupId === id && (
+        <div className="mb-6">
+          <Celebration title="Your paluwagan is live!" onDismiss={() => setLaunchedGroupId(null)}>
+            Round 1 is open. Members can now report their contributions.
+          </Celebration>
+        </div>
+      )}
+
       {cycleStarted && (
         <GroupSectionLayout
           items={cycleTabs}
@@ -921,7 +985,6 @@ export function GroupLobbyPage() {
             isActive={isActive}
             isCompleted={isCompleted}
             sortedMembers={sortedMembers}
-            reliabilityByMember={reliabilityByMember}
             dashboard={dashboardData?.dashboard}
             completionSummary={completionData?.summary}
             completionSummaryLoading={completionSummaryLoading}
@@ -930,7 +993,10 @@ export function GroupLobbyPage() {
             settlementClaims={settlementClaimsData?.claims ?? []}
             disputes={disputesData?.disputes ?? []}
             ledgerEntries={ledgerData?.entries ?? []}
-            auditEntries={auditData?.entries ?? []}
+            auditEntries={auditData?.pages.flatMap((page) => page.entries) ?? []}
+            auditHasMore={!!hasOlderAudit}
+            auditLoadingMore={loadingOlderAudit}
+            onLoadMoreAudit={() => void fetchOlderAudit()}
             actionPending={actionPending}
             viewerMembershipId={group.membershipId}
             onReportPayment={(cid, amount) => void handleReportPayment(cid, amount)}

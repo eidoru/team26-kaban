@@ -1,4 +1,4 @@
-import { Group, GroupStatus, Membership, Prisma } from "@prisma/client";
+import { Group, GroupStatus, Membership, Prisma, RoundStatus } from "@prisma/client";
 import { createNotification, writeAuditLog } from "../lib/audit.js";
 import { resolveAppOrigin } from "../lib/origin.js";
 import { prisma } from "../lib/prisma.js";
@@ -13,22 +13,11 @@ export class GroupError extends Error {
   }
 }
 
+/** A completed paluwagan's roster is closed: placeholder seats can no longer be claimed. */
+export const CLAIM_CLOSED_MESSAGE = "This paluwagan has finished, so this seat can no longer be claimed.";
+
 export async function countFilledSlots(groupId: string): Promise<number> {
   return prisma.membership.count({ where: { groupId } });
-}
-
-export async function countFilledSlotsByGroupIds(
-  groupIds: string[],
-): Promise<Map<string, number>> {
-  if (groupIds.length === 0) return new Map();
-
-  const rows = await prisma.membership.groupBy({
-    by: ["groupId"],
-    where: { groupId: { in: groupIds } },
-    _count: { _all: true },
-  });
-
-  return new Map(rows.map((row) => [row.groupId, row._count._all]));
 }
 
 export function shouldResetPayoutOrder(opts: {
@@ -172,6 +161,29 @@ export async function listUserGroups(userId: string) {
     .map((m) => m.groupId);
   const completedStats = await getCompletedGroupCardStats(completedIds);
 
+  // For active groups, the current round and the round that pays out to the viewer, so the
+  // home card can say how many rounds until their turn.
+  const activeMemberships = memberships.filter((m) => m.group.status === GroupStatus.active);
+  const activeRounds =
+    activeMemberships.length === 0
+      ? []
+      : await prisma.round.findMany({
+          where: {
+            groupId: { in: activeMemberships.map((m) => m.groupId) },
+            OR: [
+              { status: RoundStatus.current },
+              { recipientMembershipId: { in: activeMemberships.map((m) => m.id) } },
+            ],
+          },
+          select: { groupId: true, number: true, status: true, recipientMembershipId: true },
+        });
+  const currentRoundByGroup = new Map<string, number>();
+  const payoutRoundByMembership = new Map<string, number>();
+  for (const round of activeRounds) {
+    if (round.status === RoundStatus.current) currentRoundByGroup.set(round.groupId, round.number);
+    payoutRoundByMembership.set(round.recipientMembershipId, round.number);
+  }
+
   return memberships.map((m) => {
     const base = {
       ...serializeGroup(
@@ -181,6 +193,13 @@ export async function listUserGroups(userId: string) {
       ),
       membershipId: m.id,
     };
+    if (m.group.status === GroupStatus.active) {
+      return {
+        ...base,
+        currentRoundNumber: currentRoundByGroup.get(m.groupId) ?? null,
+        myPayoutRoundNumber: payoutRoundByMembership.get(m.id) ?? null,
+      };
+    }
     if (m.group.status !== GroupStatus.completed) return base;
     const stats = completedStats.get(m.groupId);
     if (!stats) return base;

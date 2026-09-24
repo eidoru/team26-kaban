@@ -1,120 +1,26 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import type {
   AuditLogEntry,
   CompletionSummary,
   DisputeEntry,
   GroupMember,
   LedgerEntry,
-  MemberReliability,
   ObligationEntry,
   RoundContribution,
   RoundSummary,
   SettlementClaimEntry,
 } from "../api/client";
+import { Check, ChevronDown, CircleCheck, Clock, FastForward, Inbox, TriangleAlert, Wrench } from "lucide-react";
 import { formatFrequency } from "../lib/frequency";
-import { displayInitials } from "../lib/initials";
+import { formatDueDate, formatLocalDate, parseDateOnly } from "../lib/dates";
+import { Avatar } from "../components/Avatar";
 import { statusBadgeClass, ui } from "../lib/ui";
 import { CopyableLink } from "../components/CopyableLink";
+import { StatCard } from "../components/StatCard";
+import { Celebration } from "../components/Celebration";
+import { CycleNetChart } from "../components/CycleNetChart";
 
-export type CycleTab = "overview" | "schedule" | "ledger" | "issues" | "members" | "audit";
-
-type StatCardTone = "neutral" | "success" | "warning" | "danger";
-
-const statCardAccent: Record<StatCardTone, string> = {
-  neutral: "border-l-gray-200",
-  success: "border-l-emerald-200",
-  warning: "border-l-amber-200",
-  danger: "border-l-red-200",
-};
-
-const statCardIconWrap: Record<StatCardTone, string> = {
-  neutral: "bg-slate-100 text-slate-600",
-  success: "bg-emerald-50 text-emerald-800",
-  warning: "bg-amber-50 text-amber-800",
-  danger: "bg-red-50 text-red-700",
-};
-
-function StatCardIcon({ name }: { name: "clock" | "alert" | "wallet" | "users" | "check" }) {
-  const className = "h-4 w-4";
-  switch (name) {
-    case "clock":
-      return (
-        <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <circle cx="12" cy="12" r="9" />
-          <path strokeLinecap="round" d="M12 7v5l3 2" />
-        </svg>
-      );
-    case "alert":
-      return (
-        <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-        </svg>
-      );
-    case "wallet":
-      return (
-        <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M3 7h18v10H3V7zm14 0V5a2 2 0 00-2-2H5a2 2 0 00-2 2v2m16 4h-4" />
-        </svg>
-      );
-    case "users":
-      return (
-        <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M16 11a3 3 0 100-6 3 3 0 000 6zM8 13a3 3 0 100-6 3 3 0 000 6zm-2 8a5 5 0 0110 0" />
-        </svg>
-      );
-    case "check":
-      return (
-        <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-        </svg>
-      );
-  }
-}
-
-function StatCard({
-  label,
-  value,
-  hint,
-  tone = "neutral",
-  icon,
-}: {
-  label: string;
-  value: string;
-  hint?: string;
-  tone?: StatCardTone;
-  icon?: "clock" | "alert" | "wallet" | "users" | "check";
-}) {
-  return (
-    <div
-      className={`rounded-2xl border border-gray-100 border-l-[3px] bg-white p-4 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.05),0_2px_8px_-2px_rgba(0,0,0,0.03)] ${statCardAccent[tone]}`}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
-          <p className="mt-1.5 text-2xl font-medium tracking-tight text-slate-900">{value}</p>
-          {hint && <p className="mt-1 text-xs text-slate-500">{hint}</p>}
-        </div>
-        {icon && (
-          <span
-            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${statCardIconWrap[tone]}`}
-            aria-hidden
-          >
-            <StatCardIcon name={icon} />
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function formatCompletionDate(iso: string | null): string | null {
-  if (!iso) return null;
-  return new Date(iso).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
+export type CycleTab = "overview" | "schedule" | "ledger" | "issues" | "audit";
 
 function CompletionSummaryPanel({ summary }: { summary: CompletionSummary }) {
   const amount = Number(summary.contributionAmount);
@@ -122,20 +28,18 @@ function CompletionSummaryPanel({ summary }: { summary: CompletionSummary }) {
   const expected = Number(summary.totalExpected);
   const outstanding = Number(summary.outstandingDebt);
   const potPerRound = Number(summary.potPerRound);
-  const startLabel = formatCompletionDate(summary.startDate);
-  const endLabel = formatCompletionDate(summary.completedAt);
+  const startLabel = summary.startDate ? formatDueDate(summary.startDate) : null;
+  const endLabel = summary.completedAt ? formatLocalDate(summary.completedAt) : null;
   const freq = formatFrequency(summary.frequency, summary.frequencyDays);
 
   return (
-    <div className="space-y-6 rounded-2xl border border-emerald-100 bg-gradient-to-b from-emerald-50/80 to-white p-5 sm:p-6">
-      <div>
-        <p className="text-xs font-medium uppercase tracking-wide text-emerald-800/70">Cycle complete</p>
-        <h2 className="mt-1 text-xl font-medium text-slate-900">{summary.groupName}</h2>
-        <p className="mt-2 text-sm text-slate-600">
+    <div className="space-y-6">
+      <Celebration title={`${summary.groupName} is complete!`} burst={false}>
+        <p>
           {summary.memberCount} members · {freq} · ₱{amount.toLocaleString()} per member per round
         </p>
         {(startLabel || endLabel) && (
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-0.5 text-ink-600">
             {startLabel && `Started ${startLabel}`}
             {startLabel && endLabel && " · "}
             {endLabel && `Finished ${endLabel}`}
@@ -143,7 +47,7 @@ function CompletionSummaryPanel({ summary }: { summary: CompletionSummary }) {
               ` · ${summary.cycleDurationDays} day${summary.cycleDurationDays === 1 ? "" : "s"}`}
           </p>
         )}
-      </div>
+      </Celebration>
 
       <div className={ui.metricGrid}>
         <StatCard
@@ -202,19 +106,17 @@ function CompletionSummaryPanel({ summary }: { summary: CompletionSummary }) {
             {summary.payoutRecipients.map((round) => (
               <li
                 key={round.roundNumber}
-                className="flex items-center gap-3 rounded-xl border border-gray-100 bg-white px-3 py-2.5"
+                className="flex items-center gap-3 rounded-2xl border border-ink-200 bg-white px-3 py-2.5"
               >
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-sm font-medium text-slate-700">
+                <span className="flex h-8 min-w-8 shrink-0 items-center justify-center rounded-full bg-ink-100 px-2 text-xs font-bold tabular-nums text-ink-700">
                   {round.roundNumber}
                 </span>
-                <span className={ui.avatarInitialsSm} aria-hidden>
-                  {displayInitials(round.recipientName)}
-                </span>
+                <Avatar name={round.recipientName} />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium text-slate-900">{round.recipientName}</p>
-                  <p className="text-xs text-slate-500">Due {round.dueDate}</p>
+                  <p className="truncate font-bold text-ink-900">{round.recipientName}</p>
+                  <p className="text-xs text-ink-500">Due {formatDueDate(round.dueDate)}</p>
                 </div>
-                <p className="shrink-0 text-sm font-medium tabular-nums text-slate-800">
+                <p className="shrink-0 text-sm font-bold tabular-nums text-ink-800">
                   ₱{Number(round.potAmount).toLocaleString()}
                 </p>
               </li>
@@ -224,7 +126,7 @@ function CompletionSummaryPanel({ summary }: { summary: CompletionSummary }) {
       </div>
 
       {outstanding > 0 && (
-        <p className="rounded-xl border border-red-100 bg-red-50/50 px-4 py-3 text-sm text-red-900">
+        <p className="rounded-2xl border border-danger-200 bg-danger-50 px-4 py-3 text-sm font-semibold text-danger-800">
           ₱{outstanding.toLocaleString()} remains owed to the organizer. Check the Issues tab for unsettled
           obligations and settlement options.
         </p>
@@ -235,27 +137,14 @@ function CompletionSummaryPanel({ summary }: { summary: CompletionSummary }) {
 
 function EmptyTabState({ title, description }: { title: string; description: string }) {
   return (
-    <div className={`${ui.emptyState} py-8`}>
-      <p className="font-medium text-slate-900">{title}</p>
-      <p className={`mt-2 text-sm ${ui.muted}`}>{description}</p>
+    <div className={`${ui.emptyState} flex flex-col items-center py-8`}>
+      <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-ink-500" aria-hidden>
+        <Inbox className="h-6 w-6" />
+      </span>
+      <p className="font-heading mt-3 text-lg font-bold text-ink-900">{title}</p>
+      <p className={`mt-1 text-sm ${ui.muted}`}>{description}</p>
     </div>
   );
-}
-
-function contributionStatusLabel(status: string) {
-  if (status === "confirmed") return "Confirmed";
-  if (status === "reported") return "Reported";
-  return "Pending";
-}
-
-function contributionStatusBadge(status: string) {
-  if (status === "confirmed") return ui.badgeActive;
-  if (status === "reported") return ui.badgeForming;
-  return "rounded-full border border-gray-200 bg-gray-50 px-2.5 py-0.5 text-xs font-normal text-slate-600";
-}
-
-function paymentStatusBadge(status: string) {
-  return `inline-flex min-w-[5.75rem] items-center justify-center ${contributionStatusBadge(status)}`;
 }
 
 function ledgerSourceLabel(source?: string) {
@@ -294,186 +183,99 @@ function isFinalRound(schedule: RoundSummary[], currentRound: RoundSummary | nul
   return !schedule.some((r) => r.number > currentRound.number);
 }
 
-function obligationStatusLabel(status: string) {
-  if (status === "settled") return "Settled";
-  if (status === "partially_settled") return "Partially settled";
-  return "Unsettled";
-}
-
-function obligationStatusBadge(status: string) {
-  if (status === "settled") return ui.badgeActive;
-  if (status === "partially_settled") return ui.badgeForming;
-  return "rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-xs font-normal text-red-800";
-}
-
-function disputeStatusLabel(status: string) {
-  return status === "resolved" ? "Resolved" : "Open";
-}
-
-function disputeStatusBadge(status: string) {
-  if (status === "resolved") return ui.badgeActive;
-  return ui.badgeForming;
-}
-
-function settlementClaimStatusLabel(status: string) {
-  if (status === "confirmed") return "Confirmed";
-  if (status === "rejected") return "Rejected";
-  return "Pending review";
-}
-
-function settlementClaimStatusBadge(status: string) {
-  if (status === "confirmed") return ui.badgeActive;
-  if (status === "rejected") return "rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-xs font-normal text-red-800";
-  return ui.badgeForming;
-}
-
 const issueActionBtn = "inline-flex min-w-[7.5rem] items-center justify-center";
 
-function ObligationTableRow({
-  obligation,
+function ClaimCard({
+  claim,
   isManager,
-  viewerMembershipId,
   actionPending,
-  onSettleMemberDebts,
-  onCoverObligationExternally,
-  onSubmitSettlementClaim,
+  onReviewSettlementClaim,
 }: {
-  obligation: ObligationEntry;
+  claim: SettlementClaimEntry;
   isManager: boolean;
-  viewerMembershipId?: string;
   actionPending: string | null;
-  onSettleMemberDebts: (memberId: string, memberName: string) => void;
-  onCoverObligationExternally: (obligationId: string, memberName: string) => void;
-  onSubmitSettlementClaim: () => void;
+  onReviewSettlementClaim: (claimId: string, decision: "confirm" | "reject") => void;
 }) {
-  const hasInterest = Number(obligation.accruedInterest) > 0;
-  const isOwnDebt = !isManager && obligation.debtorMembershipId === viewerMembershipId;
-
+  const pending = actionPending === `review-claim-${claim.id}`;
   return (
-    <tr className={ui.tableRow}>
-      <td className="px-4 py-3">
-        <div className="flex items-center gap-2.5">
-          <span className={ui.avatarInitialsSm} aria-hidden>
-            {displayInitials(obligation.displayName)}
-          </span>
-          <div className="min-w-0">
-            <p className="truncate font-medium text-slate-900">{obligation.displayName}</p>
-            {obligation.isPlaceholder && (
-              <p className="text-xs text-slate-500">Placeholder</p>
-            )}
-          </div>
-        </div>
-      </td>
-      <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-600">
-        R{obligation.roundNumber} · {obligation.roundDueDate}
-      </td>
-      <td className="px-4 py-3 text-right">
-        <div className="font-medium tabular-nums text-slate-900">
-          ₱{Number(obligation.remaining).toLocaleString()}
-        </div>
-        {hasInterest && (
-          <p className="mt-0.5 text-xs text-slate-500">
-            ₱{Number(obligation.principalRemaining).toLocaleString()} principal + ₱
-            {Number(obligation.accruedInterest).toLocaleString()} interest
+    <li className="flex flex-col gap-3 rounded-3xl border-2 border-sun-200 bg-sun-50 p-4 sm:flex-row sm:items-center">
+      <div className="flex min-w-0 flex-1 items-start gap-3">
+        <Avatar name={claim.memberDisplayName} placeholder={claim.isPlaceholder} />
+        <div className="min-w-0">
+          <p className="text-sm text-ink-700">
+            <span className="font-bold text-ink-900">{claim.memberDisplayName}</span> reported paying{" "}
+            <span className="font-bold tabular-nums text-ink-900">₱{Number(claim.amount).toLocaleString()}</span> toward
+            their debt
           </p>
-        )}
-        {obligation.externalCoverageNote && (
-          <p className="mt-1 text-xs text-amber-800">{obligation.externalCoverageNote}</p>
-        )}
-      </td>
-      <td className="px-4 py-3">
-        <span className={obligationStatusBadge(obligation.status)}>
-          {obligationStatusLabel(obligation.status)}
-        </span>
-      </td>
-      {(isManager || isOwnDebt) && (
-        <td className="px-4 py-3">
-          {obligation.status !== "settled" && isManager && (
-            <div className="flex flex-wrap justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => onSettleMemberDebts(obligation.debtorMembershipId, obligation.displayName)}
-                disabled={actionPending === `settle-${obligation.debtorMembershipId}`}
-                className={`${issueActionBtn} border border-transparent ${ui.btnPrimarySm}`}
-              >
-                {actionPending === `settle-${obligation.debtorMembershipId}` ? "…" : "Settle"}
-              </button>
-              <button
-                type="button"
-                onClick={() => onCoverObligationExternally(obligation.id, obligation.displayName)}
-                disabled={actionPending === `cover-${obligation.id}`}
-                className={`${issueActionBtn} ${ui.btnSecondarySm}`}
-              >
-                {actionPending === `cover-${obligation.id}` ? "…" : "Cover externally"}
-              </button>
-            </div>
-          )}
-          {obligation.status !== "settled" && isOwnDebt && (
-            <div className="flex justify-end">
-              {obligation.hasPendingClaim ? (
-                <span className={ui.badgeForming}>Payment pending review</span>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => onSubmitSettlementClaim()}
-                  disabled={actionPending === "submit-settlement-claim"}
-                  className={`${issueActionBtn} border border-transparent ${ui.btnPrimarySm}`}
-                >
-                  {actionPending === "submit-settlement-claim" ? "…" : "Pay"}
-                </button>
-              )}
-            </div>
-          )}
-        </td>
+          {claim.note && <p className="mt-1 text-sm italic text-ink-600">&ldquo;{claim.note}&rdquo;</p>}
+        </div>
+      </div>
+      {isManager ? (
+        <div className="flex shrink-0 gap-2">
+          <button
+            type="button"
+            onClick={() => onReviewSettlementClaim(claim.id, "confirm")}
+            disabled={pending}
+            className={ui.btnPrimarySm}
+          >
+            {pending ? "…" : "Confirm"}
+          </button>
+          <button
+            type="button"
+            onClick={() => onReviewSettlementClaim(claim.id, "reject")}
+            disabled={pending}
+            className={ui.btnSecondarySm}
+          >
+            {pending ? "…" : "Reject"}
+          </button>
+        </div>
+      ) : (
+        <span className={`${ui.badgeTurn} shrink-0 self-start sm:self-auto`}>Waiting for organizer</span>
       )}
-    </tr>
+    </li>
   );
 }
 
-function DisputeRow({
+function DisputeCard({
   dispute,
   isManager,
   actionPending,
   onResolveDispute,
-  muted = false,
 }: {
   dispute: DisputeEntry;
   isManager: boolean;
   actionPending: string | null;
   onResolveDispute: (disputeId: string) => void;
-  muted?: boolean;
 }) {
+  const selfRaised = dispute.raisedByName === dispute.memberDisplayName;
   return (
-    <li
-      className={`flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4 ${
-        muted ? "opacity-70" : ""
-      }`}
-    >
-      <div className="flex min-w-0 flex-1 items-start gap-2.5">
-        <span className={ui.avatarInitialsSm} aria-hidden>
-          {displayInitials(dispute.memberDisplayName)}
-        </span>
+    <li className="flex flex-col gap-3 rounded-3xl border-2 border-danger-200 bg-danger-50 p-4 sm:flex-row sm:items-center">
+      <div className="flex min-w-0 flex-1 items-start gap-3">
+        <Avatar name={dispute.memberDisplayName} />
         <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="truncate font-medium text-slate-900">{dispute.memberDisplayName}</p>
-            <span className={disputeStatusBadge(dispute.status)}>{disputeStatusLabel(dispute.status)}</span>
-          </div>
-          <p className="mt-0.5 text-sm text-slate-500">
-            Round {dispute.roundNumber} · ₱{Number(dispute.contributionAmount).toLocaleString()} · Raised by{" "}
-            {dispute.raisedByName}
+          <p className="text-sm text-ink-700">
+            <span className="font-bold text-ink-900">{dispute.raisedByName}</span> disputed{" "}
+            {selfRaised ? (
+              "their"
+            ) : (
+              <>
+                <span className="font-bold text-ink-900">{dispute.memberDisplayName}</span>&apos;s
+              </>
+            )}{" "}
+            Round {dispute.roundNumber} payment ·{" "}
+            <span className="font-bold tabular-nums text-ink-900">
+              ₱{Number(dispute.contributionAmount).toLocaleString()}
+            </span>
           </p>
-          {dispute.note && <p className="mt-2 text-sm text-slate-700">{dispute.note}</p>}
-          {dispute.resolution && (
-            <p className="mt-2 text-sm text-emerald-800">Resolved: {dispute.resolution}</p>
-          )}
+          {dispute.note && <p className="mt-1 text-sm italic text-ink-600">&ldquo;{dispute.note}&rdquo;</p>}
         </div>
       </div>
-      {isManager && dispute.status === "open" && (
+      {isManager && (
         <button
           type="button"
           onClick={() => onResolveDispute(dispute.id)}
           disabled={actionPending === `resolve-${dispute.id}`}
-          className={`${issueActionBtn} shrink-0 ${ui.btnPrimarySm}`}
+          className={`${ui.btnPrimarySm} shrink-0 self-start sm:self-auto`}
         >
           {actionPending === `resolve-${dispute.id}` ? "…" : "Resolve"}
         </button>
@@ -482,65 +284,119 @@ function DisputeRow({
   );
 }
 
-function SettlementClaimRow({
-  claim,
+function DebtorCard({
+  obligations,
   isManager,
+  isOwnDebt,
   actionPending,
-  onReviewSettlementClaim,
-  muted = false,
+  onSettleMemberDebts,
+  onCoverObligationExternally,
+  onSubmitSettlementClaim,
 }: {
-  claim: SettlementClaimEntry;
+  obligations: ObligationEntry[];
   isManager: boolean;
+  isOwnDebt: boolean;
   actionPending: string | null;
-  onReviewSettlementClaim: (claimId: string, decision: "confirm" | "reject") => void;
-  muted?: boolean;
+  onSettleMemberDebts: (memberId: string, memberName: string) => void;
+  onCoverObligationExternally: (obligationId: string, memberName: string) => void;
+  onSubmitSettlementClaim: () => void;
 }) {
+  const first = obligations[0];
+  const memberId = first.debtorMembershipId;
+  const total = obligations.reduce((sum, o) => sum + Number(o.remaining), 0);
+  const claimPending = obligations.some((o) => o.hasPendingClaim);
+
   return (
-    <li
-      className={`flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4 ${
-        muted ? "opacity-70" : ""
-      }`}
-    >
-      <div className="flex min-w-0 flex-1 items-start gap-2.5">
-        <span className={ui.avatarInitialsSm} aria-hidden>
-          {displayInitials(claim.memberDisplayName)}
-        </span>
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="truncate font-medium text-slate-900">{claim.memberDisplayName}</p>
-            <span className={settlementClaimStatusBadge(claim.status)}>
-              {settlementClaimStatusLabel(claim.status)}
-            </span>
-          </div>
-          <p className="mt-0.5 text-sm text-slate-500">
-            Reported ₱{Number(claim.amount).toLocaleString()}
+    <li className="rounded-3xl border border-ink-200 bg-white p-5 shadow-card">
+      <div className="flex items-start gap-3">
+        <Avatar name={first.displayName} size="md" placeholder={first.isPlaceholder} />
+        <div className="min-w-0 flex-1">
+          <p className="font-heading truncate text-lg font-bold text-ink-900">
+            {first.displayName}
+            {isOwnDebt && <span className="font-sans text-sm font-semibold text-ink-500"> (you)</span>}
           </p>
-          {claim.note && <p className="mt-2 text-sm text-slate-700">{claim.note}</p>}
-          {claim.reviewNote && (
-            <p className="mt-2 text-sm text-emerald-800">Review note: {claim.reviewNote}</p>
+          <p className="text-xs text-ink-500">
+            {obligations.length} unsettled round{obligations.length === 1 ? "" : "s"}
+          </p>
+        </div>
+        <p className="font-heading shrink-0 text-xl font-bold tabular-nums text-danger-700">
+          ₱{total.toLocaleString()}
+        </p>
+      </div>
+
+      <ul className="mt-4 space-y-2">
+        {obligations.map((o) => {
+          const hasInterest = Number(o.accruedInterest) > 0;
+          return (
+            <li key={o.id} className="rounded-2xl bg-ink-50 px-4 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                <p className="text-sm font-bold text-ink-900">
+                  Round {o.roundNumber}
+                  <span className="font-semibold text-ink-500"> · {formatDueDate(o.roundDueDate)}</span>
+                  {o.status === "partially_settled" && (
+                    <span className="ml-2 rounded-full bg-sun-100 px-2 py-0.5 text-[11px] font-bold text-sun-800">
+                      Partly paid
+                    </span>
+                  )}
+                </p>
+                <p className="text-sm font-bold tabular-nums text-ink-900">₱{Number(o.remaining).toLocaleString()}</p>
+              </div>
+              {hasInterest && (
+                <p className="mt-0.5 text-xs text-ink-500">
+                  ₱{Number(o.principalRemaining).toLocaleString()} + ₱{Number(o.accruedInterest).toLocaleString()}{" "}
+                  interest
+                </p>
+              )}
+              {o.externalCoverageNote && <p className="mt-1 text-xs text-warn-800">{o.externalCoverageNote}</p>}
+              {isManager && (
+                <button
+                  type="button"
+                  onClick={() => onCoverObligationExternally(o.id, o.displayName)}
+                  disabled={actionPending === `cover-${o.id}`}
+                  className="mt-1.5 text-xs font-bold text-ink-600 underline-offset-2 hover:text-ink-900 hover:underline disabled:opacity-50"
+                >
+                  {actionPending === `cover-${o.id}` ? "…" : "Cover externally"}
+                </button>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+
+      {(isManager || isOwnDebt) && (
+        <div className="mt-4 flex justify-end">
+          {isManager ? (
+            <button
+              type="button"
+              onClick={() => onSettleMemberDebts(memberId, first.displayName)}
+              disabled={actionPending === `settle-${memberId}`}
+              className={`${issueActionBtn} ${ui.btnPrimarySm}`}
+            >
+              {actionPending === `settle-${memberId}` ? "…" : "Record settlement"}
+            </button>
+          ) : claimPending ? (
+            <span className={ui.badgeTurn}>Payment pending review</span>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onSubmitSettlementClaim()}
+              disabled={actionPending === "submit-settlement-claim"}
+              className={`${issueActionBtn} ${ui.btnPrimarySm}`}
+            >
+              {actionPending === "submit-settlement-claim" ? "…" : "Pay"}
+            </button>
           )}
         </div>
-      </div>
-      {isManager && claim.status === "pending" && (
-        <div className="flex shrink-0 gap-2">
-          <button
-            type="button"
-            onClick={() => onReviewSettlementClaim(claim.id, "confirm")}
-            disabled={actionPending === `review-claim-${claim.id}`}
-            className={`${issueActionBtn} border border-transparent ${ui.btnPrimarySm}`}
-          >
-            {actionPending === `review-claim-${claim.id}` ? "…" : "Confirm"}
-          </button>
-          <button
-            type="button"
-            onClick={() => onReviewSettlementClaim(claim.id, "reject")}
-            disabled={actionPending === `review-claim-${claim.id}`}
-            className={`${issueActionBtn} ${ui.btnSecondarySm}`}
-          >
-            {actionPending === `review-claim-${claim.id}` ? "…" : "Reject"}
-          </button>
-        </div>
       )}
+    </li>
+  );
+}
+
+function HistoryRow({ icon, children }: { icon: ReactNode; children: ReactNode }) {
+  return (
+    <li className="flex items-start gap-3 px-4 py-3 text-sm text-ink-600">
+      <span className="mt-0.5 shrink-0">{icon}</span>
+      <div className="min-w-0">{children}</div>
     </li>
   );
 }
@@ -570,14 +426,22 @@ function IssuesPanel({
   onSubmitSettlementClaim: () => void;
   onReviewSettlementClaim: (claimId: string, decision: "confirm" | "reject") => void;
 }) {
+  const [historyOpen, setHistoryOpen] = useState(false);
+
   const openObligations = obligations.filter((o) => o.status !== "settled");
   const openDisputes = disputes.filter((d) => d.status === "open");
   const resolvedDisputes = disputes.filter((d) => d.status === "resolved");
   const pendingClaims = settlementClaims.filter((c) => c.status === "pending");
   const reviewedClaims = settlementClaims.filter((c) => c.status !== "pending");
   const totalOutstanding = openObligations.reduce((sum, o) => sum + Number(o.remaining), 0);
-  const hasActionsColumn =
-    isManager || openObligations.some((o) => o.debtorMembershipId === viewerMembershipId);
+  const historyCount = reviewedClaims.length + resolvedDisputes.length;
+
+  const byDebtor = new Map<string, ObligationEntry[]>();
+  for (const o of openObligations) {
+    byDebtor.set(o.debtorMembershipId, [...(byDebtor.get(o.debtorMembershipId) ?? []), o]);
+  }
+  const owedBy = (group: ObligationEntry[]) => group.reduce((sum, o) => sum + Number(o.remaining), 0);
+  const debtors = [...byDebtor.values()].sort((a, b) => owedBy(b) - owedBy(a));
 
   if (openObligations.length === 0 && disputes.length === 0 && settlementClaims.length === 0) {
     return (
@@ -589,84 +453,37 @@ function IssuesPanel({
   }
 
   return (
-    <div className="space-y-6">
-      {(openObligations.length > 0 || openDisputes.length > 0) && (
-        <section className={ui.sectionCard}>
-          <h2 className={ui.sectionHeader}>At a glance</h2>
-          <dl className={`${ui.metricGrid2} mt-4`}>
-            {openObligations.length > 0 && (
-              <div>
-                <dt className="text-xs font-medium uppercase tracking-wide text-slate-400">
-                  Outstanding debt
-                </dt>
-                <dd className="mt-1 text-2xl font-medium tabular-nums text-slate-900">
-                  ₱{totalOutstanding.toLocaleString()}
-                </dd>
-                <dd className="mt-0.5 text-sm text-slate-500">
-                  {openObligations.length} obligation{openObligations.length === 1 ? "" : "s"}
-                </dd>
-              </div>
-            )}
-            {openDisputes.length > 0 && (
-              <div>
-                <dt className="text-xs font-medium uppercase tracking-wide text-slate-400">
-                  Open disputes
-                </dt>
-                <dd className="mt-1 text-2xl font-medium text-slate-900">{openDisputes.length}</dd>
-                <dd className="mt-0.5 text-sm text-slate-500">Awaiting resolution</dd>
-              </div>
-            )}
-          </dl>
-        </section>
-      )}
+    <div className="space-y-8">
+      <div className="grid gap-3 sm:grid-cols-3">
+        <StatCard
+          label="Outstanding"
+          value={`₱${totalOutstanding.toLocaleString()}`}
+          hint={`${debtors.length} member${debtors.length === 1 ? "" : "s"} owe`}
+          tone={totalOutstanding > 0 ? "danger" : "neutral"}
+          icon="wallet"
+        />
+        <StatCard
+          label="To review"
+          value={String(pendingClaims.length)}
+          hint="reported payments"
+          tone={pendingClaims.length > 0 ? "warning" : "neutral"}
+          icon="clock"
+        />
+        <StatCard
+          label="Open disputes"
+          value={String(openDisputes.length)}
+          hint={openDisputes.length > 0 ? "need resolving" : "none open"}
+          tone={openDisputes.length > 0 ? "danger" : "neutral"}
+          icon="alert"
+        />
+      </div>
 
-      {openObligations.length > 0 && (
-        <section className={ui.sectionCard}>
-          <h2 className={ui.sectionHeader}>Outstanding obligations</h2>
-          <p className={ui.sectionSubtitle}>
-            Recorded when a round closes. Unpaid balances are owed to the organizer; interest may
-            accrue each period until settled.
-          </p>
-          <div className={ui.tableWrap}>
-            <table className="w-full min-w-[34rem] text-left text-sm">
-              <thead className={ui.tableHead}>
-                <tr>
-                  <th className="px-4 py-2.5 font-normal">Member</th>
-                  <th className="px-4 py-2.5 font-normal">Round</th>
-                  <th className="px-4 py-2.5 text-right font-normal">Remaining</th>
-                  <th className="px-4 py-2.5 font-normal">Status</th>
-                  {hasActionsColumn && <th className="px-4 py-2.5 text-right font-normal">Actions</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {openObligations.map((obligation) => (
-                  <ObligationTableRow
-                    key={obligation.id}
-                    obligation={obligation}
-                    isManager={isManager}
-                    viewerMembershipId={viewerMembershipId}
-                    actionPending={actionPending}
-                    onSettleMemberDebts={onSettleMemberDebts}
-                    onCoverObligationExternally={onCoverObligationExternally}
-                    onSubmitSettlementClaim={onSubmitSettlementClaim}
-                  />
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      )}
-
-      {pendingClaims.length > 0 && (
-        <section className={ui.sectionCard}>
-          <h2 className={ui.sectionHeader}>Payments awaiting review</h2>
-          <p className={ui.sectionSubtitle}>
-            Members reported these payments toward their debt. Confirming applies the amount;
-            rejecting leaves the debt unchanged.
-          </p>
-          <ul className="mt-4 divide-y divide-gray-100 overflow-hidden rounded-xl border border-gray-100">
+      {(pendingClaims.length > 0 || openDisputes.length > 0) && (
+        <section>
+          <h2 className={`mb-3 ${ui.sectionHeader}`}>{isManager ? "Needs your attention" : "In progress"}</h2>
+          <ul className="space-y-3">
             {pendingClaims.map((claim) => (
-              <SettlementClaimRow
+              <ClaimCard
                 key={claim.id}
                 claim={claim}
                 isManager={isManager}
@@ -674,35 +491,8 @@ function IssuesPanel({
                 onReviewSettlementClaim={onReviewSettlementClaim}
               />
             ))}
-          </ul>
-        </section>
-      )}
-
-      {reviewedClaims.length > 0 && (
-        <section className={ui.sectionCard}>
-          <h2 className={ui.sectionHeader}>Reviewed payments</h2>
-          <ul className="mt-4 divide-y divide-gray-100 overflow-hidden rounded-xl border border-gray-100">
-            {reviewedClaims.map((claim) => (
-              <SettlementClaimRow
-                key={claim.id}
-                claim={claim}
-                isManager={isManager}
-                actionPending={actionPending}
-                onReviewSettlementClaim={onReviewSettlementClaim}
-                muted
-              />
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {openDisputes.length > 0 && (
-        <section className={ui.sectionCard}>
-          <h2 className={ui.sectionHeader}>Open disputes</h2>
-          <p className={ui.sectionSubtitle}>Payment disagreements raised during the cycle.</p>
-          <ul className="mt-4 divide-y divide-gray-100 overflow-hidden rounded-xl border border-gray-100">
             {openDisputes.map((dispute) => (
-              <DisputeRow
+              <DisputeCard
                 key={dispute.id}
                 dispute={dispute}
                 isManager={isManager}
@@ -714,21 +504,77 @@ function IssuesPanel({
         </section>
       )}
 
-      {resolvedDisputes.length > 0 && (
-        <section className={ui.sectionCard}>
-          <h2 className={ui.sectionHeader}>Resolved disputes</h2>
-          <ul className="mt-4 divide-y divide-gray-100 overflow-hidden rounded-xl border border-gray-100">
-            {resolvedDisputes.map((dispute) => (
-              <DisputeRow
-                key={dispute.id}
-                dispute={dispute}
+      {debtors.length > 0 && (
+        <section>
+          <h2 className={ui.sectionHeader}>Who owes</h2>
+          <p className={`mb-3 ${ui.sectionSubtitle}`}>
+            Recorded when a round closes. Balances are owed to the organizer; interest may accrue each period until
+            settled.
+          </p>
+          <ul className="grid gap-3 lg:grid-cols-2">
+            {debtors.map((group) => (
+              <DebtorCard
+                key={group[0].debtorMembershipId}
+                obligations={group}
                 isManager={isManager}
+                isOwnDebt={!isManager && group[0].debtorMembershipId === viewerMembershipId}
                 actionPending={actionPending}
-                onResolveDispute={onResolveDispute}
-                muted
+                onSettleMemberDebts={onSettleMemberDebts}
+                onCoverObligationExternally={onCoverObligationExternally}
+                onSubmitSettlementClaim={onSubmitSettlementClaim}
               />
             ))}
           </ul>
+        </section>
+      )}
+
+      {historyCount > 0 && (
+        <section>
+          <button
+            type="button"
+            onClick={() => setHistoryOpen((v) => !v)}
+            aria-expanded={historyOpen}
+            aria-controls="issues-history"
+            className="flex items-center gap-2 text-sm font-bold text-ink-600 hover:text-ink-900"
+          >
+            <ChevronDown className={`h-4 w-4 transition-transform ${historyOpen ? "rotate-180" : ""}`} aria-hidden />
+            History ({historyCount})
+          </button>
+          {historyOpen && (
+            <ul
+              id="issues-history"
+              className="animate-rise mt-3 divide-y divide-ink-100 overflow-hidden rounded-3xl border border-ink-200 bg-white"
+            >
+              {reviewedClaims.map((claim) => (
+                <HistoryRow
+                  key={claim.id}
+                  icon={
+                    claim.status === "confirmed" ? (
+                      <CircleCheck className="h-4 w-4 text-brand-600" aria-hidden />
+                    ) : (
+                      <TriangleAlert className="h-4 w-4 text-danger-600" aria-hidden />
+                    )
+                  }
+                >
+                  <p>
+                    <span className="font-bold text-ink-800">{claim.memberDisplayName}</span>&apos;s ₱
+                    {Number(claim.amount).toLocaleString()} payment ·{" "}
+                    {claim.status === "confirmed" ? "confirmed" : "rejected"}
+                  </p>
+                  {claim.reviewNote && <p className="mt-0.5 text-xs text-ink-500">{claim.reviewNote}</p>}
+                </HistoryRow>
+              ))}
+              {resolvedDisputes.map((dispute) => (
+                <HistoryRow key={dispute.id} icon={<CircleCheck className="h-4 w-4 text-brand-600" aria-hidden />}>
+                  <p>
+                    Dispute on <span className="font-bold text-ink-800">{dispute.memberDisplayName}</span>&apos;s
+                    Round {dispute.roundNumber} payment · resolved
+                  </p>
+                  {dispute.resolution && <p className="mt-0.5 text-xs text-ink-500">{dispute.resolution}</p>}
+                </HistoryRow>
+              ))}
+            </ul>
+          )}
         </section>
       )}
     </div>
@@ -738,100 +584,381 @@ function IssuesPanel({
 function auditCategoryClass(category: string) {
   switch (category) {
     case "group":
-      return "bg-emerald-100 text-emerald-800";
+      return "bg-teal-100 text-teal-800";
     case "membership":
-      return "bg-blue-100 text-blue-800";
+      return "bg-sky-100 text-sky-800";
     case "contribution":
-      return "bg-amber-100 text-amber-800";
+      return "bg-lime-100 text-lime-800";
     case "round":
       return "bg-violet-100 text-violet-800";
     case "invite":
-      return "bg-gray-100 text-slate-700";
+      return "bg-indigo-100 text-indigo-800";
     case "obligation":
-      return "bg-red-100 text-red-800";
+      return "bg-rose-100 text-rose-800";
     case "dispute":
-      return "bg-orange-100 text-orange-800";
+      return "bg-amber-100 text-amber-800";
     default:
-      return "bg-gray-50 text-slate-700";
+      return "bg-ink-100 text-ink-700";
   }
 }
 
-function MemberBadge({
-  children,
-  variant = "default",
-}: {
-  children: ReactNode;
-  variant?: "default" | "manager" | "muted";
-}) {
-  const styles =
-    variant === "manager"
-      ? "border-emerald-100 bg-emerald-50 text-emerald-700"
-      : variant === "muted"
-        ? "border-gray-200 bg-gray-50 text-slate-500"
-        : "border-gray-200 bg-gray-50 text-slate-600";
+// Fixed order for filter chips; unknown categories from the server are appended.
+const AUDIT_CATEGORIES: { id: string; label: string }[] = [
+  { id: "group", label: "Group" },
+  { id: "membership", label: "Members" },
+  { id: "contribution", label: "Payments" },
+  { id: "round", label: "Rounds" },
+  { id: "invite", label: "Invites" },
+  { id: "obligation", label: "Debts" },
+  { id: "dispute", label: "Disputes" },
+];
+
+function auditCategoryLabel(entry: AuditLogEntry) {
+  return AUDIT_CATEGORIES.find((c) => c.id === entry.category)?.label ?? entry.categoryLabel;
+}
+
+function auditDayLabel(date: Date) {
+  const today = new Date();
+  const startOf = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const diffDays = Math.round((startOf(today) - startOf(date)) / 86_400_000);
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Yesterday";
+  return date.toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    ...(date.getFullYear() === today.getFullYear() ? {} : { year: "numeric" }),
+  });
+}
+
+function AuditEntryRow({ entry }: { entry: AuditLogEntry }) {
+  const [open, setOpen] = useState(false);
+  const hasDetails = entry.details.length > 0;
+  const time = new Date(entry.createdAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  const panelId = `audit-${entry.id}`;
+
+  const body = (
+    <>
+      <div className="flex flex-wrap items-center gap-2">
+        <span
+          className={`inline-flex min-w-[6.75rem] shrink-0 items-center justify-center rounded-full px-2.5 py-0.5 text-xs font-bold ${auditCategoryClass(entry.category)}`}
+        >
+          {auditCategoryLabel(entry)}
+        </span>
+        <span className="min-w-0 flex-1 font-bold text-ink-900">{entry.title}</span>
+        {hasDetails && (
+          <ChevronDown
+            className={`h-4 w-4 shrink-0 text-ink-400 transition-transform ${open ? "rotate-180" : ""}`}
+            aria-hidden
+          />
+        )}
+      </div>
+      <p className="mt-1.5 text-sm text-ink-700">{entry.summary}</p>
+      <p className="mt-1 text-xs text-ink-500">
+        <time dateTime={entry.createdAt}>{time}</time> · {entry.actorName}
+      </p>
+    </>
+  );
 
   return (
-    <span
-      className={`inline-flex items-center justify-center rounded-full border px-2.5 py-0.5 text-xs whitespace-nowrap ${styles}`}
-    >
-      {children}
-    </span>
+    <li>
+      {hasDetails ? (
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          aria-controls={panelId}
+          className="w-full px-4 py-3 text-left transition-colors hover:bg-ink-50"
+        >
+          {body}
+        </button>
+      ) : (
+        <div className="px-4 py-3">{body}</div>
+      )}
+      {open && (
+        <ul id={panelId} className="animate-rise mx-4 mb-3 space-y-1 rounded-2xl bg-ink-50 px-4 py-3 text-sm text-ink-700">
+          {entry.details.map((detail, i) => (
+            <li key={i} className="flex gap-2">
+              <span aria-hidden className="text-ink-400">
+                •
+              </span>
+              {detail}
+            </li>
+          ))}
+        </ul>
+      )}
+    </li>
   );
 }
 
-function MemberRow({
-  member,
-  position,
-  reliabilitySummary,
-  showClaimAction = false,
-  claimUrl,
-  onClaimInvite,
-  claimPending = false,
+function AuditLogPanel({
+  entries,
+  hasMore,
+  loadingMore,
+  onLoadMore,
 }: {
-  member: GroupMember;
-  position: number;
-  reliabilitySummary?: string;
-  showClaimAction?: boolean;
-  claimUrl?: string;
-  onClaimInvite?: () => void;
-  claimPending?: boolean;
+  entries: AuditLogEntry[];
+  hasMore: boolean;
+  loadingMore: boolean;
+  onLoadMore?: () => void;
 }) {
-  const showClaim = showClaimAction && member.isPlaceholder && onClaimInvite;
+  const [selected, setSelected] = useState<string[]>([]);
+
+  const counts = new Map<string, number>();
+  for (const e of entries) counts.set(e.category, (counts.get(e.category) ?? 0) + 1);
+  const extra = [...counts.keys()]
+    .filter((id) => !AUDIT_CATEGORIES.some((c) => c.id === id))
+    .map((id) => ({ id, label: entries.find((e) => e.category === id)?.categoryLabel ?? id }));
+  const chips = [...AUDIT_CATEGORIES.filter((c) => counts.has(c.id)), ...extra];
+
+  const visible = selected.length === 0 ? entries : entries.filter((e) => selected.includes(e.category));
+  const days: { key: string; label: string; items: AuditLogEntry[] }[] = [];
+  for (const entry of visible) {
+    const date = new Date(entry.createdAt);
+    const key = date.toDateString();
+    const last = days.at(-1);
+    if (last && last.key === key) last.items.push(entry);
+    else days.push({ key, label: auditDayLabel(date), items: [entry] });
+  }
+
+  function toggle(id: string) {
+    setSelected((cur) => (cur.includes(id) ? cur.filter((c) => c !== id) : [...cur, id]));
+  }
+
+  if (entries.length === 0) {
+    return <EmptyTabState title="No audit entries" description="Manager actions are logged here." />;
+  }
+
+  const chipBase = "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold transition-colors";
 
   return (
-    <li className="border-b border-gray-50 px-4 py-3.5 last:border-0">
-      <div className="flex items-center gap-3">
-        <span
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-sm font-medium text-slate-700"
-          aria-label={`Payout order ${position}`}
+    <div className="space-y-5">
+      <div role="group" aria-label="Filter by category" className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => setSelected([])}
+          aria-pressed={selected.length === 0}
+          className={`${chipBase} ${
+            selected.length === 0 ? "bg-ink-900 text-white" : "border border-ink-200 bg-white text-ink-600 hover:bg-ink-50"
+          }`}
         >
-          {position}
-        </span>
-        <span className={ui.avatarInitialsSm} aria-hidden>
-          {displayInitials(member.displayName)}
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="truncate font-medium text-slate-900">{member.displayName}</p>
-            {member.isManager && <MemberBadge variant="manager">Manager</MemberBadge>}
-            {member.isPlaceholder && <MemberBadge variant="muted">Unclaimed</MemberBadge>}
-          </div>
-          {member.contact && <p className="mt-0.5 truncate text-sm text-slate-500">{member.contact}</p>}
-          {reliabilitySummary && <p className="mt-0.5 truncate text-xs text-slate-500">{reliabilitySummary}</p>}
-        </div>
-        {showClaim ? (
-          <button
-            type="button"
-            onClick={onClaimInvite}
-            disabled={claimPending}
-            className="shrink-0 text-sm text-emerald-900 hover:underline disabled:opacity-50"
-          >
-            Claim link
-          </button>
-        ) : null}
+          All <span className="tabular-nums opacity-70">{entries.length}</span>
+        </button>
+        {chips.map((chip) => {
+          const on = selected.includes(chip.id);
+          return (
+            <button
+              key={chip.id}
+              type="button"
+              onClick={() => toggle(chip.id)}
+              aria-pressed={on}
+              className={`${chipBase} ${
+                on
+                  ? `${auditCategoryClass(chip.id)} ring-2 ring-current ring-inset`
+                  : "border border-ink-200 bg-white text-ink-600 hover:bg-ink-50"
+              }`}
+            >
+              {chip.label} <span className="tabular-nums opacity-70">{counts.get(chip.id)}</span>
+            </button>
+          );
+        })}
       </div>
-      {claimUrl && <CopyableLink url={claimUrl} label="Claim link" compact />}
-    </li>
+
+      {hasMore && (
+        <p className="text-xs text-ink-500">
+          Showing the latest {entries.length} entries. Load older entries to include more in these counts.
+        </p>
+      )}
+
+      {days.length === 0 ? (
+        <p className={`${ui.emptyState} text-sm text-ink-500`}>No entries of this type in the loaded history.</p>
+      ) : (
+        days.map((day) => (
+          <section key={day.key}>
+            <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-ink-500">{day.label}</h3>
+            <ul className="divide-y divide-ink-100 overflow-hidden rounded-3xl border border-ink-200 bg-white">
+              {day.items.map((entry) => (
+                <AuditEntryRow key={entry.id} entry={entry} />
+              ))}
+            </ul>
+          </section>
+        ))
+      )}
+
+      {hasMore && onLoadMore && (
+        <div className="flex justify-center">
+          <button type="button" onClick={onLoadMore} disabled={loadingMore} className={ui.btnSecondary}>
+            {loadingMore ? "Loading…" : "Load older entries"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TimelineDot({ status }: { status: RoundSummary["status"] | undefined }) {
+  if (status === "closed") {
+    return (
+      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-brand-600 text-white">
+        <Check className="h-3.5 w-3.5" strokeWidth={3} aria-hidden />
+      </span>
+    );
+  }
+  if (status === "current") {
+    return <span className="h-6 w-6 rounded-full border-[6px] border-brand-200 bg-brand-600" />;
+  }
+  return <span className="h-4 w-4 rounded-full border-2 border-ink-300 bg-white" />;
+}
+
+function ScheduleTimeline({
+  members,
+  schedule,
+  isManager,
+  viewerMembershipId,
+  claimUrls,
+  onClaimInvite,
+  claimPending,
+}: {
+  members: GroupMember[];
+  schedule: RoundSummary[];
+  isManager: boolean;
+  viewerMembershipId?: string;
+  claimUrls: Record<string, string>;
+  onClaimInvite?: (membershipId: string) => void;
+  claimPending: boolean;
+}) {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const roundByMember = new Map(schedule.map((r) => [r.recipientMembershipId, r]));
+
+  return (
+    <ol className="rounded-3xl border border-ink-200 bg-white px-3 py-2 sm:px-4">
+      {members.map((member, index) => {
+        const round = roundByMember.get(member.id);
+        const status = round?.status;
+        const due = round ? parseDateOnly(round.dueDate) : null;
+        const expanded = expandedId === member.id;
+        const panelId = `schedule-row-${member.id}`;
+        const isFirst = index === 0;
+        const isLast = index === members.length - 1;
+        const isYou = member.id === viewerMembershipId;
+        const canClaim = isManager && member.isPlaceholder && onClaimInvite;
+
+        return (
+          <li key={member.id} className="grid grid-cols-[3rem_1.5rem_minmax(0,1fr)] gap-x-3">
+            <div className="py-3 text-center">
+              {due ? (
+                <>
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-ink-500">
+                    {due.toLocaleDateString(undefined, { month: "short" })}
+                  </p>
+                  <p className="font-heading text-lg font-bold leading-tight tabular-nums text-ink-900">
+                    {due.getDate()}
+                  </p>
+                </>
+              ) : (
+                <p className="pt-1 text-xs font-bold text-ink-500">#{round?.number ?? member.turnNumber ?? index + 1}</p>
+              )}
+            </div>
+
+            <div className="relative flex justify-center" aria-hidden>
+              {!isFirst && (
+                <span
+                  className={`absolute left-1/2 top-0 h-1/2 w-0.5 -translate-x-1/2 ${
+                    status === "closed" || status === "current" ? "bg-brand-300" : "bg-ink-200"
+                  }`}
+                />
+              )}
+              {!isLast && (
+                <span
+                  className={`absolute bottom-0 left-1/2 h-1/2 w-0.5 -translate-x-1/2 ${
+                    status === "closed" ? "bg-brand-300" : "bg-ink-200"
+                  }`}
+                />
+              )}
+              <span className="relative z-10 flex h-full items-center">
+                <TimelineDot status={status} />
+              </span>
+            </div>
+
+            <div className="min-w-0 py-1.5">
+              <button
+                type="button"
+                onClick={() => setExpandedId(expanded ? null : member.id)}
+                aria-expanded={expanded}
+                aria-controls={panelId}
+                className={`flex w-full items-center gap-3 rounded-2xl px-2 py-1.5 text-left transition-colors hover:bg-ink-50 ${
+                  status === "current" ? "bg-brand-50 hover:bg-brand-50" : ""
+                }`}
+              >
+                <Avatar
+                  name={member.displayName}
+                  placeholder={member.isPlaceholder}
+                  className={status === "closed" ? "opacity-70" : ""}
+                />
+                <span className="min-w-0 flex-1">
+                  <span
+                    className={`block truncate ${
+                      status === "closed" ? "font-semibold text-ink-600" : "font-bold text-ink-900"
+                    }`}
+                  >
+                    {member.displayName}
+                    {isYou && <span className="font-semibold text-ink-500"> (you)</span>}
+                  </span>
+                  {(member.isManager || (isManager && member.isPlaceholder)) && (
+                    <span className="block truncate text-xs font-semibold text-ink-500">
+                      {[member.isManager && "Organizer", isManager && member.isPlaceholder && "Unclaimed"]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </span>
+                  )}
+                </span>
+                {status === "current" && <span className={`${ui.badgeActive} shrink-0`}>Now</span>}
+                <ChevronDown
+                  className={`h-4 w-4 shrink-0 text-ink-400 transition-transform ${expanded ? "rotate-180" : ""}`}
+                  aria-hidden
+                />
+              </button>
+
+              {expanded && (
+                <div id={panelId} className="animate-rise mx-2 mb-2 mt-1 space-y-2 rounded-2xl bg-ink-50 px-4 py-3 text-sm">
+                  <p className="text-ink-600">
+                    <span className="font-bold text-ink-900">Round {round?.number ?? member.turnNumber ?? index + 1}</span>
+                    {due &&
+                      ` · Due ${formatDueDate(round?.dueDate)}`}
+                    {status === "closed" && " · Paid out"}
+                  </p>
+                  <p className="text-ink-600">
+                    {member.contact ? (
+                      <>
+                        Contact: <span className="font-bold text-ink-900">{member.contact}</span>
+                      </>
+                    ) : (
+                      "No contact shared"
+                    )}
+                  </p>
+                  {canClaim && (
+                    <div className="space-y-2 pt-1">
+                      {claimUrls[member.id] ? (
+                        <CopyableLink url={claimUrls[member.id]} label="Claim link" compact />
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => onClaimInvite(member.id)}
+                          disabled={claimPending}
+                          className={ui.btnSecondarySm}
+                        >
+                          Create claim link
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 
@@ -875,22 +1002,14 @@ function ContributionRow({
       }`}
     >
       <div className="flex min-w-0 flex-1 items-center gap-2.5">
-        <span className={ui.avatarInitialsSm} aria-hidden>
-          {displayInitials(contribution.displayName ?? "?")}
-        </span>
+        <Avatar name={contribution.displayName ?? "?"} placeholder={contribution.isPlaceholder} />
         <div className="min-w-0">
-          <p className="truncate font-medium text-slate-900">{contribution.displayName ?? "Member"}</p>
-          {(contribution.isPartial || contribution.isPlaceholder) && (
-            <p className="truncate text-xs text-slate-500">
-              {contribution.isPartial && "Partial payment"}
-              {contribution.isPartial && contribution.isPlaceholder && " · "}
-              {contribution.isPlaceholder && "Placeholder"}
-            </p>
-          )}
+          <p className="truncate font-bold text-ink-900">{contribution.displayName ?? "Member"}</p>
+          {contribution.isPartial && <p className="truncate text-xs text-ink-500">Partial payment</p>}
         </div>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3 sm:justify-end">
-        <p className="text-sm font-medium tabular-nums text-slate-900">{amountLabel}</p>
+        <p className="text-sm font-bold tabular-nums text-ink-900">{amountLabel}</p>
         {hasActions && (
           <div className="flex flex-wrap gap-2">
             {contribution.canReport && (
@@ -984,10 +1103,10 @@ function ContributionsList({
     <div className="space-y-5">
       {groups.map((group) => (
         <section key={group.id}>
-          <h4 className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
+          <h4 className="mb-2 text-xs font-bold uppercase tracking-wide text-ink-500">
             {group.label} · {group.items.length}
           </h4>
-          <ul className="divide-y divide-gray-100 overflow-hidden rounded-xl border border-gray-100 bg-white">
+          <ul className="divide-y divide-ink-100 overflow-hidden rounded-3xl border border-ink-200 bg-white">
             {group.items.map((contribution) => (
               <ContributionRow
                 key={contribution.id}
@@ -1003,36 +1122,81 @@ function ContributionsList({
   );
 }
 
-function LedgerRow({ entry }: { entry: LedgerEntry }) {
-  const amountLabel =
-    entry.isPartial && entry.expectedAmount
-      ? `₱${Number(entry.amount).toLocaleString()} / ₱${Number(entry.expectedAmount).toLocaleString()}`
-      : `₱${Number(entry.amount).toLocaleString()}`;
+type LedgerOutcome = "paid" | "partial" | "awaiting" | "unpaid";
+
+function ledgerOutcome(entry: LedgerEntry): LedgerOutcome {
+  if (entry.status === "confirmed") return entry.isPartial ? "partial" : "paid";
+  if (entry.status === "reported") return "awaiting";
+  return "unpaid";
+}
+
+// Problems first, so a round's exceptions are the first thing you see when it opens.
+const OUTCOME_ORDER: Record<LedgerOutcome, number> = { unpaid: 0, partial: 1, awaiting: 2, paid: 3 };
+
+function LedgerRow({
+  entry,
+  expected,
+  roundClosed,
+}: {
+  entry: LedgerEntry;
+  expected: number;
+  roundClosed: boolean;
+}) {
+  const outcome = ledgerOutcome(entry);
+  const amount = Number(entry.amount);
+  const short = Math.max(0, expected - amount);
   const source = ledgerSourceLabel(entry.source);
 
+  const icon =
+    outcome === "paid" ? (
+      <CircleCheck className="h-5 w-5 text-brand-600" aria-hidden />
+    ) : outcome === "awaiting" ? (
+      <Clock className="h-5 w-5 text-sun-700" aria-hidden />
+    ) : (
+      <TriangleAlert className={`h-5 w-5 ${outcome === "partial" ? "text-sun-700" : "text-danger-600"}`} aria-hidden />
+    );
+
+  const detail =
+    outcome === "partial"
+      ? `₱${short.toLocaleString()} short`
+      : outcome === "awaiting"
+        ? "Awaiting confirmation"
+        : outcome === "unpaid"
+          ? roundClosed
+            ? "Missed"
+            : "Not yet paid"
+          : null;
+  // The outcome line takes priority; who recorded it only matters once it's settled.
+  const extras = detail || !source ? [] : [source];
+
   return (
-    <li
-      className={`flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 ${
-        entry.status === "confirmed" ? "opacity-75" : ""
-      }`}
-    >
-      <div className="flex min-w-0 flex-1 items-center gap-2.5">
-        <span className={ui.avatarInitialsSm} aria-hidden>
-          {displayInitials(entry.displayName)}
-        </span>
-        <div className="min-w-0">
-          <p className="truncate font-medium text-slate-900">{entry.displayName}</p>
-          {(source || entry.isPlaceholder) && (
-            <p className="truncate text-xs text-slate-500">
-              {[source, entry.isPlaceholder && "Placeholder"].filter(Boolean).join(" · ")}
-            </p>
-          )}
-        </div>
+    <li className="flex items-center gap-3 px-4 py-2.5">
+      {icon}
+      <Avatar
+        name={entry.displayName}
+        placeholder={entry.isPlaceholder}
+        className={outcome === "paid" ? "opacity-70" : ""}
+      />
+      <div className="min-w-0 flex-1">
+        <p className={`truncate text-sm ${outcome === "paid" ? "font-semibold text-ink-600" : "font-bold text-ink-900"}`}>
+          {entry.displayName}
+        </p>
+        {(detail || extras.length > 0) && (
+          <p className="truncate text-xs text-ink-500">
+            {detail && (
+              <span className={outcome === "unpaid" ? "font-bold text-danger-700" : "font-bold text-ink-700"}>
+                {detail}
+              </span>
+            )}
+            {detail && extras.length > 0 && " · "}
+            {extras.join(" · ")}
+          </p>
+        )}
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-3 sm:justify-end">
-        <p className="text-sm font-medium tabular-nums text-slate-900">{amountLabel}</p>
-        <span className={paymentStatusBadge(entry.status)}>{contributionStatusLabel(entry.status)}</span>
-      </div>
+      <p className={`shrink-0 text-sm tabular-nums ${outcome === "paid" ? "font-semibold text-ink-600" : "font-bold text-ink-900"}`}>
+        ₱{amount.toLocaleString()}
+        {outcome === "partial" && <span className="font-semibold text-ink-500"> / ₱{expected.toLocaleString()}</span>}
+      </p>
     </li>
   );
 }
@@ -1047,33 +1211,230 @@ function groupLedgerByRound(entries: LedgerEntry[]) {
   return [...groups.entries()].sort(([a], [b]) => b - a);
 }
 
-function LedgerList({ entries }: { entries: LedgerEntry[] }) {
-  const rounds = groupLedgerByRound(entries);
+function LedgerRoundCard({
+  roundNumber,
+  entries,
+  contributionAmount,
+  defaultOpen,
+}: {
+  roundNumber: number;
+  entries: LedgerEntry[];
+  contributionAmount: string;
+  defaultOpen: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const first = entries[0];
+  const roundStatus = first.roundStatus as RoundSummary["status"];
+  const roundClosed = roundStatus === "closed";
+  const due = parseDateOnly(first.roundDueDate);
+  const expectedOf = (e: LedgerEntry) => Number(e.expectedAmount ?? contributionAmount);
+
+  const expectedTotal = entries.reduce((sum, e) => sum + expectedOf(e), 0);
+  const confirmedTotal = entries
+    .filter((e) => e.status === "confirmed")
+    .reduce((sum, e) => sum + Number(e.amount), 0);
+  const percent = expectedTotal > 0 ? Math.min(100, Math.round((confirmedTotal / expectedTotal) * 100)) : 0;
+
+  const counts = { paid: 0, partial: 0, awaiting: 0, unpaid: 0 } as Record<LedgerOutcome, number>;
+  for (const e of entries) counts[ledgerOutcome(e)] += 1;
+  const tally: { label: string; tone: string }[] = [
+    counts.paid > 0 && { label: `${counts.paid} paid`, tone: "bg-brand-100 text-brand-700" },
+    counts.partial > 0 && { label: `${counts.partial} partial`, tone: "bg-sun-100 text-sun-800" },
+    counts.awaiting > 0 && { label: `${counts.awaiting} to confirm`, tone: "bg-sun-100 text-sun-800" },
+    counts.unpaid > 0 && {
+      label: `${counts.unpaid} ${roundClosed ? "missed" : "unpaid"}`,
+      tone: "bg-danger-50 text-danger-700",
+    },
+  ].filter(Boolean) as { label: string; tone: string }[];
+
+  const sorted = [...entries].sort((a, b) => OUTCOME_ORDER[ledgerOutcome(a)] - OUTCOME_ORDER[ledgerOutcome(b)]);
+  const panelId = `ledger-round-${roundNumber}`;
 
   return (
-    <div className="space-y-5">
-      {rounds.map(([roundNumber, roundEntries]) => {
-        const first = roundEntries[0];
-        const confirmed = roundEntries.filter((e) => e.status === "confirmed").length;
-        const roundStatus = first.roundStatus as RoundSummary["status"];
+    <section className="overflow-hidden rounded-3xl border border-ink-200 bg-white">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-controls={panelId}
+        className="w-full px-5 py-4 text-left transition-colors hover:bg-ink-50"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="font-heading text-lg font-bold text-ink-900">
+              Round {roundNumber}
+              {due && (
+                <span className="font-sans text-sm font-semibold text-ink-500">
+                  {" "}
+                  · {formatDueDate(first.roundDueDate)}
+                </span>
+              )}
+            </p>
+            <p className="mt-0.5 text-sm text-ink-600">
+              <span className="font-bold tabular-nums text-ink-900">₱{confirmedTotal.toLocaleString()}</span> of ₱
+              {expectedTotal.toLocaleString()} confirmed
+            </p>
+          </div>
+          <span className="flex shrink-0 items-center gap-2">
+            <span className={scheduleStatusBadge(roundStatus)}>{scheduleStatusLabel(roundStatus)}</span>
+            <ChevronDown
+              className={`h-4 w-4 text-ink-400 transition-transform ${open ? "rotate-180" : ""}`}
+              aria-hidden
+            />
+          </span>
+        </div>
+        <div className="mt-3 h-2 overflow-hidden rounded-full bg-ink-100" aria-hidden>
+          <div
+            className={`h-full rounded-full ${percent >= 100 ? "bg-brand-500" : "bg-gradient-to-r from-brand-500 to-brand-400"}`}
+            style={{ width: `${percent}%` }}
+          />
+        </div>
+        {tally.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {tally.map((t) => (
+              <span key={t.label} className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${t.tone}`}>
+                {t.label}
+              </span>
+            ))}
+          </div>
+        )}
+      </button>
+      {open && (
+        <ul id={panelId} className="animate-rise divide-y divide-ink-100 border-t border-ink-100">
+          {sorted.map((entry) => (
+            <LedgerRow key={entry.id} entry={entry} expected={expectedOf(entry)} roundClosed={roundClosed} />
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
 
-        return (
-          <section key={roundNumber}>
-            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-              <h4 className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                Round {roundNumber} · Due {first.roundDueDate} · {confirmed}/{roundEntries.length}{" "}
-                confirmed
-              </h4>
-              <span className={scheduleStatusBadge(roundStatus)}>{scheduleStatusLabel(roundStatus)}</span>
-            </div>
-            <ul className="divide-y divide-gray-100 overflow-hidden rounded-xl border border-gray-100 bg-white">
-              {roundEntries.map((entry) => (
-                <LedgerRow key={entry.id} entry={entry} />
-              ))}
-            </ul>
-          </section>
-        );
-      })}
+function LedgerList({ entries, contributionAmount }: { entries: LedgerEntry[]; contributionAmount: string }) {
+  const rounds = groupLedgerByRound(entries);
+  return (
+    <div className="space-y-3">
+      {rounds.map(([roundNumber, roundEntries], index) => (
+        <LedgerRoundCard
+          key={roundNumber}
+          roundNumber={roundNumber}
+          entries={roundEntries}
+          contributionAmount={contributionAmount}
+          defaultOpen={index === 0}
+        />
+      ))}
+    </div>
+  );
+}
+
+function ViewerRoundStatus({
+  contribution,
+  contributionAmount,
+}: {
+  contribution: RoundContribution;
+  contributionAmount: string;
+}) {
+  const expected = Number(contribution.expectedAmount ?? contributionAmount);
+  const remaining = Math.max(0, expected - Number(contribution.amount));
+
+  if (contribution.status === "confirmed") {
+    return (
+      <p className="flex items-center gap-2 rounded-2xl bg-white/80 px-4 py-2.5 text-sm font-bold text-brand-800">
+        <CircleCheck className="h-4 w-4 shrink-0" aria-hidden />
+        You&apos;re paid up for this round.
+      </p>
+    );
+  }
+  if (contribution.status === "reported") {
+    return (
+      <p className="flex items-center gap-2 rounded-2xl bg-white/80 px-4 py-2.5 text-sm font-bold text-ink-800">
+        <Clock className="h-4 w-4 shrink-0 text-sun-700" aria-hidden />
+        Your payment is waiting for the organizer to confirm.
+      </p>
+    );
+  }
+  return (
+    <p className="flex items-center gap-2 rounded-2xl bg-danger-50 px-4 py-2.5 text-sm font-bold text-danger-700">
+      <TriangleAlert className="h-4 w-4 shrink-0" aria-hidden />
+      You still owe ₱{(remaining > 0 ? remaining : expected).toLocaleString()} this round.
+    </p>
+  );
+}
+
+/** The most important thing on the page: who gets this round's pot and how close it is. */
+function RoundHero({
+  round,
+  potAmount,
+  confirmedCount,
+  totalCount,
+  progressPercent,
+  isOverdue,
+  isViewerRecipient,
+  viewerContribution,
+  contributionAmount,
+}: {
+  round: RoundSummary;
+  potAmount: number;
+  confirmedCount: number;
+  totalCount: number;
+  progressPercent: number;
+  isOverdue: boolean;
+  isViewerRecipient: boolean;
+  viewerContribution?: RoundContribution;
+  contributionAmount: string;
+}) {
+  const sunny = isViewerRecipient;
+  return (
+    <div
+      className={`rounded-3xl p-6 ${
+        sunny ? "border-2 border-sun-200 bg-sun-100 text-ink-900" : "bg-brand-700 text-white"
+      }`}
+    >
+      {/* Round number and due date live in the header's fact strip; only urgency is repeated here. */}
+      {isOverdue && (
+        <div className="mb-4">
+          <span className={ui.badgeDanger}>Overdue</span>
+        </div>
+      )}
+
+      {sunny ? (
+        <>
+          <h2 className="font-heading text-3xl font-bold">It&apos;s your turn!</h2>
+          <p className="mt-1 text-sm text-ink-700">You receive this round&apos;s pot once everyone has paid.</p>
+        </>
+      ) : (
+        <div className="flex items-center gap-3">
+          <Avatar name={round.recipientName} size="md" className="ring-2 ring-white/40" />
+          <div className="min-w-0">
+            <p className="text-sm text-brand-100">This round&apos;s pot goes to</p>
+            <h2 className="font-heading truncate text-2xl font-bold">{round.recipientName}</h2>
+          </div>
+        </div>
+      )}
+
+      <p className="font-heading mt-4 text-4xl font-bold tabular-nums sm:text-5xl">₱{potAmount.toLocaleString()}</p>
+
+      {totalCount > 0 && (
+        <div className="mt-4">
+          <div className={`h-3 overflow-hidden rounded-full ${sunny ? "bg-white/80" : "bg-white/20"}`}>
+            <div
+              className={`h-full rounded-full transition-all ${
+                sunny ? "bg-gradient-to-r from-brand-500 to-brand-400" : "bg-sun-300"
+              }`}
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+          <p className={`mt-2 text-sm font-semibold ${sunny ? "text-ink-700" : "text-brand-50"}`}>
+            {confirmedCount} of {totalCount} confirmed · {progressPercent}%
+          </p>
+        </div>
+      )}
+
+      {viewerContribution && (
+        <div className="mt-4">
+          <ViewerRoundStatus contribution={viewerContribution} contributionAmount={contributionAmount} />
+        </div>
+      )}
     </div>
   );
 }
@@ -1090,7 +1451,6 @@ export interface GroupCycleTabsProps {
   isActive: boolean;
   isCompleted: boolean;
   sortedMembers: GroupMember[];
-  reliabilityByMember: Map<string, MemberReliability>;
   dashboard?: {
     pendingConfirmations: number;
     openDisputes: number;
@@ -1112,6 +1472,9 @@ export interface GroupCycleTabsProps {
   disputes: DisputeEntry[];
   ledgerEntries: LedgerEntry[];
   auditEntries: AuditLogEntry[];
+  auditHasMore?: boolean;
+  auditLoadingMore?: boolean;
+  onLoadMoreAudit?: () => void;
   actionPending: string | null;
   viewerMembershipId?: string;
   onReportPayment: (contributionId: string, expectedAmount: string) => void;
@@ -1142,7 +1505,6 @@ export function GroupCycleTabPanels(props: GroupCycleTabsProps) {
     isActive,
     isCompleted,
     sortedMembers,
-    reliabilityByMember,
     dashboard,
     completionSummary,
     completionSummaryLoading,
@@ -1152,6 +1514,9 @@ export function GroupCycleTabPanels(props: GroupCycleTabsProps) {
     disputes,
     ledgerEntries,
     auditEntries,
+    auditHasMore = false,
+    auditLoadingMore = false,
+    onLoadMoreAudit,
     actionPending,
     viewerMembershipId,
     onReportPayment,
@@ -1186,13 +1551,18 @@ export function GroupCycleTabPanels(props: GroupCycleTabsProps) {
     return (
       <div className="space-y-6">
         {isCompleted && completionSummaryLoading && (
-          <div className={`${ui.emptyState} py-8`}>
-            <p className="font-medium text-slate-900">Loading completion summary…</p>
+          <div className="space-y-3" role="status" aria-label="Loading completion summary">
+            <div className={`${ui.skeleton} h-24`} />
+            <div className={ui.metricGrid}>
+              {[0, 1, 2, 3].map((i) => (
+                <div key={i} className={`${ui.skeleton} h-28`} />
+              ))}
+            </div>
           </div>
         )}
         {isCompleted && completionSummaryError && !completionSummary && (
           <div className={`${ui.emptyState} py-8`}>
-            <p className="font-medium text-slate-900">Could not load completion summary</p>
+            <p className="font-bold text-ink-900">Could not load completion summary</p>
             <p className={`mt-2 text-sm ${ui.muted}`}>Refresh the page to try again.</p>
           </div>
         )}
@@ -1200,61 +1570,44 @@ export function GroupCycleTabPanels(props: GroupCycleTabsProps) {
 
         {currentRound ? (
           <>
-            <div className="rounded-2xl border border-emerald-100 bg-emerald-50/50 p-5">
-              <p className="text-xs font-medium uppercase tracking-wide text-emerald-800/70">
-                Round {currentRound.number}
-              </p>
-              <h2 className="mt-1 text-2xl font-medium text-slate-900">
-                {currentRound.recipientName}
-              </h2>
-              <p className="mt-1 text-sm text-slate-600">
-                Receives ₱{potAmount.toLocaleString()} · Due {currentRound.dueDate}
-              </p>
-              {dashboard?.currentRound?.isOverdue && (
-                <span className={`${ui.badgeForming} mt-3 inline-block`}>Overdue</span>
-              )}
-              {totalCount > 0 && (
-                <div className="mt-5">
-                  <div className="mb-1.5 flex items-center justify-between text-xs text-slate-600">
-                    <span>
-                      {confirmedCount} of {totalCount} confirmed
-                    </span>
-                    <span>{progressPercent}%</span>
-                  </div>
-                  <div className="h-2 overflow-hidden rounded-full bg-white/80">
-                    <div
-                      className="h-full rounded-full bg-emerald-600 transition-all"
-                      style={{ width: `${progressPercent}%` }}
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
+            <RoundHero
+              round={currentRound}
+              potAmount={potAmount}
+              confirmedCount={confirmedCount}
+              totalCount={totalCount}
+              progressPercent={progressPercent}
+              isOverdue={!!dashboard?.currentRound?.isOverdue}
+              isViewerRecipient={!!viewerMembershipId && currentRound.recipientMembershipId === viewerMembershipId}
+              viewerContribution={contributions.find((c) => c.membershipId === viewerMembershipId)}
+              contributionAmount={group.contributionAmount}
+            />
 
             {isActive && nextRound && (
-              <div className="flex flex-wrap items-center gap-3 rounded-xl border border-gray-100 bg-white px-4 py-3">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-sm font-medium text-slate-600">
+              <div className="flex flex-wrap items-center gap-3 rounded-3xl border border-ink-200 bg-white px-4 py-3">
+                <span className="flex h-8 min-w-8 shrink-0 items-center justify-center rounded-full bg-ink-100 px-2 text-xs font-bold tabular-nums text-ink-700">
                   {nextRound.number}
                 </span>
-                <span className={ui.avatarInitialsSm} aria-hidden>
-                  {displayInitials(nextRound.recipientName ?? "?")}
-                </span>
+                <Avatar name={nextRound.recipientName ?? "?"} />
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs text-slate-500">Next payout</p>
-                  <p className="font-medium text-slate-900">{nextRound.recipientName ?? "—"}</p>
+                  <p className="text-xs font-bold uppercase tracking-wide text-ink-500">Next payout</p>
+                  <p className="truncate font-bold text-ink-900">
+                    {nextRound.recipientMembershipId === viewerMembershipId
+                      ? "You're next!"
+                      : (nextRound.recipientName ?? "—")}
+                  </p>
                 </div>
-                <div className="shrink-0 text-right text-sm text-slate-600">
-                  <p>₱{nextPotAmount.toLocaleString()}</p>
-                  <p className="text-xs text-slate-500">Due {nextRound.dueDate}</p>
+                <div className="shrink-0 text-right">
+                  <p className="text-sm font-bold tabular-nums text-ink-900">₱{nextPotAmount.toLocaleString()}</p>
+                  <p className="text-xs text-ink-500">Due {formatDueDate(nextRound.dueDate)}</p>
                 </div>
               </div>
             )}
 
             {isActive && currentRound && finalRound && (
-              <div className="rounded-xl border border-gray-100 bg-slate-50 px-4 py-3">
-                <p className="text-xs text-slate-500">Next payout</p>
-                <p className="font-medium text-slate-900">Final round</p>
-                <p className="mt-0.5 text-sm text-slate-600">
+              <div className="rounded-3xl border border-ink-200 bg-ink-50 px-5 py-4">
+                <p className="text-xs font-bold uppercase tracking-wide text-ink-500">Next payout</p>
+                <p className="font-heading font-bold text-ink-900">Final round</p>
+                <p className="mt-0.5 text-sm text-ink-600">
                   This is the last payout in the cycle. The paluwagan completes once this round closes.
                 </p>
               </div>
@@ -1302,26 +1655,6 @@ export function GroupCycleTabPanels(props: GroupCycleTabsProps) {
               </div>
             )}
 
-            {showDemoTools && isManager && isActive && currentRound && onAdvanceRound && (
-              <section className={`${ui.sectionCard} border-amber-100 bg-amber-50/40`}>
-                <h3 className={ui.sectionHeader}>Demo tools</h3>
-                <p className={ui.sectionSubtitle}>
-                  Close Round {currentRound.number} immediately and open the next payout — no need to wait
-                  for the due date.
-                </p>
-                <div className={ui.actionBar}>
-                  <button
-                    type="button"
-                    onClick={onAdvanceRound}
-                    disabled={advanceRoundPending}
-                    className={ui.btnSecondary}
-                  >
-                    {advanceRoundPending ? "Advancing…" : "Advance round"}
-                  </button>
-                </div>
-              </section>
-            )}
-
             <section>
               <h3 className={`mb-3 ${ui.sectionHeader}`}>Contributions</h3>
               {contributions.length > 0 ? (
@@ -1341,6 +1674,35 @@ export function GroupCycleTabPanels(props: GroupCycleTabsProps) {
                 />
               )}
             </section>
+
+            {showDemoTools && isManager && isActive && currentRound && onAdvanceRound && (
+              <aside
+                aria-label="Developer tools"
+                className="flex flex-col gap-3 rounded-3xl border-2 border-dashed border-ink-300 bg-ink-50 p-4 sm:flex-row sm:items-center"
+              >
+                <span
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white text-ink-600"
+                  aria-hidden
+                >
+                  <Wrench className="h-5 w-5" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-bold uppercase tracking-wide text-ink-500">Dev tools</p>
+                  <p className="text-sm text-ink-700">
+                    Close Round {currentRound.number} now and open the next payout, without waiting for the due date.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={onAdvanceRound}
+                  disabled={advanceRoundPending}
+                  className={`${ui.btnSecondarySm} shrink-0 self-start sm:self-auto`}
+                >
+                  <FastForward className="h-4 w-4" aria-hidden />
+                  {advanceRoundPending ? "Advancing…" : "Advance round"}
+                </button>
+              </aside>
+            )}
           </>
         ) : (
           !isCompleted && (
@@ -1355,36 +1717,40 @@ export function GroupCycleTabPanels(props: GroupCycleTabsProps) {
   }
 
   if (cycleTab === "schedule") {
-    return schedule.length > 0 ? (
-      <ul className="overflow-hidden rounded-2xl border border-gray-100 bg-white">
-        {schedule.map((r) => (
-          <li
-            key={r.id}
-            className={`flex flex-wrap items-center justify-between gap-3 border-b border-gray-50 px-4 py-3 last:border-0 ${
-              r.status === "current" ? "bg-emerald-50/40" : ""
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-sm font-medium text-slate-700">
-                {r.number}
-              </span>
-              <div>
-                <p className="font-medium text-slate-900">{r.recipientName ?? "—"}</p>
-                <p className="text-sm text-slate-500">Due {r.dueDate}</p>
-              </div>
-            </div>
-            <span className={scheduleStatusBadge(r.status)}>{scheduleStatusLabel(r.status)}</span>
-          </li>
-        ))}
-      </ul>
-    ) : (
-      <EmptyTabState title="No schedule yet" description="The rotation appears after activation." />
+    if (sortedMembers.length === 0) {
+      return <EmptyTabState title="No schedule yet" description="The rotation appears after activation." />;
+    }
+    return (
+      <>
+        <div className="mb-6">
+          <CycleNetChart
+            schedule={schedule}
+            viewerMembershipId={viewerMembershipId}
+            contributionAmount={group.contributionAmount}
+          />
+        </div>
+        {isManager && !isCompleted && unclaimedSeats > 0 && (
+          <p className="mb-3 text-sm text-ink-600">
+            Tap an unclaimed seat to create a claim link so someone can take it over during the cycle.
+          </p>
+        )}
+        <ScheduleTimeline
+          members={sortedMembers}
+          schedule={schedule}
+          isManager={isManager}
+          viewerMembershipId={viewerMembershipId}
+          claimUrls={claimUrls}
+          // A completed paluwagan's roster is closed (the server refuses claims too).
+          onClaimInvite={isCompleted ? undefined : onClaimInvite}
+          claimPending={claimPending}
+        />
+      </>
     );
   }
 
   if (cycleTab === "ledger") {
     return ledgerEntries.length > 0 ? (
-      <LedgerList entries={ledgerEntries} />
+      <LedgerList entries={ledgerEntries} contributionAmount={group.contributionAmount} />
     ) : (
       <EmptyTabState title="No ledger entries" description="Payments are recorded here as rounds progress." />
     );
@@ -1408,62 +1774,14 @@ export function GroupCycleTabPanels(props: GroupCycleTabsProps) {
     );
   }
 
-  if (cycleTab === "members") {
-    return (
-      <>
-        <p className="mb-3 text-sm text-slate-500">
-          {sortedMembers.length} member{sortedMembers.length === 1 ? "" : "s"} in payout order
-          {unclaimedSeats > 0 &&
-            isManager &&
-            ` · ${unclaimedSeats} unclaimed placeholder${unclaimedSeats === 1 ? "" : "s"}`}
-        </p>
-        {isManager && unclaimedSeats > 0 && (
-          <p className="mb-3 text-sm text-slate-600">
-            Generate a claim link so someone can take over an unclaimed seat during the cycle.
-          </p>
-        )}
-        <ul className="overflow-hidden rounded-2xl border border-gray-100 bg-white">
-          {sortedMembers.map((member, index) => (
-            <MemberRow
-              key={member.id}
-              member={member}
-              position={member.turnNumber ?? index + 1}
-              reliabilitySummary={reliabilityByMember.get(member.id)?.reliabilitySummary}
-              showClaimAction={isManager}
-              claimUrl={claimUrls[member.id]}
-              onClaimInvite={onClaimInvite ? () => onClaimInvite(member.id) : undefined}
-              claimPending={claimPending}
-            />
-          ))}
-        </ul>
-      </>
-    );
-  }
-
   if (cycleTab === "audit") {
-    return auditEntries.length > 0 ? (
-      <ul className="space-y-2">
-        {auditEntries.map((entry) => (
-          <li key={entry.id} className={ui.cardFlat}>
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <span
-                  className={`rounded-full px-2 py-0.5 text-xs font-medium ${auditCategoryClass(entry.category)}`}
-                >
-                  {entry.categoryLabel}
-                </span>
-                <span className="font-medium text-slate-900">{entry.title}</span>
-              </div>
-              <time className="shrink-0 text-xs text-slate-500">
-                {new Date(entry.createdAt).toLocaleString()}
-              </time>
-            </div>
-            <p className="mt-2 text-sm text-slate-700">{entry.summary}</p>
-          </li>
-        ))}
-      </ul>
-    ) : (
-      <EmptyTabState title="No audit entries" description="Manager actions are logged here." />
+    return (
+      <AuditLogPanel
+        entries={auditEntries}
+        hasMore={auditHasMore}
+        loadingMore={auditLoadingMore}
+        onLoadMore={onLoadMoreAudit}
+      />
     );
   }
 

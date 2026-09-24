@@ -3,17 +3,42 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <meta name="theme-color" content="#fff9f0" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500&family=Figtree:ital,wght@0,400;0,500;0,600&family=Funnel+Sans:ital,wght@0,400;0,500;0,600;0,700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700&family=Nunito:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
     <title>Kaban</title>
+    <style>
+      /* Pre-JS splash, replaced when React mounts. Mirrors components/Splash.tsx. */
+      html, body { margin: 0; background: #fff9f0; }
+      .boot { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; }
+      .boot-mark { display: flex; align-items: center; gap: 8px; font: 700 24px/1 "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif; letter-spacing: -0.02em; color: #0b6a47; }
+      .boot-dots { display: flex; gap: 2px; }
+      .boot-dots i { width: 12px; height: 12px; border-radius: 50%; background: #ffc84a; }
+      .boot-dots i + i { background: #3fbf86; }
+      .boot-spin { width: 44px; height: 44px; animation: boot-spin 1s linear infinite; }
+      @keyframes boot-spin { to { transform: rotate(360deg); } }
+      @media (prefers-reduced-motion: reduce) { .boot-spin { animation-duration: 3s; } }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div class="boot" role="status">
+        <span class="boot-mark"><span class="boot-dots" aria-hidden="true"><i></i><i></i></span>Kaban</span>
+        <svg class="boot-spin" viewBox="0 0 44 44" aria-hidden="true">
+          <circle cx="22" cy="22" r="18" fill="none" stroke-width="4" stroke="#e4dccf" />
+          <circle cx="22" cy="22" r="18" fill="none" stroke-width="4" stroke-linecap="round" stroke="#0e8456" stroke-dasharray="40 113" />
+          <circle cx="22" cy="22" r="18" fill="none" stroke-width="4" stroke-linecap="round" stroke="#ffc84a" stroke-dasharray="12 113" stroke-dashoffset="-50" />
+        </svg>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

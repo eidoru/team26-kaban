@@ -1,5 +1,6 @@
 import { AuditLog, Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
+import { formatDisplayDate } from "../lib/dates.js";
 
 type AuditMetadata = Record<string, unknown>;
 
@@ -85,12 +86,12 @@ function formatAction(
     }
     case "group.start_date_set": {
       const startDate = metaString(metadata, "startDate");
-      if (startDate) details.push(`Start date: ${startDate.slice(0, 10)}`);
+      if (startDate) details.push(`Start date: ${formatDisplayDate(startDate)}`);
       return {
         category: "group",
         title: "Start date set",
         summary: startDate
-          ? `Cycle start date set to ${startDate.slice(0, 10)}`
+          ? `Cycle start date set to ${formatDisplayDate(startDate)}`
           : "Cycle start date was updated",
         details,
       };
@@ -98,7 +99,7 @@ function formatAction(
     case "group.activated": {
       const startDate = metaString(metadata, "startDate");
       const rounds = metaNumber(metadata, "rounds");
-      if (startDate) details.push(`Start date: ${startDate.slice(0, 10)}`);
+      if (startDate) details.push(`Start date: ${formatDisplayDate(startDate)}`);
       if (rounds != null) details.push(`Schedule: ${rounds} rounds generated`);
       details.push("Round 1 opened for contributions");
       return {
@@ -208,6 +209,33 @@ function formatAction(
           type === "membership_claim"
             ? "A claim link was generated for a placeholder"
             : "A group invite link was generated",
+        details,
+      };
+    }
+    case "group.advance_round":
+    case "cron.advance_round": {
+      const closed = metaNumber(metadata, "closedRound");
+      const opened = metaNumber(metadata, "openedRound");
+      const completed = metaBool(metadata, "completed");
+      if (closed != null) details.push(`Round ${closed} closed before its due date`);
+      if (opened != null) details.push(`Round ${opened} opened`);
+      if (completed) details.push("That was the final round; the paluwagan is complete");
+      details.push(
+        log.action === "cron.advance_round"
+          ? "Triggered by the testing endpoint"
+          : "Triggered from the demo tools",
+      );
+      return {
+        category: "round",
+        title: "Round advanced early",
+        summary:
+          closed == null
+            ? "The current round was closed early"
+            : completed
+              ? `Round ${closed} was closed early, finishing the cycle`
+              : opened != null
+                ? `Round ${closed} was closed early and Round ${opened} opened`
+                : `Round ${closed} was closed early`,
         details,
       };
     }
@@ -450,13 +478,35 @@ function formatAction(
   }
 }
 
-export async function getGroupAuditLog(groupId: string, limit = 50) {
-  const [logs, members, rounds, contributions] = await Promise.all([
+/** Newest first. Pass `before` (an entry id) to page back; ties on createdAt break by id. */
+export async function getGroupAuditLog(
+  groupId: string,
+  { limit = 50, before }: { limit?: number; before?: string } = {},
+) {
+  const cursor = before
+    ? await prisma.auditLog.findFirst({
+        where: { id: before, groupId },
+        select: { id: true, createdAt: true },
+      })
+    : null;
+  if (before && !cursor) return { entries: [], hasMore: false };
+
+  const [rawLogs, members, rounds, contributions] = await Promise.all([
     prisma.auditLog.findMany({
-      where: { groupId },
+      where: {
+        groupId,
+        ...(cursor
+          ? {
+              OR: [
+                { createdAt: { lt: cursor.createdAt } },
+                { createdAt: cursor.createdAt, id: { lt: cursor.id } },
+              ],
+            }
+          : {}),
+      },
       include: { actor: { select: { displayName: true } } },
-      orderBy: { createdAt: "desc" },
-      take: limit,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: limit + 1,
     }),
     prisma.membership.findMany({
       where: { groupId },
@@ -478,7 +528,10 @@ export async function getGroupAuditLog(groupId: string, limit = 50) {
     contributionsById: new Map(contributions.map((c) => [c.id, c])),
   };
 
-  return logs.map((log) => {
+  const hasMore = rawLogs.length > limit;
+  const logs = rawLogs.slice(0, limit);
+
+  const entries = logs.map((log) => {
     const formatted = formatAction(log, ctx);
     return {
       id: log.id,
@@ -494,4 +547,6 @@ export async function getGroupAuditLog(groupId: string, limit = 50) {
       categoryLabel: formatted.category.charAt(0).toUpperCase() + formatted.category.slice(1),
     };
   });
+
+  return { entries, hasMore };
 }

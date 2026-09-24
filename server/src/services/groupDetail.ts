@@ -6,6 +6,7 @@ import { serializeGroup, serializeMember } from "./groups.js";
 import { serializeRound } from "./schedule.js";
 
 /** Build the group detail payload returned by GET /groups/:id. */
+/** The full group page payload for one viewer. Every route returning a group detail should use this. */
 export async function loadGroupDetailPayload(
   group: Group,
   membership: Membership,
@@ -98,7 +99,10 @@ export async function loadGroupDetailPayload(
   }
 
   return {
-    group: serializeGroup(group, filledCount, isManager ? "manager" : "member"),
+    group: {
+      ...serializeGroup(group, filledCount, isManager ? "manager" : "member"),
+      membershipId: membership.id,
+    },
     members: members.map(serializeMember),
     pending: {
       payoutOrder: needsPayoutOrder,

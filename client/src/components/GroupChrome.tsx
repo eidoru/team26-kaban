@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
-import { Link } from "react-router-dom";
-import { statusBadgeClass, ui } from "../lib/ui";
+import { Check } from "lucide-react";
+import { ui } from "../lib/ui";
 
 export type GroupPhase = "create" | "forming" | "active" | "completed";
 
@@ -11,21 +11,6 @@ const PHASES: { id: GroupPhase; label: string }[] = [
   { id: "completed", label: "Completed" },
 ];
 
-const PHASE_BADGE: Record<GroupPhase, { label: string; className: string }> = {
-  create: { label: "Draft", className: ui.badgeForming },
-  forming: { label: "Forming", className: statusBadgeClass("forming") },
-  active: { label: "Active", className: statusBadgeClass("active") },
-  completed: { label: "Completed", className: statusBadgeClass("completed") },
-};
-
-function CheckMark() {
-  return (
-    <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-    </svg>
-  );
-}
-
 export function GroupPhaseRail({ phase }: { phase: GroupPhase }) {
   const currentIndex = PHASES.findIndex((p) => p.id === phase);
 
@@ -35,32 +20,32 @@ export function GroupPhaseRail({ phase }: { phase: GroupPhase }) {
         {PHASES.map((step, index) => {
           const state = index < currentIndex ? "done" : index === currentIndex ? "current" : "upcoming";
           return (
-            <li key={step.id} className="flex items-center gap-1.5">
+            <li key={step.id} className="flex items-center gap-1.5" aria-current={state === "current" ? "step" : undefined}>
               <span
-                className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
+                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ${
                   state === "current"
-                    ? "bg-emerald-900 text-white"
+                    ? "bg-brand-700 text-white"
                     : state === "done"
-                      ? "bg-emerald-50 text-emerald-800"
-                      : "bg-gray-100 text-slate-400"
+                      ? "bg-brand-100 text-brand-800"
+                      : "bg-ink-100 text-ink-500"
                 }`}
               >
                 <span
                   className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] ${
                     state === "current"
-                      ? "bg-white text-emerald-900"
+                      ? "bg-white text-brand-700"
                       : state === "done"
-                        ? "bg-emerald-700 text-white"
-                        : "border border-gray-300 bg-white text-slate-400"
+                        ? "bg-brand-700 text-white"
+                        : "border border-ink-300 bg-white text-ink-500"
                   }`}
                 >
-                  {state === "done" ? <CheckMark /> : index + 1}
+                  {state === "done" ? <Check className="h-3 w-3" strokeWidth={3.5} aria-hidden /> : index + 1}
                 </span>
                 {step.label}
               </span>
               {index < PHASES.length - 1 && (
                 <span
-                  className={`h-px w-4 ${index < currentIndex ? "bg-emerald-300" : "bg-gray-200"}`}
+                  className={`h-0.5 w-4 rounded-full ${index < currentIndex ? "bg-brand-300" : "bg-ink-200"}`}
                   aria-hidden
                 />
               )}
@@ -72,39 +57,32 @@ export function GroupPhaseRail({ phase }: { phase: GroupPhase }) {
   );
 }
 
-export type GroupFact = { label: string; value: string };
+export type GroupFact = {
+  label: string;
+  value: string;
+  /** Short qualifier shown after the value, e.g. "in 3 days". */
+  hint?: string;
+  hintTone?: "muted" | "danger";
+};
 
 export function GroupHeader({
   title,
   phase,
   facts,
   action,
-  backTo = "/home",
-  backLabel = "Home",
 }: {
   title: string;
   phase: GroupPhase;
   facts: GroupFact[];
   action?: ReactNode;
-  backTo?: string;
-  backLabel?: string;
 }) {
-  const badge = PHASE_BADGE[phase];
-
   return (
     <div className="mb-8">
-      <Link to={backTo} className={ui.backLink}>
-        <span className={ui.backLinkArrow}>←</span>
-        {backLabel}
-      </Link>
-
-      <div className="border-b border-gray-100 pb-6">
+      <div className="border-b border-ink-100 pb-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-3">
-              <h1 className={ui.pageTitle}>{title}</h1>
-              <span className={`${badge.className} shrink-0`}>{badge.label}</span>
-            </div>
+            {/* The phase rail below already shows the current stage, so no separate status pill here. */}
+            <h1 className={ui.pageTitle}>{title}</h1>
             <div className="mt-4">
               <GroupPhaseRail phase={phase} />
             </div>
@@ -116,8 +94,19 @@ export function GroupHeader({
           <dl className={ui.factStrip}>
             {facts.map((fact) => (
               <div key={fact.label}>
-                <dt className="text-xs font-medium uppercase tracking-wide text-slate-400">{fact.label}</dt>
-                <dd className="mt-0.5 text-sm font-medium text-slate-900">{fact.value}</dd>
+                <dt className="text-xs font-bold uppercase tracking-wide text-ink-500">{fact.label}</dt>
+                <dd className="mt-0.5 text-sm font-bold text-ink-900 tabular-nums">
+                  {fact.value}
+                  {fact.hint && (
+                    <span
+                      className={`ml-1.5 text-xs font-semibold ${
+                        fact.hintTone === "danger" ? "text-danger-700" : "text-ink-500"
+                      }`}
+                    >
+                      {fact.hint}
+                    </span>
+                  )}
+                </dd>
               </div>
             ))}
           </dl>
@@ -145,11 +134,11 @@ export function GroupSidebar({
 }) {
   return (
     <nav aria-label="Sections">
-      <ul className={ui.sidebarNav}>
+      <ul role="tablist" className={ui.sidebarNav}>
         {items.map((item) => {
           const isActive = active === item.id;
           return (
-            <li key={item.id} className="shrink-0 md:shrink">
+            <li key={item.id} role="presentation" className="shrink-0 md:shrink">
               <button
                 type="button"
                 role="tab"
@@ -168,7 +157,7 @@ export function GroupSidebar({
                 {item.badge != null && item.badge > 0 && (
                   <span
                     className={`inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1.5 py-0.5 text-xs leading-none ${
-                      isActive ? "bg-white/20 text-white" : "bg-red-600 text-white"
+                      isActive ? "bg-white/20 text-white" : "bg-danger-600 text-white"
                     }`}
                   >
                     {item.badge > 99 ? "99+" : item.badge}
@@ -196,11 +185,51 @@ export function GroupSectionLayout({
 }) {
   return (
     <div className="flex flex-col gap-6 md:flex-row md:gap-10">
-      <div className="md:w-44 md:shrink-0">
+      <div className="relative md:w-44 md:shrink-0">
         <GroupSidebar items={items} active={active} onSelect={onSelect} />
+        <div aria-hidden className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-cream md:hidden" />
       </div>
       <div className="min-w-0 flex-1" role="tabpanel">
         {children}
+      </div>
+    </div>
+  );
+}
+
+// Radius is set per block, so this skips ui.skeleton (which carries its own rounded-2xl).
+const bone = "animate-pulse bg-ink-100";
+
+/** Placeholder with the group page's shape (header, phase rail, facts, hero, list) while it loads. */
+export function GroupPageSkeleton() {
+  return (
+    <div role="status" aria-label="Loading group" className="min-w-0">
+      <div className="mb-8 border-b border-ink-200 pb-6">
+        <div className={`${bone} h-9 w-64 max-w-full rounded-2xl`} />
+        <div className="mt-4 flex flex-wrap gap-2">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className={`${bone} h-7 w-24 rounded-full`} />
+          ))}
+        </div>
+        <div className="mt-5 flex flex-wrap gap-8">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="space-y-2">
+              <div className={`${bone} h-3 w-20 rounded-full`} />
+              <div className={`${bone} h-4 w-24 rounded-full`} />
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="flex flex-col gap-6 md:flex-row md:gap-10">
+        <div className="flex gap-1 md:w-44 md:shrink-0 md:flex-col">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className={`${bone} h-9 w-24 rounded-full md:w-full`} />
+          ))}
+        </div>
+        <div className="min-w-0 flex-1 space-y-4">
+          <div className={`${bone} h-56 rounded-3xl`} />
+          <div className={`${bone} h-16 rounded-3xl`} />
+          <div className={`${bone} h-16 rounded-3xl`} />
+        </div>
       </div>
     </div>
   );

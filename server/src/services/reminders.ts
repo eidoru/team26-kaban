@@ -3,6 +3,7 @@ import { createNotification } from "../lib/audit.js";
 import { prisma } from "../lib/prisma.js";
 import { getGroupInterestRoundContexts, getObligationTotalRemaining, toShortfallInterestTerms } from "./shortfallInterest.js";
 import { startOfUtcDay } from "./schedule.js";
+import { formatDisplayDate } from "../lib/dates.js";
 
 function addDays(date: Date, days: number): Date {
   const result = new Date(date);
@@ -81,7 +82,7 @@ export async function sendDueReminders(): Promise<{ sent: number }> {
           ? `${group.name}: contribution overdue`
           : `${group.name}: contribution due tomorrow`;
         const body = isOverdue
-          ? `Round ${currentRound.number} was due ${currentRound.dueDate.toISOString().slice(0, 10)}. Please report or settle your payment.`
+          ? `Round ${currentRound.number} was due ${formatDisplayDate(currentRound.dueDate)}. Please report or settle your payment.`
           : `Round ${currentRound.number} is due tomorrow (₱${Number(group.contributionAmount).toLocaleString()}).`;
 
         if (

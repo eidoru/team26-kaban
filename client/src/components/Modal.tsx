@@ -59,7 +59,7 @@ export function Modal({
       <button
         type="button"
         aria-label="Close dialog"
-        className="absolute inset-0 bg-slate-900/40"
+        className="absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]"
         onClick={handleBackdropClick}
         tabIndex={-1}
       />
@@ -69,14 +69,14 @@ export function Modal({
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={description ? descriptionId : undefined}
-        className={`relative w-full max-w-md ${ui.cardCompact}`}
+        className="animate-pop relative w-full max-w-md rounded-3xl border border-ink-200 bg-white p-6 shadow-lift"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 id={titleId} className={ui.sectionHeading}>
           {title}
         </h2>
         {description && (
-          <p id={descriptionId} className="mt-2 text-sm text-slate-600">
+          <p id={descriptionId} className="mt-2 text-sm text-ink-600">
             {description}
           </p>
         )}

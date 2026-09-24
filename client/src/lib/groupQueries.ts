@@ -97,7 +97,6 @@ export function invalidateGroupCycle(queryClient: QueryClient, groupId: string) 
   void queryClient.invalidateQueries({ queryKey: ["audit-log", groupId] });
   void queryClient.invalidateQueries({ queryKey: ["dashboard", groupId] });
   void queryClient.invalidateQueries({ queryKey: ["completion-summary", groupId] });
-  void queryClient.invalidateQueries({ queryKey: ["member-reliability", groupId] });
   void queryClient.invalidateQueries({ queryKey: ["obligations", groupId] });
   void queryClient.invalidateQueries({ queryKey: ["disputes", groupId] });
   void queryClient.invalidateQueries({ queryKey: ["manager-obligations"] });
@@ -140,7 +139,6 @@ export function deferContributionSideEffects(queryClient: QueryClient, groupId: 
   void queryClient.invalidateQueries({ queryKey: ["dashboard", groupId] });
   void queryClient.invalidateQueries({ queryKey: ["ledger", groupId] });
   void queryClient.invalidateQueries({ queryKey: ["audit-log", groupId] });
-  void queryClient.invalidateQueries({ queryKey: ["member-reliability", groupId] });
 }
 
 function recomputeFormingGroupDetail(current: GroupDetail, members: GroupMember[]): GroupDetail {
@@ -227,6 +225,26 @@ export function patchPayoutOrder(queryClient: QueryClient, groupId: string, memb
     if (!current) return current;
     const sorted = [...members].sort((a, b) => (a.turnNumber ?? 0) - (b.turnNumber ?? 0));
     return recomputeFormingGroupDetail(current, sorted);
+  });
+}
+
+/** The value being saved is already known client-side, so this can apply immediately
+ * rather than waiting on the round trip before the date shows as set. */
+export function patchStartDate(queryClient: QueryClient, groupId: string, startDate: string) {
+  queryClient.setQueryData<GroupDetail>(groupQueryKey(groupId), (current) => {
+    if (!current) return current;
+    return {
+      ...current,
+      group: { ...current.group, startDate },
+      pending: {
+        ...current.pending,
+        startDateMissing: false,
+        canActivate:
+          current.group.status === "forming" &&
+          current.pending.openSlots === 0 &&
+          !current.pending.payoutOrder,
+      },
+    };
   });
 }
 

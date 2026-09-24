@@ -1,8 +1,11 @@
-import { type FormEvent, type ReactNode, useEffect, useId, useState } from "react";
+import { type FormEvent, type ReactNode, useId, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api, ApiError, patchSession, storeAuth } from "../api/client";
 import { useAuth } from "../context/AuthContext";
-import { displayInitials } from "../lib/initials";
+import { Avatar } from "../components/Avatar";
+import { StatCard } from "../components/StatCard";
+import { ToggleSwitch } from "../components/ToggleSwitch";
+import { demoToolsAvailable, useDemoToolsSetting } from "../lib/devTools";
 import { ui } from "../lib/ui";
 
 function formatPeso(amount: string | number): string {
@@ -21,36 +24,6 @@ function paluwaganBreakdown(stats: {
   if (stats.forming > 0) parts.push(`${stats.forming} forming`);
   if (stats.completed > 0) parts.push(`${stats.completed} done`);
   return parts.join(" · ");
-}
-
-function ActivityMetricCard({
-  label,
-  value,
-  hint,
-  highlight = false,
-}: {
-  label: string;
-  value: string;
-  hint: string;
-  highlight?: boolean;
-}) {
-  return (
-    <div
-      className={`rounded-2xl border p-5 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.05),0_2px_8px_-2px_rgba(0,0,0,0.03)] ${
-        highlight ? "border-red-200 bg-red-50/40" : "border-gray-100 bg-white"
-      }`}
-    >
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
-      <p
-        className={`mt-2 text-2xl font-medium tracking-tight ${
-          highlight ? "text-red-900" : "text-slate-900"
-        }`}
-      >
-        {value}
-      </p>
-      <p className={`mt-1 text-xs ${highlight ? "text-red-700/80" : "text-slate-500"}`}>{hint}</p>
-    </div>
-  );
 }
 
 function FormAlerts({ success, error }: { success?: string; error?: string }) {
@@ -81,13 +54,13 @@ function SecurityRow({
   children: ReactNode;
 }) {
   return (
-    <div className={`rounded-xl border transition-colors ${open ? "border-emerald-200 bg-emerald-50/40" : "border-gray-100 bg-white"}`}>
+    <div className={`rounded-3xl border transition-colors ${open ? "border-brand-200 bg-brand-50/60" : "border-ink-200 bg-white"}`}>
       <div className="relative p-4 pr-[8.5rem] sm:p-5">
         <div className="min-w-0">
-          <p className="text-sm font-medium text-slate-900">{title}</p>
-          <p className="mt-0.5 truncate text-sm text-slate-600">{value}</p>
+          <p className="text-sm font-bold text-ink-900">{title}</p>
+          <p className="mt-0.5 truncate text-sm text-ink-600">{value}</p>
           {hint && (
-            <p className={`mt-1 text-xs text-slate-400 ${open ? "invisible" : ""}`} aria-hidden={open}>
+            <p className={`mt-1 text-xs text-ink-500 ${open ? "invisible" : ""}`} aria-hidden={open}>
               {hint}
             </p>
           )}
@@ -97,17 +70,17 @@ function SecurityRow({
           onClick={onToggle}
           aria-expanded={open}
           aria-controls={panelId}
-          className={`absolute right-4 top-4 inline-flex h-10 w-[6.5rem] items-center justify-center rounded-xl border text-sm font-normal transition-colors sm:right-5 sm:top-5 ${
+          className={`absolute right-4 top-4 inline-flex h-10 w-[6.5rem] items-center justify-center rounded-full border-2 text-sm font-bold transition-colors sm:right-5 sm:top-5 ${
             open
-              ? "border-gray-200 bg-white text-slate-600 hover:bg-gray-50"
-              : "border-emerald-900 text-emerald-900 hover:bg-emerald-900 hover:text-white"
+              ? "border-ink-200 bg-white text-ink-600 hover:bg-ink-50"
+              : "border-brand-700 text-brand-700 hover:bg-brand-700 hover:text-white"
           }`}
         >
           {open ? "Cancel" : "Change"}
         </button>
       </div>
       {open && (
-        <div id={panelId} className="border-t border-emerald-100 px-4 pb-5 pt-4 sm:px-5">
+        <div id={panelId} className="border-t border-brand-100 px-4 pb-5 pt-4 sm:px-5">
           {children}
         </div>
       )}
@@ -117,6 +90,7 @@ function SecurityRow({
 
 export function ProfilePage() {
   const { user, refreshUser } = useAuth();
+  const [demoToolsOn, setDemoToolsOn] = useDemoToolsSetting();
   const emailPanelId = useId();
   const passwordPanelId = useId();
 
@@ -146,12 +120,6 @@ export function ProfilePage() {
     queryFn: () => api.getProfileActivity(),
   });
 
-  useEffect(() => {
-    setDisplayName(user?.displayName ?? "");
-    setContact(user?.contact ?? "");
-  }, [user?.displayName, user?.contact]);
-
-  const initials = displayInitials(user?.displayName);
 
   function resetEmailForm() {
     setEmailMessage("");
@@ -274,28 +242,23 @@ export function ProfilePage() {
         <p className={ui.pageSubtitle}>How you appear in groups and how you sign in</p>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-emerald-100 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.05),0_2px_8px_-2px_rgba(0,0,0,0.03)]">
-        <div className="bg-emerald-50 p-6 sm:p-8">
-          <div className="flex items-center gap-4">
-            <div className={ui.avatarInitials} aria-hidden>
-              {initials}
-            </div>
+      <div className="overflow-hidden rounded-3xl border border-ink-200 bg-white shadow-card">
+        <div className="relative overflow-hidden bg-brand-700 p-6 text-white sm:p-8">
+          <div aria-hidden className="absolute -right-16 -top-16 h-48 w-48 rounded-full bg-brand-600" />
+          <div className="relative flex items-center gap-4">
+            <Avatar name={user?.displayName} size="lg" className="ring-4 ring-white/30" />
             <div className="min-w-0">
-              <p className="truncate text-lg font-medium text-emerald-900">{user?.displayName}</p>
-              <p className="truncate text-sm text-emerald-700/80">{user?.email}</p>
-              {user?.contact ? (
-                <p className="mt-0.5 truncate text-sm text-emerald-700/60">{user.contact}</p>
-              ) : (
-                <p className="mt-0.5 text-sm text-emerald-700/50">No contact added</p>
-              )}
+              <p className="font-heading truncate text-2xl font-bold">{user?.displayName}</p>
+              <p className="truncate text-sm text-brand-50">{user?.email}</p>
+              <p className="mt-0.5 truncate text-sm text-brand-100">{user?.contact || "No contact added"}</p>
             </div>
           </div>
-          <p className="mt-4 text-sm text-emerald-700/70">
+          <p className="relative mt-5 text-sm text-brand-50">
             Your display name and contact are visible to members in your paluwagan groups.
           </p>
         </div>
 
-        <div className="border-t border-emerald-100 bg-white p-6 sm:p-8">
+        <div className="p-6 sm:p-8">
           <form onSubmit={handleProfileSubmit} className={ui.formStack}>
             <FormAlerts success={profileMessage} error={profileError} />
             <div className="grid gap-6 sm:grid-cols-2">
@@ -315,7 +278,7 @@ export function ProfilePage() {
               </div>
               <div>
                 <label htmlFor="contact" className={ui.label}>
-                  Contact <span className="text-slate-400">(optional)</span>
+                  Contact <span className="text-ink-500">(optional)</span>
                 </label>
                 <input
                   id="contact"
@@ -339,7 +302,7 @@ export function ProfilePage() {
 
       <section>
         <div className="mb-4">
-          <h2 className="text-lg font-medium text-slate-900">Account security</h2>
+          <h2 className={ui.sectionHeading}>Account security</h2>
           <p className={`mt-1 text-sm ${ui.muted}`}>Change sign-in details when you need to</p>
         </div>
 
@@ -447,7 +410,7 @@ export function ProfilePage() {
                     aria-invalid={confirmPassword.length > 0 && newPassword !== confirmPassword}
                   />
                   {confirmPassword.length > 0 && newPassword !== confirmPassword && (
-                    <p className="mt-2 text-xs font-normal text-red-600">Passwords do not match.</p>
+                    <p className="mt-2 text-xs font-normal text-danger-600">Passwords do not match.</p>
                   )}
                 </div>
               </div>
@@ -463,42 +426,72 @@ export function ProfilePage() {
 
       <section>
         <div className="mb-4">
-          <h2 className="text-lg font-medium text-slate-900">Your activity</h2>
+          <h2 className={ui.sectionHeading}>Your activity</h2>
           <p className={`mt-1 text-sm ${ui.muted}`}>
             Self-scoped — never an aggregated profile others can see
           </p>
         </div>
 
         {activityLoading ? (
-          <p className={ui.muted}>Loading activity…</p>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-hidden>
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className={`${ui.skeleton} h-32`} />
+            ))}
+          </div>
         ) : activityData ? (
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <ActivityMetricCard
+            <StatCard
               label="Paluwagans"
               value={String(activityData.activity.paluwagans.total)}
               hint={paluwaganBreakdown(activityData.activity.paluwagans)}
+              icon="users"
             />
-            <ActivityMetricCard
+            <StatCard
               label="Total contributed"
               value={formatPeso(activityData.activity.totalContributed)}
               hint="across all groups"
+              icon="wallet"
             />
-            <ActivityMetricCard
+            <StatCard
               label="Total received"
               value={formatPeso(activityData.activity.totalReceived)}
               hint="payouts collected"
+              tone="success"
+              icon="check"
             />
-            <ActivityMetricCard
+            <StatCard
               label="Outstanding"
               value={formatPeso(activityData.activity.outstanding)}
               hint={
                 Number(activityData.activity.outstanding) > 0 ? "you carry" : "all settled"
               }
-              highlight={Number(activityData.activity.outstanding) > 0}
+              tone={Number(activityData.activity.outstanding) > 0 ? "danger" : "neutral"}
+              icon="alert"
             />
           </div>
         ) : null}
       </section>
+
+      {demoToolsAvailable && (
+        <section>
+          <div className="mb-4">
+            <h2 className={ui.sectionHeading}>Developer</h2>
+            <p className={`mt-1 text-sm ${ui.muted}`}>Testing aids. Only available on development builds.</p>
+          </div>
+          <div className={`${ui.sectionCard} space-y-2`}>
+            <ToggleSwitch
+              id="showDemoTools"
+              checked={demoToolsOn}
+              onChange={setDemoToolsOn}
+              label="Show demo tools"
+            />
+            <p className="text-xs text-ink-500">
+              Adds an &ldquo;Advance round&rdquo; card to active groups you organize, to close rounds without waiting
+              for the due date. Saved in this browser only.
+            </p>
+          </div>
+        </section>
+      )}
     </div>
   );
 }

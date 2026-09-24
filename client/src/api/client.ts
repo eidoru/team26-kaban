@@ -45,6 +45,16 @@ export interface AuthResponse {
   refreshToken: string;
 }
 
+export interface GroupSettingsInput {
+  name: string;
+  contributionAmount: number;
+  frequency: "weekly" | "biweekly" | "monthly" | "custom";
+  frequencyDays?: number;
+  slotCount: number;
+  startDate: string;
+  shortfallInterestRatePercent?: number;
+}
+
 export interface GroupSummary {
   id: string;
   name: string;
@@ -61,6 +71,10 @@ export interface GroupSummary {
   membershipId: string;
   totalCollected?: string;
   outstandingDebt?: string;
+  /** Active groups only. */
+  currentRoundNumber?: number | null;
+  /** Active groups only: the round whose pot goes to the viewer. */
+  myPayoutRoundNumber?: number | null;
 }
 
 export interface GroupMember {
@@ -199,7 +213,14 @@ export interface ManagerObligationsOverview {
     groupStatus: string;
     count: number;
     totalOutstanding: string;
-    items: { id: string; displayName: string; roundNumber: number; remaining: string }[];
+    items: {
+      id: string;
+      debtorMembershipId: string;
+      displayName: string;
+      isPlaceholder: boolean;
+      roundNumber: number;
+      remaining: string;
+    }[];
   }[];
 }
 
@@ -628,24 +649,16 @@ export const api = {
 
   getHomeOverview: () => request<HomeOverview>("/home/overview"),
 
-  createGroup: (body: {
-    name: string;
-    contributionAmount: number;
-    frequency: "weekly" | "biweekly" | "monthly" | "custom";
-    frequencyDays?: number;
-    slotCount: number;
-    startDate: string;
-    shortfallInterestRatePercent?: number;
-  }) =>
+  createGroup: (body: GroupSettingsInput) =>
     request<{ group: GroupSummary; membershipId: string }>("/groups", {
       method: "POST",
       body: JSON.stringify(body),
     }),
 
-  getGroup: (id: string) => request<GroupDetail>(`/groups/${id}`),
+  /** Pass TanStack Query's `signal` so `cancelQueries()` actually aborts an in-flight fetch
+   * instead of letting a stale response land on top of a fresher optimistic update. */
+  getGroup: (id: string, signal?: AbortSignal) => request<GroupDetail>(`/groups/${id}`, { signal }),
 
-  getMemberReliability: (groupId: string) =>
-    request<{ reliability: MemberReliability[] }>(`/groups/${groupId}/member-reliability`),
 
   addPlaceholder: (groupId: string, body: { displayName: string; contact?: string }) =>
     request<{ member: GroupMember }>(`/groups/${groupId}/members`, {
@@ -770,7 +783,10 @@ export const api = {
 
   getLedger: (groupId: string) => request<{ entries: LedgerEntry[] }>(`/groups/${groupId}/ledger`),
 
-  getAuditLog: (groupId: string) => request<{ entries: AuditLogEntry[] }>(`/groups/${groupId}/audit-log`),
+  getAuditLog: (groupId: string, before?: string) =>
+    request<{ entries: AuditLogEntry[]; hasMore: boolean }>(
+      `/groups/${groupId}/audit-log${before ? `?before=${encodeURIComponent(before)}` : ""}`,
+    ),
 
   getDashboard: (groupId: string) =>
     request<{ dashboard: GroupDashboard }>(`/groups/${groupId}/dashboard`),

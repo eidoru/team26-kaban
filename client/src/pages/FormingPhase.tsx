@@ -1,6 +1,8 @@
 import { type DragEvent, type FormEvent, useEffect, useMemo, useState } from "react";
-import { displayInitials } from "../lib/initials";
+import { Check, GripVertical, Link2, UserPlus } from "lucide-react";
+import { Avatar } from "../components/Avatar";
 import { formatFrequency } from "../lib/frequency";
+import { formatDueDate } from "../lib/dates";
 import { formatShortfallInterestRate } from "../lib/shortfallInterest";
 import { ui } from "../lib/ui";
 import { useAuth } from "../context/AuthContext";
@@ -27,21 +29,10 @@ type FormingPending = {
 };
 
 type ManagerTab = "members" | "order" | "start";
-type MemberTab = "members" | "order" | "terms";
+type MemberTab = "members" | "terms";
 
 export function formatGroupDate(iso: string | null | undefined): string {
-  if (!iso) return "Not set yet";
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "Not set yet";
-  return date.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
-}
-
-function CheckMark() {
-  return (
-    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-    </svg>
-  );
+  return iso ? formatDueDate(iso) : "Not set yet";
 }
 
 function SetupChecklist({
@@ -63,29 +54,72 @@ function SetupChecklist({
     ...(needsStartDate ? [{ done: startDone, label: "Pick start date" }] : []),
     { done: ready, label: "Launch" },
   ];
+  const currentIndex = items.findIndex((item) => !item.done);
 
   return (
-    <ol className="flex flex-wrap gap-2">
-      {items.map((item) => (
-        <li
-          key={item.label}
-          className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm ${
-            item.done ? "bg-emerald-50 text-emerald-800" : "bg-gray-100 text-slate-500"
-          }`}
-        >
-          <span
-            className={`flex h-5 w-5 items-center justify-center rounded-full ${
-              item.done ? "bg-emerald-900 text-white" : "border border-gray-300 bg-white text-xs text-slate-400"
-            }`}
-          >
-            {item.done ? <CheckMark /> : "·"}
-          </span>
-          {item.label}
-        </li>
-      ))}
+    <ol className="flex flex-wrap items-center gap-x-2 gap-y-2">
+      {items.map((item, index) => {
+        const current = index === currentIndex;
+        return (
+          <li key={item.label} className="flex items-center gap-2" aria-current={current ? "step" : undefined}>
+            <span
+              className={`inline-flex items-center gap-2 rounded-full py-1 pl-1 pr-3 text-sm font-bold ${
+                item.done
+                  ? "bg-brand-100 text-brand-800"
+                  : current
+                    ? "bg-sun-100 text-ink-900"
+                    : "bg-ink-100 text-ink-500"
+              }`}
+            >
+              <span
+                className={`flex h-6 w-6 items-center justify-center rounded-full text-xs ${
+                  item.done
+                    ? "bg-brand-600 text-white"
+                    : current
+                      ? "bg-sun-300 text-ink-900"
+                      : "border-2 border-ink-200 bg-white text-ink-500"
+                }`}
+              >
+                {item.done ? <Check className="h-3.5 w-3.5" strokeWidth={3} aria-hidden /> : index + 1}
+              </span>
+              {item.label}
+            </span>
+            {index < items.length - 1 && (
+              <span
+                aria-hidden
+                className={`hidden h-0.5 w-4 rounded-full sm:block ${item.done ? "bg-brand-300" : "bg-ink-200"}`}
+              />
+            )}
+          </li>
+        );
+      })}
     </ol>
   );
 }
+
+function TurnChip({ turn }: { turn: number | null }) {
+  return (
+    <span
+      className={`flex h-8 min-w-8 shrink-0 items-center justify-center rounded-full px-2 text-xs font-bold tabular-nums ${
+        turn != null ? "bg-ink-100 text-ink-700" : "text-ink-400"
+      }`}
+      title={turn != null ? `Payout turn ${turn}` : "Turn not set"}
+    >
+      {turn != null ? `#${turn}` : "—"}
+    </span>
+  );
+}
+
+function TermTile({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl bg-ink-50 px-4 py-3">
+      <dt className="text-xs font-bold uppercase tracking-wide text-ink-500">{label}</dt>
+      <dd className="mt-0.5 text-sm font-bold text-ink-900 tabular-nums">{value}</dd>
+    </div>
+  );
+}
+
+const memberListClass = "divide-y divide-ink-100 overflow-hidden rounded-3xl border border-ink-200 bg-white";
 
 function MemberTableRow({
   member,
@@ -107,66 +141,50 @@ function MemberTableRow({
   removePending?: boolean;
 }) {
   return (
-    <tr className={ui.tableRow}>
-      <td className="w-12 px-4 py-3 text-sm font-medium text-slate-500">{turn ?? "—"}</td>
-      <td className="px-4 py-3">
-        <div className="flex items-center gap-3">
-          <span className={ui.avatarInitialsSm} aria-hidden>
-            {displayInitials(member.displayName)}
-          </span>
-          <div className="min-w-0">
-            <p className="font-medium text-slate-900">{member.displayName}</p>
-            <p className="text-xs text-slate-500">
-              {member.isManager && "Organizer · "}
-              {member.isPlaceholder ? "Placeholder" : "Member"}
-            </p>
-          </div>
+    <li className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3">
+      <TurnChip turn={turn} />
+      <Avatar name={member.displayName} placeholder={member.isPlaceholder} />
+      <div className="min-w-0 flex-1">
+        <p className="truncate font-bold text-ink-900">{member.displayName}</p>
+        {(member.isManager || member.contact) && (
+          <p className="truncate text-xs text-ink-500">
+            {[member.isManager && "Organizer", member.contact].filter(Boolean).join(" · ")}
+          </p>
+        )}
+      </div>
+      {managerView && member.isPlaceholder && (
+        <div className="flex shrink-0 flex-wrap justify-end gap-1">
+          <button type="button" onClick={onClaimInvite} disabled={claimPending} className={ui.btnSecondarySm}>
+            Claim link
+          </button>
+          {!member.isManager && (
+            <button type="button" onClick={onRemoveMember} disabled={removePending} className={ui.btnDangerGhost}>
+              Remove
+            </button>
+          )}
         </div>
-      </td>
-      <td className="hidden px-4 py-3 text-sm text-slate-500 sm:table-cell">{member.contact ?? "—"}</td>
-      {managerView && (
-        <td className="px-4 py-3 text-right">
-          {member.isPlaceholder && (
-            <div className="flex flex-wrap justify-end gap-2">
-              <button
-                type="button"
-                onClick={onClaimInvite}
-                disabled={claimPending}
-                className="text-sm text-emerald-900 hover:underline disabled:opacity-50"
-              >
-                Claim link
-              </button>
-              {!member.isManager && (
-                <button
-                  type="button"
-                  onClick={onRemoveMember}
-                  disabled={removePending}
-                  className="text-sm text-red-600 hover:underline disabled:opacity-50"
-                >
-                  Remove
-                </button>
-              )}
-            </div>
-          )}
-          {claimUrl && (
-            <div className="mt-2">
-              <CopyableLink url={claimUrl} label="Claim link" compact />
-            </div>
-          )}
-        </td>
       )}
-    </tr>
+      {managerView && claimUrl && (
+        <div className="w-full sm:pl-[5.25rem]">
+          <CopyableLink url={claimUrl} label="Claim link" compact />
+        </div>
+      )}
+    </li>
   );
 }
 
 function OpenSlotRow() {
   return (
-    <tr className={ui.tableRow}>
-      <td className="px-4 py-3 text-sm text-slate-400">—</td>
-      <td className="px-4 py-3 text-sm text-slate-400" colSpan={3}>
-        Open slot
-      </td>
-    </tr>
+    <li className="flex items-center gap-3 px-4 py-3 text-sm font-semibold text-ink-500">
+      <span className="h-8 w-8 shrink-0" aria-hidden />
+      <span
+        aria-hidden
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-dashed border-ink-300 text-xs"
+      >
+        ?
+      </span>
+      Open seat
+    </li>
   );
 }
 
@@ -203,20 +221,17 @@ function OrderRow({
       onDragEnd={onDragEnd}
       onDragOver={onDragOver}
       onDrop={onDrop}
-      className={`flex items-center gap-4 border-b border-gray-50 px-4 py-3 last:border-0 ${
-        draggable ? "cursor-grab active:cursor-grabbing" : ""
-      } ${isDragging ? "opacity-40" : ""} ${isDragOver ? "bg-emerald-50/80" : ""}`}
+      className={`flex items-center gap-3 border-b border-ink-100 px-4 py-3 transition-colors last:border-0 ${
+        draggable ? "cursor-grab bg-white hover:bg-ink-50 active:cursor-grabbing" : ""
+      } ${isDragging ? "opacity-40" : ""} ${isDragOver ? "bg-brand-50 ring-2 ring-inset ring-brand-300" : ""}`}
     >
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-900 text-sm font-medium text-white">
-        {position}
-      </span>
-      <span className={ui.avatarInitialsSm} aria-hidden>
-        {displayInitials(member.displayName)}
-      </span>
-      <span className="min-w-0 flex-1 truncate font-medium text-slate-900">{member.displayName}</span>
-      {draggable && (
-        <span className="text-xs text-slate-400" aria-hidden>
-          Drag
+      {draggable && <GripVertical className="h-5 w-5 shrink-0 text-ink-400" aria-hidden />}
+      <TurnChip turn={position} />
+      <Avatar name={member.displayName} placeholder={member.isPlaceholder} />
+      <span className="min-w-0 flex-1 truncate font-bold text-ink-900">{member.displayName}</span>
+      {position === 1 && (
+        <span className="shrink-0 rounded-full bg-sun-100 px-2.5 py-0.5 text-xs font-bold text-sun-800">
+          First payout
         </span>
       )}
     </li>
@@ -302,14 +317,15 @@ export function FormingManagerPanel({
   const startDone = !pending.startDateMissing;
   const orderLocked = orderDone && !payoutDraftActive;
 
-  const defaultTab: ManagerTab = !rosterDone ? "members" : !orderDone ? "order" : "start";
-  const [tab, setTab] = useState<ManagerTab>(defaultTab);
+  // Picks the sensible starting tab (e.g. landing on "order" if the roster was already
+  // full last time you visited) but only once, on mount. It intentionally does NOT keep
+  // re-syncing afterward — completing the roster used to force-switch the tab to "order"
+  // mid-edit, which is exactly the bug the "Continue to payout order" button below exists
+  // to avoid: the user decides when to move on, not a background effect.
+  const initialTab: ManagerTab = !rosterDone ? "members" : !orderDone ? "order" : "start";
+  const [tab, setTab] = useState<ManagerTab>(initialTab);
   const [dragId, setDragId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
-
-  useEffect(() => {
-    setTab(defaultTab);
-  }, [defaultTab]);
 
   useEffect(() => {
     if (tab === "order" && rosterDone && !orderLocked && !payoutDraftActive) {
@@ -351,19 +367,23 @@ export function FormingManagerPanel({
   const navItems: SectionNavItem[] = [
     { id: "members", label: "Members" },
     { id: "order", label: "Payout order", disabled: !rosterDone },
-    { id: "start", label: "Launch", disabled: !rosterDone || !orderDone },
+    { id: "start", label: "Launch", disabled: !rosterDone || !orderLocked },
   ];
 
   return (
     <div className="space-y-6">
-      <div className={ui.sectionCard}>
-        <p className="text-sm text-slate-600">
-          Finish setup to open Round 1. Pot size: <span className="font-medium text-slate-900">{pot}</span>
-        </p>
-        <div className="mt-4">
+      <div className={`${ui.sectionCard} space-y-4`}>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wide text-ink-500">Each round&apos;s pot</p>
+            <p className="font-heading text-3xl font-bold tabular-nums text-ink-900">{pot}</p>
+          </div>
+          <p className="text-sm font-semibold text-ink-600">Finish setup to open Round 1.</p>
+        </div>
+        <div>
           <SetupChecklist
             rosterDone={rosterDone}
-            orderDone={orderDone}
+            orderDone={orderLocked}
             startDone={startDone}
             needsStartDate={pending.startDateMissing}
             ready={readyToActivate}
@@ -383,74 +403,83 @@ export function FormingManagerPanel({
               </p>
             </div>
 
-            <div className={ui.tableWrap}>
-              <table className="w-full min-w-[28rem] text-left text-sm">
-                <thead className={ui.tableHead}>
-                  <tr>
-                    <th className="px-4 py-2.5 font-normal">Turn</th>
-                    <th className="px-4 py-2.5 font-normal">Name</th>
-                    <th className="hidden px-4 py-2.5 font-normal sm:table-cell">Contact</th>
-                    <th className="px-4 py-2.5 text-right font-normal">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sortedMembers.map((member) => (
-                    <MemberTableRow
-                      key={member.id}
-                      member={member}
-                      turn={orderDone ? getTurn(member) : null}
-                      managerView
-                      claimUrl={claimUrls[member.id]}
-                      onClaimInvite={() => onClaimInvite(member.id)}
-                      onRemoveMember={() => onRemoveMember(member.id)}
-                      claimPending={claimInvitePending}
-                      removePending={removeMemberPending}
-                    />
-                  ))}
-                  {pending.openSlots > 0 &&
-                    Array.from({ length: pending.openSlots }).map((_, i) => <OpenSlotRow key={`open-${i}`} />)}
-                </tbody>
-              </table>
-            </div>
+            <ul className={memberListClass}>
+              {sortedMembers.map((member) => (
+                <MemberTableRow
+                  key={member.id}
+                  member={member}
+                  turn={orderDone ? getTurn(member) : null}
+                  managerView
+                  claimUrl={claimUrls[member.id]}
+                  onClaimInvite={() => onClaimInvite(member.id)}
+                  onRemoveMember={() => onRemoveMember(member.id)}
+                  claimPending={claimInvitePending}
+                  removePending={removeMemberPending}
+                />
+              ))}
+              {pending.openSlots > 0 &&
+                Array.from({ length: pending.openSlots }).map((_, i) => <OpenSlotRow key={`open-${i}`} />)}
+            </ul>
 
-            {pending.openSlots > 0 && (
-              <div className="grid gap-6 border-t border-gray-100 pt-6 md:grid-cols-2">
-                <form onSubmit={onAddMember} className="space-y-3">
-                  <p className="text-sm font-medium text-slate-900">Add placeholder</p>
-                  <input
-                    required
-                    value={addName}
-                    onChange={(e) => onAddNameChange(e.target.value)}
-                    placeholder="Name"
-                    className={ui.input}
-                  />
-                  <input
-                    value={addContact}
-                    onChange={(e) => onAddContactChange(e.target.value)}
-                    placeholder="Contact (optional)"
-                    className={ui.input}
-                  />
-                  <button type="submit" disabled={addMemberPending} className={ui.btnPrimarySm}>
-                    {addMemberPending ? "Adding…" : "Add"}
-                  </button>
-                </form>
-                <div>
-                  <p className="mb-2 text-sm font-medium text-slate-900">Invite link</p>
-                  {inviteUrl ? (
-                    <CopyableLink url={inviteUrl} label="Group invite" compact />
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={onGroupInvite}
-                      disabled={groupInvitePending}
-                      className={ui.btnSecondary}
-                    >
-                      {groupInvitePending ? "Generating…" : "Generate invite link"}
-                    </button>
-                  )}
+            {/* Stays mounted so it can animate closed when the last slot fills, instead of
+                vanishing in a single frame. Collapses via the grid-rows 1fr → 0fr technique (no
+                animation library needed); `mb-0` cancels the parent's space-y gap while collapsed,
+                and `inert` keeps the hidden inputs out of tab order and the accessibility tree.
+                The clip box is widened (-mx-2) and padded inside so button lips and focus rings
+                aren't cut off; the padding lives inside the clip so collapsing still reaches 0. */}
+            <div
+              className={`grid transition-all duration-300 ease-out ${
+                pending.openSlots > 0 ? "grid-rows-[1fr] opacity-100" : "mb-0 grid-rows-[0fr] opacity-0"
+              }`}
+              inert={pending.openSlots === 0}
+            >
+              <div className="-mx-2 min-h-0 overflow-hidden">
+                <div className="px-2 pb-2">
+                  <div className="grid gap-6 border-t border-ink-100 pt-6 md:grid-cols-2">
+                    <form onSubmit={onAddMember} className="space-y-3">
+                      <p className="flex items-center gap-2 text-sm font-bold text-ink-900">
+                        <UserPlus className="h-4 w-4 text-brand-700" aria-hidden />
+                        Add placeholder
+                      </p>
+                      <input
+                        required
+                        value={addName}
+                        onChange={(e) => onAddNameChange(e.target.value)}
+                        placeholder="Name"
+                        className={ui.input}
+                      />
+                      <input
+                        value={addContact}
+                        onChange={(e) => onAddContactChange(e.target.value)}
+                        placeholder="Contact (optional)"
+                        className={ui.input}
+                      />
+                      <button type="submit" disabled={addMemberPending} className={ui.btnPrimarySm}>
+                        {addMemberPending ? "Adding…" : "Add"}
+                      </button>
+                    </form>
+                    <div>
+                      <p className="mb-3 flex items-center gap-2 text-sm font-bold text-ink-900">
+                        <Link2 className="h-4 w-4 text-brand-700" aria-hidden />
+                        Invite link
+                      </p>
+                      {inviteUrl ? (
+                        <CopyableLink url={inviteUrl} label="Group invite" compact />
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={onGroupInvite}
+                          disabled={groupInvitePending}
+                          className={ui.btnSecondary}
+                        >
+                          {groupInvitePending ? "Generating…" : "Generate invite link"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
-            )}
+            </div>
 
             {rosterDone && (
               <div className={ui.actionBar}>
@@ -477,7 +506,7 @@ export function FormingManagerPanel({
               <p className={ui.warning}>Draft — not saved until you lock in.</p>
             )}
 
-            <ol className="overflow-hidden rounded-xl border border-gray-100">
+            <ol className="overflow-hidden rounded-3xl border border-ink-200 bg-white">
               {orderedMembers.map((member, index) => (
                 <OrderRow
                   key={member.id}
@@ -505,9 +534,11 @@ export function FormingManagerPanel({
             </ol>
 
             <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={onRandomize} className={ui.btnOutline}>
-                Randomize
-              </button>
+              {!orderLocked && (
+                <button type="button" onClick={onRandomize} className={ui.btnOutline}>
+                  Randomize
+                </button>
+              )}
               {!orderLocked && (
                 <button type="button" onClick={onLockIn} disabled={lockingInPayout} className={ui.btnPrimary}>
                   {lockingInPayout ? "Locking in…" : "Lock in order"}
@@ -520,7 +551,9 @@ export function FormingManagerPanel({
               )}
             </div>
 
-            {orderDone && (
+            {/* orderLocked, not orderDone: randomize/drag write draft turn numbers into the
+                cache before anything is saved, so only a locked-in order may move on. */}
+            {orderLocked && (
               <div className={ui.actionBar}>
                 <button type="button" onClick={() => setTab("start")} className={ui.btnPrimary}>
                   Continue to launch
@@ -530,44 +563,29 @@ export function FormingManagerPanel({
           </section>
         )}
 
-        {tab === "start" && rosterDone && orderDone && (
+        {tab === "start" && rosterDone && orderLocked && (
           <section className={`${ui.sectionCard} space-y-6`}>
             <div>
               <h2 className={ui.sectionHeader}>Launch</h2>
               <p className={ui.sectionSubtitle}>Review the terms and open Round 1.</p>
             </div>
 
-            <dl className="grid gap-3 text-sm sm:grid-cols-2">
-              <div>
-                <dt className="text-slate-500">Contribution</dt>
-                <dd className="font-medium text-slate-900">
-                  ₱{Number(group.contributionAmount).toLocaleString()}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-slate-500">Schedule</dt>
-                <dd className="font-medium text-slate-900">
-                  {formatFrequency(group.frequency, group.frequencyDays)}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-slate-500">Round pot</dt>
-                <dd className="font-medium text-slate-900">{pot}</dd>
-              </div>
-              <div>
-                <dt className="text-slate-500">Shortfall interest</dt>
-                <dd className="font-medium text-slate-900">
-                  {formatShortfallInterestRate(
-                    group.shortfallInterestRatePercent,
-                    group.frequency,
-                    group.frequencyDays,
-                  )}
-                </dd>
-              </div>
+            <dl className="grid gap-2 sm:grid-cols-2">
+              <TermTile label="Contribution" value={`₱${Number(group.contributionAmount).toLocaleString()}`} />
+              <TermTile label="Schedule" value={formatFrequency(group.frequency, group.frequencyDays)} />
+              <TermTile label="Round pot" value={pot} />
+              <TermTile
+                label="Shortfall interest"
+                value={formatShortfallInterestRate(
+                  group.shortfallInterestRatePercent,
+                  group.frequency,
+                  group.frequencyDays,
+                )}
+              />
             </dl>
 
             {pending.startDateMissing && (
-              <div className="flex flex-wrap items-end gap-3 border-t border-gray-100 pt-4">
+              <div className="flex flex-wrap items-end gap-3 border-t border-ink-100 pt-4">
                 <div className="min-w-[12rem] flex-1">
                   <label htmlFor="formingStartDate" className={ui.label}>
                     First round due
@@ -592,14 +610,14 @@ export function FormingManagerPanel({
             )}
 
             {!pending.startDateMissing && displayStartDate && (
-              <p className="text-sm text-slate-600">
+              <p className="text-sm text-ink-600">
                 First round due{" "}
-                <span className="font-medium text-slate-900">{formatGroupDate(displayStartDate)}</span>
+                <span className="font-bold text-ink-900">{formatGroupDate(displayStartDate)}</span>
               </p>
             )}
 
             {pending.unclaimedSeats > 0 && (
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-ink-500">
                 {pending.unclaimedSeats} unclaimed placeholder
                 {pending.unclaimedSeats === 1 ? "" : "s"} on the roster.
               </p>
@@ -677,16 +695,17 @@ export function FormingMemberPanel({
 
   const navItems: SectionNavItem[] = [
     { id: "members", label: "Members" },
-    { id: "order", label: "Payout order" },
     { id: "terms", label: "Terms" },
   ];
 
   return (
     <div className="space-y-6">
-      <div className={ui.callout}>
-        <p className="text-sm font-medium text-emerald-900">Forming</p>
-        <p className="mt-1 text-sm text-emerald-800/90">{memberStatusMessage(pending)}</p>
-        <div className="mt-4">
+      <div className={`${ui.sectionCard} space-y-4`}>
+        <div>
+          <span className={ui.badgeForming}>Forming</span>
+          <p className="font-heading mt-2 text-lg font-bold text-ink-900">{memberStatusMessage(pending)}</p>
+        </div>
+        <div>
           <SetupChecklist
             rosterDone={rosterDone}
             orderDone={orderDone}
@@ -698,16 +717,20 @@ export function FormingMemberPanel({
       </div>
 
       {myMembership && (
-        <div className={ui.cardFlat}>
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Your seat</p>
-          <p className="mt-1 text-lg font-medium text-slate-900">{myMembership.displayName}</p>
-          {myMembership.turnNumber != null ? (
-            <p className="mt-1 text-sm text-slate-600">
-              Payout turn #{myMembership.turnNumber} of {group.slotCount}
-            </p>
-          ) : (
-            <p className="mt-1 text-sm text-slate-600">Turn assigned after payout order is set.</p>
-          )}
+        <div className="flex items-center gap-4 rounded-3xl border-2 border-sun-200 bg-sun-100 p-5">
+          <Avatar name={myMembership.displayName} size="md" className="ring-2 ring-white" />
+          <div className="min-w-0">
+            <p className="text-xs font-bold uppercase tracking-wide text-sun-800">Your seat</p>
+            <p className="font-heading truncate text-lg font-bold text-ink-900">{myMembership.displayName}</p>
+            {myMembership.turnNumber != null ? (
+              <p className="text-sm text-ink-700">
+                Payout turn <span className="font-bold text-ink-900">#{myMembership.turnNumber}</span> of{" "}
+                {group.slotCount}
+              </p>
+            ) : (
+              <p className="text-sm text-ink-700">Turn assigned after payout order is set.</p>
+            )}
+          </div>
         </div>
       )}
 
@@ -717,86 +740,37 @@ export function FormingMemberPanel({
             <h2 className={ui.sectionHeader}>
               Members ({rosterFilled}/{group.slotCount})
             </h2>
-            <div className={`${ui.tableWrap} mt-4`}>
-              <table className="w-full min-w-[24rem] text-left text-sm">
-                <thead className={ui.tableHead}>
-                  <tr>
-                    <th className="px-4 py-2.5 font-normal">Turn</th>
-                    <th className="px-4 py-2.5 font-normal">Name</th>
-                    <th className="hidden px-4 py-2.5 font-normal sm:table-cell">Contact</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {displayMembers.map((member) => (
-                    <MemberTableRow
-                      key={member.id}
-                      member={member}
-                      turn={orderDone ? member.turnNumber : null}
-                      managerView={false}
-                    />
-                  ))}
-                  {pending.openSlots > 0 &&
-                    Array.from({ length: pending.openSlots }).map((_, i) => <OpenSlotRow key={`open-${i}`} />)}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        )}
-
-        {tab === "order" && (
-          <section className={ui.sectionCard}>
-            <h2 className={ui.sectionHeader}>Payout order</h2>
-            {orderDone ? (
-              <ol className="mt-4 overflow-hidden rounded-xl border border-gray-100">
-                {displayMembers.map((member, index) => (
-                  <OrderRow
-                    key={member.id}
-                    member={member}
-                    position={member.turnNumber ?? index + 1}
-                    draggable={false}
-                    isDragging={false}
-                    isDragOver={false}
-                    onDragStart={() => {}}
-                    onDragEnd={() => {}}
-                    onDragOver={() => {}}
-                    onDrop={() => {}}
-                  />
-                ))}
-              </ol>
-            ) : (
-              <p className={`${ui.sectionSubtitle} mt-2`}>
-                The organizer hasn&apos;t set the payout order yet. Turns appear here once it&apos;s locked in.
-              </p>
-            )}
+            <p className={ui.sectionSubtitle}>
+              {orderDone
+                ? "Listed in payout order. Turn 1 receives the pot first."
+                : "Turns appear here once the organizer locks in the payout order."}
+            </p>
+            <ul className={`${memberListClass} mt-4`}>
+              {displayMembers.map((member) => (
+                <MemberTableRow
+                  key={member.id}
+                  member={member}
+                  turn={orderDone ? member.turnNumber : null}
+                  managerView={false}
+                />
+              ))}
+              {pending.openSlots > 0 &&
+                Array.from({ length: pending.openSlots }).map((_, i) => <OpenSlotRow key={`open-${i}`} />)}
+            </ul>
           </section>
         )}
 
         {tab === "terms" && (
           <section className={ui.sectionCard}>
             <h2 className={ui.sectionHeader}>Terms</h2>
-            <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
-              <div>
-                <dt className="text-slate-500">Organizer</dt>
-                <dd className="font-medium text-slate-900">{manager?.displayName ?? "—"}</dd>
-              </div>
-              <div>
-                <dt className="text-slate-500">Contribution</dt>
-                <dd className="font-medium text-slate-900">
-                  ₱{Number(group.contributionAmount).toLocaleString()}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-slate-500">Schedule</dt>
-                <dd className="font-medium text-slate-900">
-                  {formatFrequency(group.frequency, group.frequencyDays)}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-slate-500">Round 1 due</dt>
-                <dd className="font-medium text-slate-900">
-                  {startDone ? formatGroupDate(displayStartDate || group.startDate) : "Not set yet"}
-                </dd>
-              </div>
+            <dl className="mt-4 grid gap-2 sm:grid-cols-2">
+              <TermTile label="Organizer" value={manager?.displayName ?? "—"} />
+              <TermTile label="Contribution" value={`₱${Number(group.contributionAmount).toLocaleString()}`} />
+              <TermTile label="Schedule" value={formatFrequency(group.frequency, group.frequencyDays)} />
+              <TermTile
+                label="Round 1 due"
+                value={startDone ? formatGroupDate(displayStartDate || group.startDate) : "Not set yet"}
+              />
             </dl>
           </section>
         )}

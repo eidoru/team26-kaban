@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Check, Copy } from "lucide-react";
 import { ui } from "../lib/ui";
 
 type CopyableLinkProps = {
@@ -21,16 +22,16 @@ export function CopyableLink({ url, label = "Link", compact = false }: CopyableL
   }
 
   const inputClassName = compact
-    ? "min-w-0 flex-1 truncate rounded-lg border border-gray-100 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-700 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/20"
-    : "min-w-0 flex-1 truncate rounded-lg border border-gray-100 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/20";
+    ? "min-w-0 flex-1 truncate rounded-full border-2 border-ink-200 bg-ink-50 px-3 py-1.5 text-xs text-ink-700 focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-500/15"
+    : "min-w-0 flex-1 truncate rounded-full border-2 border-ink-200 bg-white px-4 py-2 text-sm text-ink-700 focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-500/15";
 
   const buttonClassName = compact
-    ? "shrink-0 rounded-lg bg-emerald-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-950"
+    ? "inline-flex shrink-0 items-center gap-1.5 rounded-full bg-brand-700 px-3.5 py-1.5 text-xs font-bold text-white transition-colors hover:bg-brand-600"
     : `${ui.btnPrimarySm} shrink-0 sm:min-w-[6.5rem]`;
 
   return (
-    <div className={compact ? "w-full" : "rounded-xl border border-emerald-200/60 bg-white p-4 shadow-sm"}>
-      {!compact && <p className="mb-2 text-xs font-normal text-slate-500">{label}</p>}
+    <div className={compact ? "w-full" : "rounded-3xl border border-brand-200 bg-brand-50 p-4"}>
+      {!compact && <p className="mb-2 text-xs font-bold uppercase tracking-wide text-brand-800">{label}</p>}
       <div className={`flex gap-2 ${compact ? "" : "flex-col sm:flex-row sm:items-center"}`}>
         <input
           type="text"
@@ -42,6 +43,7 @@ export function CopyableLink({ url, label = "Link", compact = false }: CopyableL
           aria-label={label}
         />
         <button type="button" onClick={() => void handleCopy()} className={buttonClassName}>
+          {copied ? <Check className="h-4 w-4" aria-hidden /> : <Copy className="h-4 w-4" aria-hidden />}
           {copied ? "Copied!" : "Copy"}
         </button>
       </div>
