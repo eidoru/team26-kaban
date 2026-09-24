@@ -4,7 +4,7 @@ import { GroupStatus, InviteTokenType, Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { createNotification, writeAuditLog } from "../lib/audit.js";
 import { resolveAppOrigin } from "../lib/origin.js";
-import { requireAuth, requireNonProductionDeploy } from "../middleware/auth.js";
+import { requireAuth, requireDemoTools } from "../middleware/auth.js";
 import { validateBody } from "../middleware/validate.js";
 import {
   loadGroup,
@@ -69,7 +69,7 @@ const router = Router();
 /** UAT/demo only: close the current round without waiting for the calendar. */
 router.post(
   "/:id/advance-round",
-  requireNonProductionDeploy,
+  requireDemoTools,
   requireAuth,
   loadGroup,
   requireGroupManager,
