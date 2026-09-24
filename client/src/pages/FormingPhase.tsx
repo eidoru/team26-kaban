@@ -28,7 +28,7 @@ type FormingPending = {
 };
 
 type ManagerTab = "members" | "order" | "start";
-type MemberTab = "members" | "order" | "terms";
+type MemberTab = "members" | "terms";
 
 export function formatGroupDate(iso: string | null | undefined): string {
   if (!iso) return "Not set yet";
@@ -145,14 +145,14 @@ function MemberTableRow({
   return (
     <li className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3">
       <TurnChip turn={turn} />
-      <Avatar name={member.displayName} />
+      <Avatar name={member.displayName} placeholder={member.isPlaceholder} />
       <div className="min-w-0 flex-1">
         <p className="truncate font-bold text-ink-900">{member.displayName}</p>
-        <p className="truncate text-xs text-ink-500">
-          {member.isManager && "Organizer · "}
-          {member.isPlaceholder ? "Placeholder" : "Member"}
-          {member.contact && ` · ${member.contact}`}
-        </p>
+        {(member.isManager || member.contact) && (
+          <p className="truncate text-xs text-ink-500">
+            {[member.isManager && "Organizer", member.contact].filter(Boolean).join(" · ")}
+          </p>
+        )}
       </div>
       {managerView && member.isPlaceholder && (
         <div className="flex shrink-0 flex-wrap justify-end gap-1">
@@ -229,7 +229,7 @@ function OrderRow({
     >
       {draggable && <GripVertical className="h-5 w-5 shrink-0 text-ink-400" aria-hidden />}
       <TurnChip turn={position} />
-      <Avatar name={member.displayName} />
+      <Avatar name={member.displayName} placeholder={member.isPlaceholder} />
       <span className="min-w-0 flex-1 truncate font-bold text-ink-900">{member.displayName}</span>
       {position === 1 && (
         <span className="shrink-0 rounded-full bg-sun-100 px-2.5 py-0.5 text-xs font-bold text-sun-800">
@@ -693,7 +693,6 @@ export function FormingMemberPanel({
 
   const navItems: SectionNavItem[] = [
     { id: "members", label: "Members" },
-    { id: "order", label: "Payout order" },
     { id: "terms", label: "Terms" },
   ];
 
@@ -739,6 +738,11 @@ export function FormingMemberPanel({
             <h2 className={ui.sectionHeader}>
               Members ({rosterFilled}/{group.slotCount})
             </h2>
+            <p className={ui.sectionSubtitle}>
+              {orderDone
+                ? "Listed in payout order. Turn 1 receives the pot first."
+                : "Turns appear here once the organizer locks in the payout order."}
+            </p>
             <ul className={`${memberListClass} mt-4`}>
               {displayMembers.map((member) => (
                 <MemberTableRow
@@ -751,34 +755,6 @@ export function FormingMemberPanel({
               {pending.openSlots > 0 &&
                 Array.from({ length: pending.openSlots }).map((_, i) => <OpenSlotRow key={`open-${i}`} />)}
             </ul>
-          </section>
-        )}
-
-        {tab === "order" && (
-          <section className={ui.sectionCard}>
-            <h2 className={ui.sectionHeader}>Payout order</h2>
-            {orderDone ? (
-              <ol className="mt-4 overflow-hidden rounded-3xl border border-ink-200 bg-white">
-                {displayMembers.map((member, index) => (
-                  <OrderRow
-                    key={member.id}
-                    member={member}
-                    position={member.turnNumber ?? index + 1}
-                    draggable={false}
-                    isDragging={false}
-                    isDragOver={false}
-                    onDragStart={() => {}}
-                    onDragEnd={() => {}}
-                    onDragOver={() => {}}
-                    onDrop={() => {}}
-                  />
-                ))}
-              </ol>
-            ) : (
-              <p className={`${ui.sectionSubtitle} mt-2`}>
-                The organizer hasn&apos;t set the payout order yet. Turns appear here once it&apos;s locked in.
-              </p>
-            )}
           </section>
         )}
 

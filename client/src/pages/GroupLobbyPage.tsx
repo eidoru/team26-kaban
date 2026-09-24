@@ -1,9 +1,11 @@
 ﻿import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ApiError, api, type GroupDetail, type GroupMember, type MemberReliability } from "../api/client";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ApiError, api, type GroupDetail, type GroupMember } from "../api/client";
 import { useDialog } from "../context/DialogContext";
 import { formatFrequency } from "../lib/frequency";
+import { dueHint, formatDueDate } from "../lib/dates";
+import { useDemoToolsSetting } from "../lib/devTools";
 import { clearGroupQueries, deferContributionSideEffects, deferStructureSideEffects, groupQueryKey, groupSupplementalQueryOptions, invalidateGroupIssues, invalidateGroupShell, isGroupNotFoundError, mergeCurrentRoundIntoGroupCache, OPTIMISTIC_MEMBER_ID, patchConfirmedContribution, patchGroupCurrentRoundContribution, patchMemberAdded, patchMemberRemoved, patchPayoutOrder, patchRecordedContribution, patchReportedContribution, patchStartDate, applyManualTurnOrder, refreshGroupView, shuffleMemberTurnOrder, shouldRetryGroupQuery } from "../lib/groupQueries";
 import { isSupabaseRealtimeConfigured } from "../lib/supabaseClient";
 import { isRealtimeFallbackNeeded, useGroupRealtime, type GroupRealtimeScope } from "../lib/useGroupRealtime";
@@ -12,6 +14,7 @@ import { Celebration } from "../components/Celebration";
 import { GroupCycleTabPanels, type CycleTab } from "./GroupCycleTabs";
 import {
   GroupHeader,
+  GroupPageSkeleton,
   GroupSectionLayout,
   type GroupFact,
   type GroupPhase,
@@ -115,9 +118,16 @@ export function GroupLobbyPage() {
     ...groupSupplementalQueryOptions,
   });
 
-  const { data: auditData } = useQuery({
+  const {
+    data: auditData,
+    fetchNextPage: fetchOlderAudit,
+    hasNextPage: hasOlderAudit,
+    isFetchingNextPage: loadingOlderAudit,
+  } = useInfiniteQuery({
     queryKey: ["audit-log", id],
-    queryFn: () => api.getAuditLog(id!),
+    queryFn: ({ pageParam }) => api.getAuditLog(id!, pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.entries.at(-1)?.id : undefined),
     enabled: !!id && groupLoaded && cycleStarted && isManagerView && cycleTab === "audit",
     retry: shouldRetryGroupQuery,
     ...groupSupplementalQueryOptions,
@@ -167,14 +177,6 @@ export function GroupLobbyPage() {
     queryKey: ["completion-summary", id],
     queryFn: () => api.getCompletionSummary(id!),
     enabled: !!id && groupLoaded && isCompleted && cycleTab === "overview",
-    retry: shouldRetryGroupQuery,
-    ...groupSupplementalQueryOptions,
-  });
-
-  const { data: reliabilityData } = useQuery({
-    queryKey: ["member-reliability", id],
-    queryFn: () => api.getMemberReliability(id!),
-    enabled: !!id && groupLoaded && cycleStarted && cycleTab === "members",
     retry: shouldRetryGroupQuery,
     ...groupSupplementalQueryOptions,
   });
@@ -296,8 +298,7 @@ export function GroupLobbyPage() {
     mutationFn: () => api.advanceRound(id!),
   });
 
-  const showDemoTools =
-    import.meta.env.DEV || import.meta.env.VITE_DEMO_TOOLS === "true";
+  const [showDemoTools] = useDemoToolsSetting();
 
   const sortedMembers = useMemo(() => {
     if (!data?.members) return [];
@@ -309,7 +310,7 @@ export function GroupLobbyPage() {
     });
   }, [data?.members]);
 
-  if (isPending && !data) return <p className={ui.muted}>Loading group…</p>;
+  if (isPending && !data) return <GroupPageSkeleton />;
   if (groupUnavailable) return <p className={ui.muted}>This paluwagan is no longer available…</p>;
   if (error || !data) {
     return (
@@ -329,8 +330,6 @@ export function GroupLobbyPage() {
   const isManager = group.role === "manager";
   const isForming = group.status === "forming";
   const isActive = group.status === "active";
-  const reliability = reliabilityData?.reliability ?? [];
-  const reliabilityByMember = new Map(reliability.map((r: MemberReliability) => [r.membershipId, r]));
   const displayStartDate =
     startDate || (group.startDate ? String(group.startDate).slice(0, 10) : "");
 
@@ -798,7 +797,6 @@ export function GroupLobbyPage() {
       await activate.mutateAsync(displayStartDate ? { startDate: displayStartDate } : undefined);
       await refreshGroupView(queryClient, id!);
       setLaunchedGroupId(id!);
-      void queryClient.invalidateQueries({ queryKey: ["member-reliability", id] });
       void queryClient.invalidateQueries({ queryKey: ["audit-log", id] });
     } catch (err) {
       setFormError(err instanceof ApiError ? err.message : "Failed to activate group");
@@ -827,7 +825,6 @@ export function GroupLobbyPage() {
       void queryClient.invalidateQueries({ queryKey: ["ledger", id] });
       void queryClient.invalidateQueries({ queryKey: ["obligations", id] });
       void queryClient.invalidateQueries({ queryKey: ["disputes", id] });
-      void queryClient.invalidateQueries({ queryKey: ["member-reliability", id] });
       void queryClient.invalidateQueries({ queryKey: ["audit-log", id] });
       void queryClient.invalidateQueries({ queryKey: ["completion-summary", id] });
       if (completed) {
@@ -850,21 +847,31 @@ export function GroupLobbyPage() {
     { id: "schedule", label: "Schedule" },
     { id: "ledger", label: "Ledger" },
     { id: "issues", label: "Issues", badge: issuesCount },
-    { id: "members", label: "Members" },
     ...(isManager ? [{ id: "audit" as const, label: "Audit log" }] : []),
   ];
 
   const phase: GroupPhase = isForming ? "forming" : isActive ? "active" : "completed";
   const headerFacts: GroupFact[] = [
-    { label: "Contribution", value: `₱${Number(group.contributionAmount).toLocaleString()}` },
-    { label: "Schedule", value: formatFrequency(group.frequency, group.frequencyDays) },
+    {
+      label: "Contribution",
+      value: `₱${Number(group.contributionAmount).toLocaleString()} ${formatFrequency(
+        group.frequency,
+        group.frequencyDays,
+      ).toLowerCase()}`,
+    },
     { label: "Roster", value: `${group.filledCount ?? members.length} / ${group.slotCount}` },
   ];
   if (isActive && currentRound) {
-    headerFacts.push({
-      label: "Current round",
-      value: `#${currentRound.number} · due ${currentRound.dueDate}`,
-    });
+    const hint = dueHint(currentRound.dueDate);
+    headerFacts.push(
+      { label: "Round", value: `${currentRound.number} of ${schedule.length || group.slotCount}` },
+      {
+        label: "Next due",
+        value: formatDueDate(currentRound.dueDate),
+        hint: hint?.label,
+        hintTone: hint?.overdue ? "danger" : "muted",
+      },
+    );
   } else if (isForming && displayStartDate) {
     headerFacts.push({ label: "Starts", value: formatGroupDate(displayStartDate) });
   }
@@ -962,7 +969,6 @@ export function GroupLobbyPage() {
             isActive={isActive}
             isCompleted={isCompleted}
             sortedMembers={sortedMembers}
-            reliabilityByMember={reliabilityByMember}
             dashboard={dashboardData?.dashboard}
             completionSummary={completionData?.summary}
             completionSummaryLoading={completionSummaryLoading}
@@ -971,7 +977,10 @@ export function GroupLobbyPage() {
             settlementClaims={settlementClaimsData?.claims ?? []}
             disputes={disputesData?.disputes ?? []}
             ledgerEntries={ledgerData?.entries ?? []}
-            auditEntries={auditData?.entries ?? []}
+            auditEntries={auditData?.pages.flatMap((page) => page.entries) ?? []}
+            auditHasMore={!!hasOlderAudit}
+            auditLoadingMore={loadingOlderAudit}
+            onLoadMoreAudit={() => void fetchOlderAudit()}
             actionPending={actionPending}
             viewerMembershipId={group.membershipId}
             onReportPayment={(cid, amount) => void handleReportPayment(cid, amount)}

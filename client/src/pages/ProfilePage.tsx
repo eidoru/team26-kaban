@@ -4,6 +4,8 @@ import { api, ApiError, patchSession, storeAuth } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { Avatar } from "../components/Avatar";
 import { StatCard } from "../components/StatCard";
+import { ToggleSwitch } from "../components/ToggleSwitch";
+import { demoToolsAvailable, useDemoToolsSetting } from "../lib/devTools";
 import { ui } from "../lib/ui";
 
 function formatPeso(amount: string | number): string {
@@ -88,6 +90,7 @@ function SecurityRow({
 
 export function ProfilePage() {
   const { user, refreshUser } = useAuth();
+  const [demoToolsOn, setDemoToolsOn] = useDemoToolsSetting();
   const emailPanelId = useId();
   const passwordPanelId = useId();
 
@@ -468,6 +471,27 @@ export function ProfilePage() {
           </div>
         ) : null}
       </section>
+
+      {demoToolsAvailable && (
+        <section>
+          <div className="mb-4">
+            <h2 className={ui.sectionHeading}>Developer</h2>
+            <p className={`mt-1 text-sm ${ui.muted}`}>Testing aids. Only available on development builds.</p>
+          </div>
+          <div className={`${ui.sectionCard} space-y-2`}>
+            <ToggleSwitch
+              id="showDemoTools"
+              checked={demoToolsOn}
+              onChange={setDemoToolsOn}
+              label="Show demo tools"
+            />
+            <p className="text-xs text-ink-500">
+              Adds an &ldquo;Advance round&rdquo; card to active groups you organize, to close rounds without waiting
+              for the due date. Saved in this browser only.
+            </p>
+          </div>
+        </section>
+      )}
     </div>
   );
 }

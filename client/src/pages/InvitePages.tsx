@@ -119,6 +119,7 @@ function GroupInviteDetails({ data }: { data: InvitePreview }) {
                   <Avatar
                     key={index}
                     name={member.displayName}
+                    placeholder={member.isPlaceholder}
                     className={`ring-2 ring-white ${index > 0 ? "-ml-2" : ""}`}
                   />
                 ))}
@@ -150,14 +151,9 @@ function GroupInviteDetails({ data }: { data: InvitePreview }) {
           <ul className="space-y-2.5">
             {members.map((member, index) => (
               <li key={index} className="flex items-center gap-3">
-                <Avatar name={member.displayName} />
+                <Avatar name={member.displayName} placeholder={member.isPlaceholder} />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-bold text-ink-900">
-                    {member.displayName}
-                    {member.isPlaceholder && (
-                      <span className="ml-1.5 font-normal text-ink-500">(placeholder)</span>
-                    )}
-                  </p>
+                  <p className="truncate text-sm font-bold text-ink-900">{member.displayName}</p>
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
                   {member.turnNumber != null && (

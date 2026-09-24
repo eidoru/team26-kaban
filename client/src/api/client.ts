@@ -652,8 +652,6 @@ export const api = {
    * instead of letting a stale response land on top of a fresher optimistic update. */
   getGroup: (id: string, signal?: AbortSignal) => request<GroupDetail>(`/groups/${id}`, { signal }),
 
-  getMemberReliability: (groupId: string) =>
-    request<{ reliability: MemberReliability[] }>(`/groups/${groupId}/member-reliability`),
 
   addPlaceholder: (groupId: string, body: { displayName: string; contact?: string }) =>
     request<{ member: GroupMember }>(`/groups/${groupId}/members`, {
@@ -778,7 +776,10 @@ export const api = {
 
   getLedger: (groupId: string) => request<{ entries: LedgerEntry[] }>(`/groups/${groupId}/ledger`),
 
-  getAuditLog: (groupId: string) => request<{ entries: AuditLogEntry[] }>(`/groups/${groupId}/audit-log`),
+  getAuditLog: (groupId: string, before?: string) =>
+    request<{ entries: AuditLogEntry[]; hasMore: boolean }>(
+      `/groups/${groupId}/audit-log${before ? `?before=${encodeURIComponent(before)}` : ""}`,
+    ),
 
   getDashboard: (groupId: string) =>
     request<{ dashboard: GroupDashboard }>(`/groups/${groupId}/dashboard`),

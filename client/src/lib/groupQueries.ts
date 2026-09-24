@@ -97,7 +97,6 @@ export function invalidateGroupCycle(queryClient: QueryClient, groupId: string) 
   void queryClient.invalidateQueries({ queryKey: ["audit-log", groupId] });
   void queryClient.invalidateQueries({ queryKey: ["dashboard", groupId] });
   void queryClient.invalidateQueries({ queryKey: ["completion-summary", groupId] });
-  void queryClient.invalidateQueries({ queryKey: ["member-reliability", groupId] });
   void queryClient.invalidateQueries({ queryKey: ["obligations", groupId] });
   void queryClient.invalidateQueries({ queryKey: ["disputes", groupId] });
   void queryClient.invalidateQueries({ queryKey: ["manager-obligations"] });
@@ -140,7 +139,6 @@ export function deferContributionSideEffects(queryClient: QueryClient, groupId: 
   void queryClient.invalidateQueries({ queryKey: ["dashboard", groupId] });
   void queryClient.invalidateQueries({ queryKey: ["ledger", groupId] });
   void queryClient.invalidateQueries({ queryKey: ["audit-log", groupId] });
-  void queryClient.invalidateQueries({ queryKey: ["member-reliability", groupId] });
 }
 
 function recomputeFormingGroupDetail(current: GroupDetail, members: GroupMember[]): GroupDetail {
