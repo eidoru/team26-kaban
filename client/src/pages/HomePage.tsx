@@ -67,6 +67,17 @@ function groupStatusDetail(group: GroupSummary): string {
   return `${group.slotCount} members · finished`;
 }
 
+function turnChipLabel(group: GroupSummary): string | null {
+  const current = group.currentRoundNumber;
+  const mine = group.myPayoutRoundNumber;
+  if (group.status !== "active" || current == null || mine == null) return null;
+  const roundsAway = mine - current;
+  if (roundsAway < 0) return null;
+  if (roundsAway === 0) return "Your turn now";
+  if (roundsAway === 1) return "You're next";
+  return `Your turn in ${roundsAway} rounds`;
+}
+
 function formingFillPercent(group: GroupSummary): number {
   if (group.slotCount <= 0) return 0;
   return Math.min(100, Math.round(((group.filledCount ?? 0) / group.slotCount) * 100));
@@ -84,6 +95,7 @@ function GroupTile({
   const amount = `₱${Number(group.contributionAmount).toLocaleString()}`;
   const freq = formatFrequency(group.frequency, group.frequencyDays);
   const fillPercent = formingFillPercent(group);
+  const turnLabel = muted ? null : turnChipLabel(group);
 
   return (
     <Link
@@ -117,8 +129,9 @@ function GroupTile({
       <div className="mt-auto flex items-center justify-between gap-3 text-sm">
         <span className="min-w-0 truncate font-semibold text-ink-600">{groupStatusDetail(group)}</span>
         <span className="flex shrink-0 items-center gap-2">
+          {turnLabel && <span className={ui.badgeTurn}>{turnLabel}</span>}
           {group.role === "manager" && (
-            <span className="rounded-full bg-sun-100 px-2.5 py-0.5 text-xs font-bold text-sun-800">
+            <span className="rounded-full bg-ink-100 px-2.5 py-0.5 text-xs font-bold text-ink-600">
               Organizing
             </span>
           )}

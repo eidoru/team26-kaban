@@ -71,6 +71,10 @@ export interface GroupSummary {
   membershipId: string;
   totalCollected?: string;
   outstandingDebt?: string;
+  /** Active groups only. */
+  currentRoundNumber?: number | null;
+  /** Active groups only: the round whose pot goes to the viewer. */
+  myPayoutRoundNumber?: number | null;
 }
 
 export interface GroupMember {

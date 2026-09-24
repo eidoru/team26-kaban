@@ -11,11 +11,13 @@ import type {
   RoundSummary,
   SettlementClaimEntry,
 } from "../api/client";
+import { CircleCheck, Clock, Inbox, TriangleAlert } from "lucide-react";
 import { formatFrequency } from "../lib/frequency";
 import { Avatar } from "../components/Avatar";
 import { statusBadgeClass, ui } from "../lib/ui";
 import { CopyableLink } from "../components/CopyableLink";
 import { StatCard } from "../components/StatCard";
+import { Celebration } from "../components/Celebration";
 
 export type CycleTab = "overview" | "schedule" | "ledger" | "issues" | "members" | "audit";
 
@@ -39,15 +41,13 @@ function CompletionSummaryPanel({ summary }: { summary: CompletionSummary }) {
   const freq = formatFrequency(summary.frequency, summary.frequencyDays);
 
   return (
-    <div className="space-y-6 rounded-2xl border border-brand-100 bg-gradient-to-b from-brand-50/80 to-white p-5 sm:p-6">
-      <div>
-        <p className="text-xs font-medium uppercase tracking-wide text-brand-800/70">Cycle complete</p>
-        <h2 className="font-heading mt-1 text-xl font-medium text-ink-900">{summary.groupName}</h2>
-        <p className="mt-2 text-sm text-ink-600">
+    <div className="space-y-6">
+      <Celebration title={`${summary.groupName} is complete!`} burst={false}>
+        <p>
           {summary.memberCount} members · {freq} · ₱{amount.toLocaleString()} per member per round
         </p>
         {(startLabel || endLabel) && (
-          <p className="mt-1 text-sm text-ink-500">
+          <p className="mt-0.5 text-ink-600">
             {startLabel && `Started ${startLabel}`}
             {startLabel && endLabel && " · "}
             {endLabel && `Finished ${endLabel}`}
@@ -55,7 +55,7 @@ function CompletionSummaryPanel({ summary }: { summary: CompletionSummary }) {
               ` · ${summary.cycleDurationDays} day${summary.cycleDurationDays === 1 ? "" : "s"}`}
           </p>
         )}
-      </div>
+      </Celebration>
 
       <div className={ui.metricGrid}>
         <StatCard
@@ -114,17 +114,17 @@ function CompletionSummaryPanel({ summary }: { summary: CompletionSummary }) {
             {summary.payoutRecipients.map((round) => (
               <li
                 key={round.roundNumber}
-                className="flex items-center gap-3 rounded-xl border border-ink-100 bg-white px-3 py-2.5"
+                className="flex items-center gap-3 rounded-2xl border border-ink-200 bg-white px-3 py-2.5"
               >
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-ink-100 text-sm font-medium text-ink-700">
+                <span className="flex h-8 min-w-8 shrink-0 items-center justify-center rounded-full bg-ink-100 px-2 text-xs font-bold tabular-nums text-ink-700">
                   {round.roundNumber}
                 </span>
                 <Avatar name={round.recipientName} />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium text-ink-900">{round.recipientName}</p>
+                  <p className="truncate font-bold text-ink-900">{round.recipientName}</p>
                   <p className="text-xs text-ink-500">Due {round.dueDate}</p>
                 </div>
-                <p className="shrink-0 text-sm font-medium tabular-nums text-ink-800">
+                <p className="shrink-0 text-sm font-bold tabular-nums text-ink-800">
                   ₱{Number(round.potAmount).toLocaleString()}
                 </p>
               </li>
@@ -134,7 +134,7 @@ function CompletionSummaryPanel({ summary }: { summary: CompletionSummary }) {
       </div>
 
       {outstanding > 0 && (
-        <p className="rounded-xl border border-danger-100 bg-danger-50/50 px-4 py-3 text-sm text-danger-900">
+        <p className="rounded-2xl border border-danger-200 bg-danger-50 px-4 py-3 text-sm font-semibold text-danger-800">
           ₱{outstanding.toLocaleString()} remains owed to the organizer. Check the Issues tab for unsettled
           obligations and settlement options.
         </p>
@@ -145,9 +145,12 @@ function CompletionSummaryPanel({ summary }: { summary: CompletionSummary }) {
 
 function EmptyTabState({ title, description }: { title: string; description: string }) {
   return (
-    <div className={`${ui.emptyState} py-8`}>
-      <p className="font-medium text-ink-900">{title}</p>
-      <p className={`mt-2 text-sm ${ui.muted}`}>{description}</p>
+    <div className={`${ui.emptyState} flex flex-col items-center py-8`}>
+      <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-ink-500" aria-hidden>
+        <Inbox className="h-6 w-6" />
+      </span>
+      <p className="font-heading mt-3 text-lg font-bold text-ink-900">{title}</p>
+      <p className={`mt-1 text-sm ${ui.muted}`}>{description}</p>
     </div>
   );
 }
@@ -161,7 +164,7 @@ function contributionStatusLabel(status: string) {
 function contributionStatusBadge(status: string) {
   if (status === "confirmed") return ui.badgeActive;
   if (status === "reported") return ui.badgeForming;
-  return "rounded-full border border-ink-200 bg-ink-50 px-2.5 py-0.5 text-xs font-normal text-ink-600";
+  return ui.badgeCompleted;
 }
 
 function paymentStatusBadge(status: string) {
@@ -213,7 +216,7 @@ function obligationStatusLabel(status: string) {
 function obligationStatusBadge(status: string) {
   if (status === "settled") return ui.badgeActive;
   if (status === "partially_settled") return ui.badgeForming;
-  return "rounded-full border border-danger-200 bg-danger-50 px-2.5 py-0.5 text-xs font-normal text-danger-800";
+  return ui.badgeDanger;
 }
 
 function disputeStatusLabel(status: string) {
@@ -233,7 +236,7 @@ function settlementClaimStatusLabel(status: string) {
 
 function settlementClaimStatusBadge(status: string) {
   if (status === "confirmed") return ui.badgeActive;
-  if (status === "rejected") return "rounded-full border border-danger-200 bg-danger-50 px-2.5 py-0.5 text-xs font-normal text-danger-800";
+  if (status === "rejected") return ui.badgeDanger;
   return ui.badgeForming;
 }
 
@@ -265,7 +268,7 @@ function ObligationTableRow({
         <div className="flex items-center gap-2.5">
           <Avatar name={obligation.displayName} />
           <div className="min-w-0">
-            <p className="truncate font-medium text-ink-900">{obligation.displayName}</p>
+            <p className="truncate font-bold text-ink-900">{obligation.displayName}</p>
             {obligation.isPlaceholder && (
               <p className="text-xs text-ink-500">Placeholder</p>
             )}
@@ -276,7 +279,7 @@ function ObligationTableRow({
         R{obligation.roundNumber} · {obligation.roundDueDate}
       </td>
       <td className="px-4 py-3 text-right">
-        <div className="font-medium tabular-nums text-ink-900">
+        <div className="font-bold tabular-nums text-ink-900">
           ₱{Number(obligation.remaining).toLocaleString()}
         </div>
         {hasInterest && (
@@ -361,7 +364,7 @@ function DisputeRow({
         <Avatar name={dispute.memberDisplayName} />
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="truncate font-medium text-ink-900">{dispute.memberDisplayName}</p>
+            <p className="truncate font-bold text-ink-900">{dispute.memberDisplayName}</p>
             <span className={disputeStatusBadge(dispute.status)}>{disputeStatusLabel(dispute.status)}</span>
           </div>
           <p className="mt-0.5 text-sm text-ink-500">
@@ -411,7 +414,7 @@ function SettlementClaimRow({
         <Avatar name={claim.memberDisplayName} />
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="truncate font-medium text-ink-900">{claim.memberDisplayName}</p>
+            <p className="truncate font-bold text-ink-900">{claim.memberDisplayName}</p>
             <span className={settlementClaimStatusBadge(claim.status)}>
               {settlementClaimStatusLabel(claim.status)}
             </span>
@@ -500,10 +503,10 @@ function IssuesPanel({
           <dl className={`${ui.metricGrid2} mt-4`}>
             {openObligations.length > 0 && (
               <div>
-                <dt className="text-xs font-medium uppercase tracking-wide text-ink-500">
+                <dt className="text-xs font-bold uppercase tracking-wide text-ink-500">
                   Outstanding debt
                 </dt>
-                <dd className="mt-1 text-2xl font-medium tabular-nums text-ink-900">
+                <dd className="mt-1 text-2xl font-bold tabular-nums text-ink-900">
                   ₱{totalOutstanding.toLocaleString()}
                 </dd>
                 <dd className="mt-0.5 text-sm text-ink-500">
@@ -513,10 +516,10 @@ function IssuesPanel({
             )}
             {openDisputes.length > 0 && (
               <div>
-                <dt className="text-xs font-medium uppercase tracking-wide text-ink-500">
+                <dt className="text-xs font-bold uppercase tracking-wide text-ink-500">
                   Open disputes
                 </dt>
-                <dd className="mt-1 text-2xl font-medium text-ink-900">{openDisputes.length}</dd>
+                <dd className="mt-1 text-2xl font-bold text-ink-900">{openDisputes.length}</dd>
                 <dd className="mt-0.5 text-sm text-ink-500">Awaiting resolution</dd>
               </div>
             )}
@@ -568,7 +571,7 @@ function IssuesPanel({
             Members reported these payments toward their debt. Confirming applies the amount;
             rejecting leaves the debt unchanged.
           </p>
-          <ul className="mt-4 divide-y divide-ink-100 overflow-hidden rounded-xl border border-ink-100">
+          <ul className="mt-4 divide-y divide-ink-100 overflow-hidden rounded-3xl border border-ink-200 bg-white">
             {pendingClaims.map((claim) => (
               <SettlementClaimRow
                 key={claim.id}
@@ -585,7 +588,7 @@ function IssuesPanel({
       {reviewedClaims.length > 0 && (
         <section className={ui.sectionCard}>
           <h2 className={ui.sectionHeader}>Reviewed payments</h2>
-          <ul className="mt-4 divide-y divide-ink-100 overflow-hidden rounded-xl border border-ink-100">
+          <ul className="mt-4 divide-y divide-ink-100 overflow-hidden rounded-3xl border border-ink-200 bg-white">
             {reviewedClaims.map((claim) => (
               <SettlementClaimRow
                 key={claim.id}
@@ -604,7 +607,7 @@ function IssuesPanel({
         <section className={ui.sectionCard}>
           <h2 className={ui.sectionHeader}>Open disputes</h2>
           <p className={ui.sectionSubtitle}>Payment disagreements raised during the cycle.</p>
-          <ul className="mt-4 divide-y divide-ink-100 overflow-hidden rounded-xl border border-ink-100">
+          <ul className="mt-4 divide-y divide-ink-100 overflow-hidden rounded-3xl border border-ink-200 bg-white">
             {openDisputes.map((dispute) => (
               <DisputeRow
                 key={dispute.id}
@@ -621,7 +624,7 @@ function IssuesPanel({
       {resolvedDisputes.length > 0 && (
         <section className={ui.sectionCard}>
           <h2 className={ui.sectionHeader}>Resolved disputes</h2>
-          <ul className="mt-4 divide-y divide-ink-100 overflow-hidden rounded-xl border border-ink-100">
+          <ul className="mt-4 divide-y divide-ink-100 overflow-hidden rounded-3xl border border-ink-200 bg-white">
             {resolvedDisputes.map((dispute) => (
               <DisputeRow
                 key={dispute.id}
@@ -642,21 +645,21 @@ function IssuesPanel({
 function auditCategoryClass(category: string) {
   switch (category) {
     case "group":
-      return "bg-brand-100 text-brand-800";
+      return "bg-teal-100 text-teal-800";
     case "membership":
-      return "bg-blue-100 text-blue-800";
+      return "bg-sky-100 text-sky-800";
     case "contribution":
-      return "bg-warn-100 text-warn-800";
+      return "bg-lime-100 text-lime-800";
     case "round":
       return "bg-violet-100 text-violet-800";
     case "invite":
-      return "bg-ink-100 text-ink-700";
+      return "bg-indigo-100 text-indigo-800";
     case "obligation":
-      return "bg-danger-100 text-danger-800";
+      return "bg-rose-100 text-rose-800";
     case "dispute":
-      return "bg-warn-100 text-warn-800";
+      return "bg-amber-100 text-amber-800";
     default:
-      return "bg-ink-50 text-ink-700";
+      return "bg-ink-100 text-ink-700";
   }
 }
 
@@ -669,14 +672,14 @@ function MemberBadge({
 }) {
   const styles =
     variant === "manager"
-      ? "border-brand-100 bg-brand-50 text-brand-700"
+      ? "bg-brand-100 text-brand-700"
       : variant === "muted"
-        ? "border-ink-200 bg-ink-50 text-ink-500"
-        : "border-ink-200 bg-ink-50 text-ink-600";
+        ? "bg-ink-100 text-ink-500"
+        : "bg-ink-100 text-ink-600";
 
   return (
     <span
-      className={`inline-flex items-center justify-center rounded-full border px-2.5 py-0.5 text-xs whitespace-nowrap ${styles}`}
+      className={`inline-flex min-w-[5.75rem] items-center justify-center whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-bold ${styles}`}
     >
       {children}
     </span>
@@ -703,36 +706,42 @@ function MemberRow({
   const showClaim = showClaimAction && member.isPlaceholder && onClaimInvite;
 
   return (
-    <li className="border-b border-ink-50 px-4 py-3.5 last:border-0">
+    <li className="border-b border-ink-100 px-4 py-3.5 last:border-0">
       <div className="flex items-center gap-3">
         <span
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-ink-100 text-sm font-medium text-ink-700"
+          className="flex h-8 min-w-8 shrink-0 items-center justify-center rounded-full bg-ink-100 px-2 text-xs font-bold tabular-nums text-ink-700"
           aria-label={`Payout order ${position}`}
         >
           {position}
         </span>
         <Avatar name={member.displayName} />
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="truncate font-medium text-ink-900">{member.displayName}</p>
-            {member.isManager && <MemberBadge variant="manager">Manager</MemberBadge>}
-            {member.isPlaceholder && <MemberBadge variant="muted">Unclaimed</MemberBadge>}
-          </div>
+          <p className="truncate font-bold text-ink-900">{member.displayName}</p>
           {member.contact && <p className="mt-0.5 truncate text-sm text-ink-500">{member.contact}</p>}
           {reliabilitySummary && <p className="mt-0.5 truncate text-xs text-ink-500">{reliabilitySummary}</p>}
         </div>
+        {(member.isManager || member.isPlaceholder) && (
+          <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
+            {member.isManager && <MemberBadge variant="manager">Manager</MemberBadge>}
+            {member.isPlaceholder && <MemberBadge variant="muted">Unclaimed</MemberBadge>}
+          </div>
+        )}
         {showClaim ? (
           <button
             type="button"
             onClick={onClaimInvite}
             disabled={claimPending}
-            className="shrink-0 text-sm text-brand-900 hover:underline disabled:opacity-50"
+            className={`${ui.btnSecondarySm} shrink-0`}
           >
             Claim link
           </button>
         ) : null}
       </div>
-      {claimUrl && <CopyableLink url={claimUrl} label="Claim link" compact />}
+      {claimUrl && (
+        <div className="mt-3">
+          <CopyableLink url={claimUrl} label="Claim link" compact />
+        </div>
+      )}
     </li>
   );
 }
@@ -779,7 +788,7 @@ function ContributionRow({
       <div className="flex min-w-0 flex-1 items-center gap-2.5">
         <Avatar name={contribution.displayName ?? "?"} />
         <div className="min-w-0">
-          <p className="truncate font-medium text-ink-900">{contribution.displayName ?? "Member"}</p>
+          <p className="truncate font-bold text-ink-900">{contribution.displayName ?? "Member"}</p>
           {(contribution.isPartial || contribution.isPlaceholder) && (
             <p className="truncate text-xs text-ink-500">
               {contribution.isPartial && "Partial payment"}
@@ -790,7 +799,7 @@ function ContributionRow({
         </div>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3 sm:justify-end">
-        <p className="text-sm font-medium tabular-nums text-ink-900">{amountLabel}</p>
+        <p className="text-sm font-bold tabular-nums text-ink-900">{amountLabel}</p>
         {hasActions && (
           <div className="flex flex-wrap gap-2">
             {contribution.canReport && (
@@ -884,10 +893,10 @@ function ContributionsList({
     <div className="space-y-5">
       {groups.map((group) => (
         <section key={group.id}>
-          <h4 className="mb-2 text-xs font-medium uppercase tracking-wide text-ink-500">
+          <h4 className="mb-2 text-xs font-bold uppercase tracking-wide text-ink-500">
             {group.label} · {group.items.length}
           </h4>
-          <ul className="divide-y divide-ink-100 overflow-hidden rounded-xl border border-ink-100 bg-white">
+          <ul className="divide-y divide-ink-100 overflow-hidden rounded-3xl border border-ink-200 bg-white">
             {group.items.map((contribution) => (
               <ContributionRow
                 key={contribution.id}
@@ -919,7 +928,7 @@ function LedgerRow({ entry }: { entry: LedgerEntry }) {
       <div className="flex min-w-0 flex-1 items-center gap-2.5">
         <Avatar name={entry.displayName} />
         <div className="min-w-0">
-          <p className="truncate font-medium text-ink-900">{entry.displayName}</p>
+          <p className="truncate font-bold text-ink-900">{entry.displayName}</p>
           {(source || entry.isPlaceholder) && (
             <p className="truncate text-xs text-ink-500">
               {[source, entry.isPlaceholder && "Placeholder"].filter(Boolean).join(" · ")}
@@ -928,7 +937,7 @@ function LedgerRow({ entry }: { entry: LedgerEntry }) {
         </div>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3 sm:justify-end">
-        <p className="text-sm font-medium tabular-nums text-ink-900">{amountLabel}</p>
+        <p className="text-sm font-bold tabular-nums text-ink-900">{amountLabel}</p>
         <span className={paymentStatusBadge(entry.status)}>{contributionStatusLabel(entry.status)}</span>
       </div>
     </li>
@@ -958,13 +967,13 @@ function LedgerList({ entries }: { entries: LedgerEntry[] }) {
         return (
           <section key={roundNumber}>
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-              <h4 className="text-xs font-medium uppercase tracking-wide text-ink-500">
+              <h4 className="text-xs font-bold uppercase tracking-wide text-ink-500">
                 Round {roundNumber} · Due {first.roundDueDate} · {confirmed}/{roundEntries.length}{" "}
                 confirmed
               </h4>
               <span className={scheduleStatusBadge(roundStatus)}>{scheduleStatusLabel(roundStatus)}</span>
             </div>
-            <ul className="divide-y divide-ink-100 overflow-hidden rounded-xl border border-ink-100 bg-white">
+            <ul className="divide-y divide-ink-100 overflow-hidden rounded-3xl border border-ink-200 bg-white">
               {roundEntries.map((entry) => (
                 <LedgerRow key={entry.id} entry={entry} />
               ))}
@@ -972,6 +981,125 @@ function LedgerList({ entries }: { entries: LedgerEntry[] }) {
           </section>
         );
       })}
+    </div>
+  );
+}
+
+function ViewerRoundStatus({
+  contribution,
+  contributionAmount,
+}: {
+  contribution: RoundContribution;
+  contributionAmount: string;
+}) {
+  const expected = Number(contribution.expectedAmount ?? contributionAmount);
+  const remaining = Math.max(0, expected - Number(contribution.amount));
+
+  if (contribution.status === "confirmed") {
+    return (
+      <p className="flex items-center gap-2 rounded-2xl bg-white/80 px-4 py-2.5 text-sm font-bold text-brand-800">
+        <CircleCheck className="h-4 w-4 shrink-0" aria-hidden />
+        You&apos;re paid up for this round.
+      </p>
+    );
+  }
+  if (contribution.status === "reported") {
+    return (
+      <p className="flex items-center gap-2 rounded-2xl bg-white/80 px-4 py-2.5 text-sm font-bold text-ink-800">
+        <Clock className="h-4 w-4 shrink-0 text-sun-700" aria-hidden />
+        Your payment is waiting for the organizer to confirm.
+      </p>
+    );
+  }
+  return (
+    <p className="flex items-center gap-2 rounded-2xl bg-danger-50 px-4 py-2.5 text-sm font-bold text-danger-700">
+      <TriangleAlert className="h-4 w-4 shrink-0" aria-hidden />
+      You still owe ₱{(remaining > 0 ? remaining : expected).toLocaleString()} this round.
+    </p>
+  );
+}
+
+/** The most important thing on the page: who gets this round's pot and how close it is. */
+function RoundHero({
+  round,
+  potAmount,
+  confirmedCount,
+  totalCount,
+  progressPercent,
+  isOverdue,
+  isViewerRecipient,
+  viewerContribution,
+  contributionAmount,
+}: {
+  round: RoundSummary;
+  potAmount: number;
+  confirmedCount: number;
+  totalCount: number;
+  progressPercent: number;
+  isOverdue: boolean;
+  isViewerRecipient: boolean;
+  viewerContribution?: RoundContribution;
+  contributionAmount: string;
+}) {
+  const sunny = isViewerRecipient;
+  return (
+    <div
+      className={`rounded-3xl p-6 ${
+        sunny ? "border-2 border-sun-200 bg-sun-100 text-ink-900" : "bg-brand-700 text-white"
+      }`}
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <span
+          className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-bold ${
+            sunny ? "bg-white text-sun-800" : "bg-white/15 text-white"
+          }`}
+        >
+          Round {round.number}
+        </span>
+        <span className={`text-sm font-semibold ${sunny ? "text-ink-600" : "text-brand-100"}`}>
+          Due {round.dueDate}
+        </span>
+        {isOverdue && <span className={ui.badgeDanger}>Overdue</span>}
+      </div>
+
+      {sunny ? (
+        <>
+          <h2 className="font-heading mt-4 text-3xl font-bold">It&apos;s your turn!</h2>
+          <p className="mt-1 text-sm text-ink-700">You receive this round&apos;s pot once everyone has paid.</p>
+        </>
+      ) : (
+        <div className="mt-4 flex items-center gap-3">
+          <Avatar name={round.recipientName} size="md" className="ring-2 ring-white/40" />
+          <div className="min-w-0">
+            <p className="text-sm text-brand-100">This round&apos;s pot goes to</p>
+            <h2 className="font-heading truncate text-2xl font-bold">{round.recipientName}</h2>
+          </div>
+        </div>
+      )}
+
+      <p className="font-heading mt-4 text-4xl font-bold tabular-nums sm:text-5xl">₱{potAmount.toLocaleString()}</p>
+
+      {totalCount > 0 && (
+        <div className="mt-4">
+          <div className={`h-3 overflow-hidden rounded-full ${sunny ? "bg-white/80" : "bg-white/20"}`}>
+            <div
+              className={`h-full rounded-full transition-all ${
+                sunny ? "bg-gradient-to-r from-brand-500 to-brand-400" : "bg-sun-300"
+              }`}
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+          <p className={`mt-2 text-sm font-semibold ${sunny ? "text-ink-700" : "text-brand-50"}`}>
+            {confirmedCount} of {totalCount} confirmed · {progressPercent}%
+          </p>
+        </div>
+      )}
+
+      {viewerContribution && (
+        <div className="mt-4">
+          <ViewerRoundStatus contribution={viewerContribution} contributionAmount={contributionAmount} />
+        </div>
+      )}
     </div>
   );
 }
@@ -1084,13 +1212,18 @@ export function GroupCycleTabPanels(props: GroupCycleTabsProps) {
     return (
       <div className="space-y-6">
         {isCompleted && completionSummaryLoading && (
-          <div className={`${ui.emptyState} py-8`}>
-            <p className="font-medium text-ink-900">Loading completion summary…</p>
+          <div className="space-y-3" role="status" aria-label="Loading completion summary">
+            <div className={`${ui.skeleton} h-24`} />
+            <div className={ui.metricGrid}>
+              {[0, 1, 2, 3].map((i) => (
+                <div key={i} className={`${ui.skeleton} h-28`} />
+              ))}
+            </div>
           </div>
         )}
         {isCompleted && completionSummaryError && !completionSummary && (
           <div className={`${ui.emptyState} py-8`}>
-            <p className="font-medium text-ink-900">Could not load completion summary</p>
+            <p className="font-bold text-ink-900">Could not load completion summary</p>
             <p className={`mt-2 text-sm ${ui.muted}`}>Refresh the page to try again.</p>
           </div>
         )}
@@ -1098,58 +1231,43 @@ export function GroupCycleTabPanels(props: GroupCycleTabsProps) {
 
         {currentRound ? (
           <>
-            <div className="rounded-2xl border border-brand-100 bg-brand-50/50 p-5">
-              <p className="text-xs font-medium uppercase tracking-wide text-brand-800/70">
-                Round {currentRound.number}
-              </p>
-              <h2 className="font-heading mt-1 text-2xl font-medium text-ink-900">
-                {currentRound.recipientName}
-              </h2>
-              <p className="mt-1 text-sm text-ink-600">
-                Receives ₱{potAmount.toLocaleString()} · Due {currentRound.dueDate}
-              </p>
-              {dashboard?.currentRound?.isOverdue && (
-                <span className={`${ui.badgeForming} mt-3 inline-block`}>Overdue</span>
-              )}
-              {totalCount > 0 && (
-                <div className="mt-5">
-                  <div className="mb-1.5 flex items-center justify-between text-xs text-ink-600">
-                    <span>
-                      {confirmedCount} of {totalCount} confirmed
-                    </span>
-                    <span>{progressPercent}%</span>
-                  </div>
-                  <div className="h-2 overflow-hidden rounded-full bg-white/80">
-                    <div
-                      className="h-full rounded-full bg-brand-600 transition-all"
-                      style={{ width: `${progressPercent}%` }}
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
+            <RoundHero
+              round={currentRound}
+              potAmount={potAmount}
+              confirmedCount={confirmedCount}
+              totalCount={totalCount}
+              progressPercent={progressPercent}
+              isOverdue={!!dashboard?.currentRound?.isOverdue}
+              isViewerRecipient={!!viewerMembershipId && currentRound.recipientMembershipId === viewerMembershipId}
+              viewerContribution={contributions.find((c) => c.membershipId === viewerMembershipId)}
+              contributionAmount={group.contributionAmount}
+            />
 
             {isActive && nextRound && (
-              <div className="flex flex-wrap items-center gap-3 rounded-xl border border-ink-100 bg-white px-4 py-3">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-ink-100 text-sm font-medium text-ink-600">
+              <div className="flex flex-wrap items-center gap-3 rounded-3xl border border-ink-200 bg-white px-4 py-3">
+                <span className="flex h-8 min-w-8 shrink-0 items-center justify-center rounded-full bg-ink-100 px-2 text-xs font-bold tabular-nums text-ink-700">
                   {nextRound.number}
                 </span>
                 <Avatar name={nextRound.recipientName ?? "?"} />
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs text-ink-500">Next payout</p>
-                  <p className="font-medium text-ink-900">{nextRound.recipientName ?? "—"}</p>
+                  <p className="text-xs font-bold uppercase tracking-wide text-ink-500">Next payout</p>
+                  <p className="truncate font-bold text-ink-900">
+                    {nextRound.recipientMembershipId === viewerMembershipId
+                      ? "You're next!"
+                      : (nextRound.recipientName ?? "—")}
+                  </p>
                 </div>
-                <div className="shrink-0 text-right text-sm text-ink-600">
-                  <p>₱{nextPotAmount.toLocaleString()}</p>
+                <div className="shrink-0 text-right">
+                  <p className="text-sm font-bold tabular-nums text-ink-900">₱{nextPotAmount.toLocaleString()}</p>
                   <p className="text-xs text-ink-500">Due {nextRound.dueDate}</p>
                 </div>
               </div>
             )}
 
             {isActive && currentRound && finalRound && (
-              <div className="rounded-xl border border-ink-100 bg-ink-50 px-4 py-3">
-                <p className="text-xs text-ink-500">Next payout</p>
-                <p className="font-medium text-ink-900">Final round</p>
+              <div className="rounded-3xl border border-ink-200 bg-ink-50 px-5 py-4">
+                <p className="text-xs font-bold uppercase tracking-wide text-ink-500">Next payout</p>
+                <p className="font-heading font-bold text-ink-900">Final round</p>
                 <p className="mt-0.5 text-sm text-ink-600">
                   This is the last payout in the cycle. The paluwagan completes once this round closes.
                 </p>
@@ -1252,20 +1370,21 @@ export function GroupCycleTabPanels(props: GroupCycleTabsProps) {
 
   if (cycleTab === "schedule") {
     return schedule.length > 0 ? (
-      <ul className="overflow-hidden rounded-2xl border border-ink-100 bg-white">
+      <ul className="overflow-hidden rounded-3xl border border-ink-200 bg-white">
         {schedule.map((r) => (
           <li
             key={r.id}
-            className={`flex flex-wrap items-center justify-between gap-3 border-b border-ink-50 px-4 py-3 last:border-0 ${
-              r.status === "current" ? "bg-brand-50/40" : ""
+            className={`flex flex-wrap items-center justify-between gap-3 border-b border-ink-100 px-4 py-3 last:border-0 ${
+              r.status === "current" ? "bg-brand-50" : ""
             }`}
           >
             <div className="flex items-center gap-3">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-ink-100 text-sm font-medium text-ink-700">
+              <span className="flex h-8 min-w-8 shrink-0 items-center justify-center rounded-full bg-ink-100 px-2 text-xs font-bold tabular-nums text-ink-700">
                 {r.number}
               </span>
+              <Avatar name={r.recipientName ?? "?"} />
               <div>
-                <p className="font-medium text-ink-900">{r.recipientName ?? "—"}</p>
+                <p className="font-bold text-ink-900">{r.recipientName ?? "—"}</p>
                 <p className="text-sm text-ink-500">Due {r.dueDate}</p>
               </div>
             </div>
@@ -1318,7 +1437,7 @@ export function GroupCycleTabPanels(props: GroupCycleTabsProps) {
             Generate a claim link so someone can take over an unclaimed seat during the cycle.
           </p>
         )}
-        <ul className="overflow-hidden rounded-2xl border border-ink-100 bg-white">
+        <ul className="overflow-hidden rounded-3xl border border-ink-200 bg-white">
           {sortedMembers.map((member, index) => (
             <MemberRow
               key={member.id}
@@ -1344,11 +1463,11 @@ export function GroupCycleTabPanels(props: GroupCycleTabsProps) {
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="flex flex-wrap items-center gap-2">
                 <span
-                  className={`rounded-full px-2 py-0.5 text-xs font-medium ${auditCategoryClass(entry.category)}`}
+                  className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${auditCategoryClass(entry.category)}`}
                 >
                   {entry.categoryLabel}
                 </span>
-                <span className="font-medium text-ink-900">{entry.title}</span>
+                <span className="font-bold text-ink-900">{entry.title}</span>
               </div>
               <time className="shrink-0 text-xs text-ink-500">
                 {new Date(entry.createdAt).toLocaleString()}

@@ -8,6 +8,7 @@ import { clearGroupQueries, deferContributionSideEffects, deferStructureSideEffe
 import { isSupabaseRealtimeConfigured } from "../lib/supabaseClient";
 import { isRealtimeFallbackNeeded, useGroupRealtime, type GroupRealtimeScope } from "../lib/useGroupRealtime";
 import { ui } from "../lib/ui";
+import { Celebration } from "../components/Celebration";
 import { GroupCycleTabPanels, type CycleTab } from "./GroupCycleTabs";
 import {
   GroupHeader,
@@ -32,6 +33,8 @@ export function GroupLobbyPage() {
   const [manualOrder, setManualOrder] = useState<Record<string, number>>({});
   const [payoutDraftActive, setPayoutDraftActive] = useState(false);
   const [activating, setActivating] = useState(false);
+  // Keyed by group id so the celebration never leaks onto another group's page.
+  const [launchedGroupId, setLaunchedGroupId] = useState<string | null>(null);
   const [cycleTab, setCycleTab] = useState<CycleTab>("overview");
 
   useEffect(() => {
@@ -794,6 +797,7 @@ export function GroupLobbyPage() {
     try {
       await activate.mutateAsync(displayStartDate ? { startDate: displayStartDate } : undefined);
       await refreshGroupView(queryClient, id!);
+      setLaunchedGroupId(id!);
       void queryClient.invalidateQueries({ queryKey: ["member-reliability", id] });
       void queryClient.invalidateQueries({ queryKey: ["audit-log", id] });
     } catch (err) {
@@ -932,6 +936,14 @@ export function GroupLobbyPage() {
           )}
 
           {formError && <p className={ui.error}>{formError}</p>}
+        </div>
+      )}
+
+      {cycleStarted && launchedGroupId === id && (
+        <div className="mb-6">
+          <Celebration title="Your paluwagan is live!" onDismiss={() => setLaunchedGroupId(null)}>
+            Round 1 is open. Members can now report their contributions.
+          </Celebration>
         </div>
       )}
 

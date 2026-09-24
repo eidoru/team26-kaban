@@ -41,6 +41,7 @@ export const ui = {
   badgeActive: `${badgeBase} bg-brand-100 text-brand-700`,
   badgeCompleted: `${badgeBase} bg-ink-100 text-ink-600`,
   badgeTurn: `${badgeBase} bg-sun-100 text-sun-800`,
+  badgeDanger: `${badgeBase} bg-danger-50 text-danger-700`,
   link: "text-sm font-semibold text-brand-700 underline-offset-2 hover:text-brand-900 hover:underline",
   muted: "text-ink-500",
   skeleton: "animate-pulse rounded-2xl bg-ink-100",
