@@ -8,6 +8,7 @@ import { formatFrequency } from "../lib/frequency";
 import { ArrowRight, BadgeCheck, CircleAlert, Clock, Users, Wallet, type LucideIcon } from "lucide-react";
 import { Avatar } from "../components/Avatar";
 import { KabanChest } from "../components/Illustration";
+import { NotificationIcon } from "../components/NotificationIcon";
 import { StatCard, type StatCardIconName, type StatCardTone } from "../components/StatCard";
 import { patchNotificationRead } from "../lib/homeQueries";
 import { statusBadgeClass, ui } from "../lib/ui";
@@ -213,12 +214,7 @@ function ActivityRow({
 }) {
   const content = (
     <div className="flex gap-3">
-      <span
-        className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
-          item.isUnread ? "bg-brand-600" : "bg-transparent"
-        }`}
-        aria-hidden
-      />
+      <NotificationIcon type={item.type} size="sm" />
       <div className="min-w-0 flex-1">
         <p className="text-sm font-bold text-ink-900">{item.title}</p>
         <p className="mt-0.5 line-clamp-1 text-sm text-ink-600">{item.body}</p>
@@ -227,6 +223,9 @@ function ActivityRow({
           <time>{formatWhen(item.createdAt)}</time>
         </p>
       </div>
+      {item.isUnread && (
+        <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full bg-brand-600" aria-label="Unread" />
+      )}
     </div>
   );
 

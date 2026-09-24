@@ -4,6 +4,7 @@ import { api } from "../api/client";
 import { Avatar } from "../components/Avatar";
 import { statusBadgeClass, ui } from "../lib/ui";
 import { StatCard } from "../components/StatCard";
+import { KabanChest } from "../components/Illustration";
 
 function formatPeso(amount: string | number): string {
   return `₱${Number(amount).toLocaleString()}`;
@@ -35,7 +36,16 @@ export function ManagerObligationsPage() {
       <h1 className={ui.pageTitle}>Owed to you</h1>
       <p className={ui.pageSubtitle}>Unsettled shortfalls across the paluwagans you manage.</p>
 
-      {isLoading && <p className={`mt-8 ${ui.muted}`}>Loading…</p>}
+      {isLoading && (
+        <div className="mt-8 space-y-4" aria-hidden>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className={`${ui.skeleton} h-28`} />
+            ))}
+          </div>
+          <div className={`${ui.skeleton} h-40`} />
+        </div>
+      )}
       {error && <p className={`mt-8 ${ui.error}`}>Failed to load obligations.</p>}
 
       {data && (
@@ -63,8 +73,9 @@ export function ManagerObligationsPage() {
           </div>
 
           {groups.length === 0 ? (
-            <div className={ui.emptyState}>
-              <p className="font-heading text-base font-medium text-ink-900">You're all square</p>
+            <div className={`${ui.emptyState} flex flex-col items-center`}>
+              <KabanChest className="w-36" />
+              <p className="font-heading mt-4 text-xl font-bold text-ink-900">You&apos;re all square</p>
               <p className="mt-1 text-sm text-ink-500">
                 No one owes you anything across the paluwagans you manage.
               </p>
@@ -77,14 +88,14 @@ export function ManagerObligationsPage() {
                     <div className="flex min-w-0 flex-wrap items-center gap-2">
                       <Link
                         to={`/groups/${g.groupId}`}
-                        className={`font-heading truncate text-base font-medium ${ui.link}`}
+                        className="font-heading truncate text-lg font-bold text-ink-900 hover:text-brand-700 hover:underline"
                       >
                         {g.groupName}
                       </Link>
                       <span className={statusBadgeClass(g.groupStatus)}>{groupStatusLabel(g.groupStatus)}</span>
                     </div>
                     <div className="text-right">
-                      <p className="text-lg font-medium tabular-nums text-danger-800">
+                      <p className="font-heading text-xl font-bold tabular-nums text-danger-700">
                         {formatPeso(g.totalOutstanding)}
                       </p>
                       <p className="text-xs text-ink-500">
@@ -93,15 +104,15 @@ export function ManagerObligationsPage() {
                     </div>
                   </div>
 
-                  <ul className="mt-4 divide-y divide-ink-50 border-t border-ink-100">
+                  <ul className="mt-4 divide-y divide-ink-100 border-t border-ink-100">
                     {g.items.map((item) => (
                       <li key={item.id} className="flex items-center gap-3 py-3">
                         <Avatar name={item.displayName} />
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium text-ink-900">{item.displayName}</p>
+                          <p className="truncate text-sm font-bold text-ink-900">{item.displayName}</p>
                           <p className="text-xs text-ink-500">Round {item.roundNumber}</p>
                         </div>
-                        <p className="text-sm font-medium tabular-nums text-ink-900">
+                        <p className="text-sm font-bold tabular-nums text-ink-900">
                           {formatPeso(item.remaining)}
                         </p>
                       </li>
