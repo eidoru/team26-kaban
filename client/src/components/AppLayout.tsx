@@ -49,7 +49,7 @@ export function AppLayout() {
         <div className={`mx-auto flex h-16 w-full min-w-0 ${ui.page} items-center justify-between gap-4 px-6`}>
           <Link
             to="/home"
-            className="inline-flex shrink-0 items-center text-xl font-bold tracking-tight text-emerald-900"
+            className="font-heading inline-flex shrink-0 items-center text-xl font-bold tracking-tight text-emerald-900"
           >
             Kaban
           </Link>

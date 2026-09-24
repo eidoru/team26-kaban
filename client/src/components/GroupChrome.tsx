@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
-import { Link } from "react-router-dom";
-import { statusBadgeClass, ui } from "../lib/ui";
+import { ui } from "../lib/ui";
 
 export type GroupPhase = "create" | "forming" | "active" | "completed";
 
@@ -10,13 +9,6 @@ const PHASES: { id: GroupPhase; label: string }[] = [
   { id: "active", label: "Active" },
   { id: "completed", label: "Completed" },
 ];
-
-const PHASE_BADGE: Record<GroupPhase, { label: string; className: string }> = {
-  create: { label: "Draft", className: ui.badgeForming },
-  forming: { label: "Forming", className: statusBadgeClass("forming") },
-  active: { label: "Active", className: statusBadgeClass("active") },
-  completed: { label: "Completed", className: statusBadgeClass("completed") },
-};
 
 function CheckMark() {
   return (
@@ -79,32 +71,19 @@ export function GroupHeader({
   phase,
   facts,
   action,
-  backTo = "/home",
-  backLabel = "Home",
 }: {
   title: string;
   phase: GroupPhase;
   facts: GroupFact[];
   action?: ReactNode;
-  backTo?: string;
-  backLabel?: string;
 }) {
-  const badge = PHASE_BADGE[phase];
-
   return (
     <div className="mb-8">
-      <Link to={backTo} className={ui.backLink}>
-        <span className={ui.backLinkArrow}>←</span>
-        {backLabel}
-      </Link>
-
       <div className="border-b border-gray-100 pb-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-3">
-              <h1 className={ui.pageTitle}>{title}</h1>
-              <span className={`${badge.className} shrink-0`}>{badge.label}</span>
-            </div>
+            {/* The phase rail below already shows the current stage, so no separate status pill here. */}
+            <h1 className={ui.pageTitle}>{title}</h1>
             <div className="mt-4">
               <GroupPhaseRail phase={phase} />
             </div>

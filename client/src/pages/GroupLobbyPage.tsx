@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, api, type GroupDetail, type GroupMember, type MemberReliability } from "../api/client";
 import { useDialog } from "../context/DialogContext";
 import { formatFrequency } from "../lib/frequency";
-import { clearGroupQueries, deferContributionSideEffects, deferStructureSideEffects, groupQueryKey, groupSupplementalQueryOptions, invalidateGroupIssues, invalidateGroupShell, isGroupNotFoundError, mergeCurrentRoundIntoGroupCache, OPTIMISTIC_MEMBER_ID, patchConfirmedContribution, patchGroupCurrentRoundContribution, patchMemberAdded, patchMemberRemoved, patchPayoutOrder, patchRecordedContribution, patchReportedContribution, applyManualTurnOrder, refreshGroupView, shuffleMemberTurnOrder, shouldRetryGroupQuery } from "../lib/groupQueries";
+import { clearGroupQueries, deferContributionSideEffects, deferStructureSideEffects, groupQueryKey, groupSupplementalQueryOptions, invalidateGroupIssues, invalidateGroupShell, isGroupNotFoundError, mergeCurrentRoundIntoGroupCache, OPTIMISTIC_MEMBER_ID, patchConfirmedContribution, patchGroupCurrentRoundContribution, patchMemberAdded, patchMemberRemoved, patchPayoutOrder, patchRecordedContribution, patchReportedContribution, patchStartDate, applyManualTurnOrder, refreshGroupView, shuffleMemberTurnOrder, shouldRetryGroupQuery } from "../lib/groupQueries";
 import { isSupabaseRealtimeConfigured } from "../lib/supabaseClient";
 import { isRealtimeFallbackNeeded, useGroupRealtime, type GroupRealtimeScope } from "../lib/useGroupRealtime";
 import { ui } from "../lib/ui";
@@ -31,6 +31,7 @@ export function GroupLobbyPage() {
   const [startDate, setStartDate] = useState("");
   const [manualOrder, setManualOrder] = useState<Record<string, number>>({});
   const [payoutDraftActive, setPayoutDraftActive] = useState(false);
+  const [activating, setActivating] = useState(false);
   const [cycleTab, setCycleTab] = useState<CycleTab>("overview");
 
   useEffect(() => {
@@ -41,7 +42,7 @@ export function GroupLobbyPage() {
 
   const { data, isPending, error } = useQuery({
     queryKey: ["group", id],
-    queryFn: () => api.getGroup(id!),
+    queryFn: ({ signal }) => api.getGroup(id!, signal),
     enabled: !!id,
     retry: shouldRetryGroupQuery,
     staleTime: 60_000,
@@ -730,33 +731,55 @@ export function GroupLobbyPage() {
       return;
     }
 
+    // The order being submitted is exactly what's already on screen (the manual/randomized
+    // draft), so lock it in visually right away rather than waiting on the round trip.
+    const previous = queryClient.getQueryData<GroupDetail>(groupQueryKey(id));
+    const orderByMembership = new Map(order.map((entry) => [entry.membershipId, entry.turnNumber]));
+    const optimisticMembers = data.members.map((member) => ({
+      ...member,
+      turnNumber: orderByMembership.get(member.id) ?? member.turnNumber,
+    }));
+    patchPayoutOrder(queryClient, id, optimisticMembers);
+
     try {
       const result = await persistPayoutOrder.mutateAsync(order);
       patchPayoutOrder(queryClient, id, result.members);
       deferStructureSideEffects(queryClient, id);
       syncManualOrderFromMembers(result.members);
+      // Only unlock once the server has actually confirmed it — flipping this before the
+      // request resolves lets "Edit order" reopen a draft while the old request is still in
+      // flight, surfacing its leftover "Locking in…" state and risking it overwriting the
+      // new edit once it finally resolves.
       setPayoutDraftActive(false);
     } catch (err) {
+      if (previous) queryClient.setQueryData(groupQueryKey(id), previous);
+      setPayoutDraftActive(true);
       setFormError(err instanceof ApiError ? err.message : "Failed to lock in payout order");
     }
   }
 
   async function handleSaveStartDate() {
     setFormError("");
-    if (!displayStartDate) {
+    if (!displayStartDate || !id) {
       setFormError("Choose a start date");
       return;
     }
+    const previous = queryClient.getQueryData<GroupDetail>(groupQueryKey(id));
+    patchStartDate(queryClient, id, displayStartDate);
     try {
       await saveStartDate.mutateAsync(displayStartDate);
       invalidateStructure();
     } catch (err) {
+      if (previous) queryClient.setQueryData(groupQueryKey(id), previous);
       setFormError(err instanceof ApiError ? err.message : "Failed to save start date");
     }
   }
 
+  // Randomizing or dragging writes real turn numbers into the cache as a *draft* before
+  // anything is persisted, so `pending.payoutOrder` alone can look satisfied too early.
+  // Only a locked-in order (draft cleared by handleLockInPayoutOrder) counts.
   const readyToActivate =
-    pending.openSlots === 0 && !pending.payoutOrder && !!displayStartDate;
+    pending.openSlots === 0 && !pending.payoutOrder && !payoutDraftActive && !!displayStartDate;
 
   const rosterFilled = group.filledCount ?? members.length;
   const rosterFillPercent =
@@ -764,6 +787,10 @@ export function GroupLobbyPage() {
 
   async function handleActivate() {
     setFormError("");
+    // activate.isPending alone would flip false as soon as the activate request settles,
+    // before the refetch below lands — the button would revert to idle while the page is
+    // still showing the stale Forming view. Keep it pending through both steps.
+    setActivating(true);
     try {
       await activate.mutateAsync(displayStartDate ? { startDate: displayStartDate } : undefined);
       await refreshGroupView(queryClient, id!);
@@ -771,6 +798,8 @@ export function GroupLobbyPage() {
       void queryClient.invalidateQueries({ queryKey: ["audit-log", id] });
     } catch (err) {
       setFormError(err instanceof ApiError ? err.message : "Failed to activate group");
+    } finally {
+      setActivating(false);
     }
   }
 
@@ -871,7 +900,7 @@ export function GroupLobbyPage() {
               groupInvitePending={groupInvite.isPending}
               lockingInPayout={persistPayoutOrder.isPending}
               saveStartDatePending={saveStartDate.isPending}
-              activatePending={activate.isPending}
+              activatePending={activating}
               deleteGroupPending={deleteGroup.isPending}
               onAddNameChange={setAddName}
               onAddContactChange={setAddContact}
