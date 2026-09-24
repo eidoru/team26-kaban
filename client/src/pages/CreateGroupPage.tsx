@@ -38,9 +38,9 @@ function formatPeso(amount: number): string {
 
 function SummaryRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-baseline justify-between gap-4 border-b border-ink-50 py-2.5 last:border-0">
+    <div className="flex items-baseline justify-between gap-4 border-b border-ink-100 py-2.5 last:border-0">
       <dt className="text-sm text-ink-500">{label}</dt>
-      <dd className="text-right text-sm font-medium text-ink-900">{value}</dd>
+      <dd className="text-right text-sm font-bold text-ink-900">{value}</dd>
     </div>
   );
 }
@@ -61,7 +61,7 @@ function FormSection({
       <div className="flex items-start gap-3">
         {step != null && (
           <span
-            className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-900 text-xs font-medium text-white"
+            className="font-heading flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-100 text-sm font-bold text-brand-800"
             aria-hidden
           >
             {step}
@@ -89,7 +89,7 @@ function RosterDots({ totalSlots }: { totalSlots: number }) {
       {Array.from({ length: dotCount }, (_, i) => (
         <span
           key={i}
-          className={`h-2.5 w-2.5 rounded-full ${i === 0 ? "bg-white" : "bg-white/25"}`}
+          className={`h-3 w-3 rounded-full ${i === 0 ? "bg-sun-300" : "bg-white/25"}`}
         />
       ))}
     </div>
@@ -262,19 +262,21 @@ export function CreateGroupPage() {
       <GroupHeader title="Create paluwagan" phase="create" facts={headerFacts} />
 
       <div className="flex flex-col gap-6 lg:flex-row lg:gap-10">
-        <aside className="space-y-4 lg:order-last lg:w-72 lg:shrink-0 lg:self-start lg:sticky lg:top-24">
-          <div className="overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-card">
-            <div className="bg-gradient-to-br from-brand-900 to-brand-800 px-6 py-6 text-white">
-              <p className="text-xs font-medium uppercase tracking-wide text-brand-200">
+        <aside className="hidden space-y-4 lg:order-last lg:block lg:w-72 lg:shrink-0 lg:self-start lg:sticky lg:top-24">
+          <div className="overflow-hidden rounded-3xl border border-ink-200 bg-white shadow-card">
+            <div className="bg-gradient-to-br from-brand-700 to-brand-800 px-6 py-6 text-white">
+              <p className="truncate text-xs font-bold uppercase tracking-wide text-brand-100">
                 {name.trim() || "New paluwagan"}
               </p>
-              <p className="mt-3 text-3xl font-semibold tracking-tight">{summary.total}</p>
-              <p className="mt-1 text-sm text-brand-100">
+              <p className="font-heading mt-3 text-3xl font-bold tracking-tight tabular-nums">{summary.total}</p>
+              <p className="mt-1 text-sm text-brand-50">
                 total pot · {summary.contribution} per member
               </p>
               <div className="mt-5">
                 <RosterDots totalSlots={slots} />
-                <p className="mt-2 text-xs text-brand-200">{summary.roster} slots claimed</p>
+                <p className="mt-2 text-xs font-semibold text-brand-100">
+                  {summary.roster} seats filled · yours is the first
+                </p>
               </div>
             </div>
             <dl className="px-6 py-2">
@@ -392,14 +394,14 @@ export function CreateGroupPage() {
             </div>
 
             {amountMode === "total" && summary.contribution !== "—" && (
-              <p className="rounded-xl bg-brand-50 px-4 py-3 text-sm text-brand-900">
-                That's <span className="font-medium">{summary.contribution}</span> per member, per
+              <p className="rounded-2xl bg-brand-50 px-4 py-3 text-sm text-brand-900">
+                That&apos;s <span className="font-bold">{summary.contribution}</span> per member, per
                 round.
                 {totalRoundedUp && (
                   <>
                     {" "}
                     Rounded up so the pot doesn't fall short: the total collected comes to{" "}
-                    <span className="font-medium">{summary.total}</span> instead of the{" "}
+                    <span className="font-bold">{summary.total}</span> instead of the{" "}
                     {formatPeso(requestedTotal)} requested.
                   </>
                 )}
@@ -489,8 +491,19 @@ export function CreateGroupPage() {
             )}
           </FormSection>
 
-          <div className="flex justify-end">
-            <button type="submit" disabled={mutation.isPending} className={ui.btnPrimary}>
+          {/* Below lg the summary panel is hidden, so this bar carries the live total next to the
+              submit button; it sits just above the mobile tab bar. */}
+          <div className="sticky bottom-24 z-30 flex items-center justify-between gap-3 rounded-3xl border border-ink-200 bg-white/95 p-3 pl-5 shadow-lift backdrop-blur md:bottom-4 lg:static lg:justify-end lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none lg:backdrop-blur-none">
+            <div className="min-w-0 lg:hidden">
+              <p className="text-xs font-bold uppercase tracking-wide text-ink-500">Total pot</p>
+              <p className="font-heading truncate text-lg font-bold leading-tight tabular-nums text-ink-900">
+                {summary.total}
+              </p>
+              <p className="truncate text-xs text-ink-500">
+                {summary.contribution} each · {summary.frequency}
+              </p>
+            </div>
+            <button type="submit" disabled={mutation.isPending} className={`${ui.btnPrimary} shrink-0`}>
               {mutation.isPending ? "Creating…" : "Create paluwagan"}
             </button>
           </div>

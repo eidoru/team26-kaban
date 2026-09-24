@@ -1,7 +1,7 @@
-import { Check, Clock, TriangleAlert, Users, Wallet, type LucideIcon } from "lucide-react";
+import { Bell, Check, Clock, TriangleAlert, Users, Wallet, type LucideIcon } from "lucide-react";
 
 export type StatCardTone = "neutral" | "success" | "warning" | "danger";
-export type StatCardIconName = "clock" | "alert" | "wallet" | "users" | "check";
+export type StatCardIconName = "clock" | "alert" | "wallet" | "users" | "check" | "bell";
 
 const ICONS: Record<StatCardIconName, LucideIcon> = {
   clock: Clock,
@@ -9,6 +9,7 @@ const ICONS: Record<StatCardIconName, LucideIcon> = {
   wallet: Wallet,
   users: Users,
   check: Check,
+  bell: Bell,
 };
 
 const iconWrap: Record<StatCardTone, string> = {
