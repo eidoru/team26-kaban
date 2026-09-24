@@ -899,8 +899,9 @@ router.get("/:id/ledger", loadGroup, requireGroupMember, async (req, res, next) 
 
 router.get("/:id/audit-log", loadGroup, requireGroupManager, async (req, res, next) => {
   try {
-    const entries = await getGroupAuditLog(req.group!.id);
-    res.json({ entries });
+    const before = typeof req.query.before === "string" && req.query.before ? req.query.before : undefined;
+    const page = await getGroupAuditLog(req.group!.id, { before });
+    res.json(page);
   } catch (err) {
     next(err);
   }

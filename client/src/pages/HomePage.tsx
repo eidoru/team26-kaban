@@ -5,7 +5,11 @@ import { api, type GroupSummary, type HomeAttentionItem, type NotificationItem }
 import { useAuth } from "../context/AuthContext";
 import { formatWhen } from "../lib/formatWhen";
 import { formatFrequency } from "../lib/frequency";
-import { displayInitials } from "../lib/initials";
+import { ArrowRight, BadgeCheck, CircleAlert, Clock, Users, Wallet, type LucideIcon } from "lucide-react";
+import { Avatar } from "../components/Avatar";
+import { KabanChest } from "../components/Illustration";
+import { NotificationIcon } from "../components/NotificationIcon";
+import { StatCard, type StatCardIconName, type StatCardTone } from "../components/StatCard";
 import { patchNotificationRead } from "../lib/homeQueries";
 import { statusBadgeClass, ui } from "../lib/ui";
 
@@ -64,30 +68,23 @@ function groupStatusDetail(group: GroupSummary): string {
   return `${group.slotCount} members · finished`;
 }
 
+function turnChipLabel(group: GroupSummary): string | null {
+  const current = group.currentRoundNumber;
+  const mine = group.myPayoutRoundNumber;
+  if (group.status !== "active" || current == null || mine == null) return null;
+  const roundsAway = mine - current;
+  if (roundsAway < 0) return null;
+  if (roundsAway === 0) return "Your turn now";
+  if (roundsAway === 1) return "You're next";
+  return `Your turn in ${roundsAway} rounds`;
+}
+
 function formingFillPercent(group: GroupSummary): number {
   if (group.slotCount <= 0) return 0;
   return Math.min(100, Math.round(((group.filledCount ?? 0) / group.slotCount) * 100));
 }
 
-function HomeMetric({
-  label,
-  value,
-  hint,
-}: {
-  label: string;
-  value: string;
-  hint?: string;
-}) {
-  return (
-    <div className="rounded-xl border border-gray-100 bg-gray-50/80 px-4 py-3">
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="mt-1 text-xl font-medium tabular-nums text-slate-900">{value}</p>
-      {hint && <p className="mt-0.5 text-xs text-slate-500">{hint}</p>}
-    </div>
-  );
-}
-
-function GroupRow({
+function GroupTile({
   group,
   onPrefetch,
   muted = false,
@@ -99,67 +96,112 @@ function GroupRow({
   const amount = `₱${Number(group.contributionAmount).toLocaleString()}`;
   const freq = formatFrequency(group.frequency, group.frequencyDays);
   const fillPercent = formingFillPercent(group);
+  const turnLabel = muted ? null : turnChipLabel(group);
 
   return (
     <Link
       to={`/groups/${group.id}`}
       onMouseEnter={() => onPrefetch(group.id)}
       onFocus={() => onPrefetch(group.id)}
-      className={`flex items-center gap-4 px-4 py-3.5 transition-colors hover:bg-slate-50 ${
-        muted ? "opacity-75" : ""
+      className={`group flex h-full flex-col gap-4 rounded-3xl border border-ink-200 bg-white p-5 shadow-card transition-all motion-safe:hover:-translate-y-0.5 hover:shadow-lift ${
+        muted ? "opacity-80" : ""
       }`}
     >
-      <span
-        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-medium text-white ${
-          muted ? "bg-slate-400" : "bg-emerald-900"
-        }`}
-        aria-hidden
-      >
-        {displayInitials(group.name)}
-      </span>
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-          <h3 className="font-heading truncate font-medium text-slate-900">{group.name}</h3>
-          {group.role === "manager" && (
-            <span className="text-xs font-medium text-emerald-700">Organizing</span>
-          )}
+      <div className="flex items-start gap-3">
+        <Avatar name={group.name} size="md" shape="tile" className={muted ? "grayscale" : ""} />
+        <div className="min-w-0 flex-1">
+          <h3 className="font-heading truncate text-lg font-bold text-ink-900">{group.name}</h3>
+          <p className="mt-0.5 truncate text-sm text-ink-500">
+            {amount} · {freq}
+          </p>
         </div>
-        <p className="mt-0.5 truncate text-sm text-slate-500">
-          {amount} · {freq} · {groupStatusDetail(group)}
-        </p>
-        {group.status === "forming" && !muted && (
-          <div className="mt-2 max-w-xs">
-            <div className="h-1 overflow-hidden rounded-full bg-gray-100">
-              <div
-                className="h-full rounded-full bg-emerald-600 transition-all"
-                style={{ width: `${fillPercent}%` }}
-              />
-            </div>
-          </div>
-        )}
+        <span className={`${statusBadgeClass(group.status)} shrink-0`}>{statusLabel(group.status)}</span>
       </div>
-      <span className={`${statusBadgeClass(group.status)} shrink-0`}>{statusLabel(group.status)}</span>
-      <span className="shrink-0 text-slate-300" aria-hidden>
-        →
-      </span>
+
+      {group.status === "forming" && !muted && (
+        <div className="h-2.5 overflow-hidden rounded-full bg-ink-100" aria-hidden>
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-brand-500 to-brand-400 transition-all"
+            style={{ width: `${fillPercent}%` }}
+          />
+        </div>
+      )}
+
+      <div className="mt-auto flex items-center justify-between gap-3 text-sm">
+        <span className="min-w-0 truncate font-semibold text-ink-600">{groupStatusDetail(group)}</span>
+        <span className="flex shrink-0 items-center gap-2">
+          {turnLabel && <span className={ui.badgeTurn}>{turnLabel}</span>}
+          {group.role === "manager" && (
+            <span className="rounded-full bg-ink-100 px-2.5 py-0.5 text-xs font-bold text-ink-600">
+              Organizing
+            </span>
+          )}
+          <ArrowRight
+            className="h-4 w-4 text-ink-400 transition-transform group-hover:translate-x-0.5"
+            aria-hidden
+          />
+        </span>
+      </div>
     </Link>
   );
 }
 
+const ATTENTION_ICON: Record<HomeAttentionItem["kind"], LucideIcon> = {
+  forming_ready: BadgeCheck,
+  forming_slots: Users,
+  confirm_payments: BadgeCheck,
+  payment_due: Clock,
+  owed_outstanding: Wallet,
+};
+
 function AttentionItem({ item }: { item: HomeAttentionItem }) {
+  const Icon = ATTENTION_ICON[item.kind] ?? CircleAlert;
+  const high = item.priority === "high";
   return (
     <Link
       to={item.link}
-      className="flex items-start justify-between gap-3 border-l-2 border-amber-400 py-2 pl-4 pr-1 transition-colors hover:bg-amber-50/40"
+      className={`group flex h-full items-start gap-3 rounded-3xl border-2 p-4 transition-colors ${
+        high
+          ? "border-danger-200 bg-danger-50 hover:border-danger-300"
+          : "border-sun-200 bg-sun-50 hover:border-sun-300"
+      }`}
     >
-      <div className="min-w-0">
-        <p className="text-sm font-medium text-slate-900">{item.title}</p>
-        <p className="mt-0.5 text-sm text-slate-600">{item.body}</p>
-      </div>
-      <span className="shrink-0 pt-0.5 text-slate-400" aria-hidden>
-        →
+      <span
+        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl ${
+          high ? "bg-white text-danger-600" : "bg-white text-sun-700"
+        }`}
+        aria-hidden
+      >
+        <Icon className="h-[18px] w-[18px]" />
       </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-bold text-ink-900">{item.title}</p>
+        <p className="mt-0.5 text-sm text-ink-700">{item.body}</p>
+      </div>
+      <ArrowRight
+        className="mt-1 h-4 w-4 shrink-0 text-ink-500 transition-transform group-hover:translate-x-0.5"
+        aria-hidden
+      />
     </Link>
+  );
+}
+
+function GroupGridSkeleton() {
+  return (
+    <div className="grid gap-4 sm:grid-cols-2" aria-hidden>
+      {[0, 1].map((i) => (
+        <div key={i} className="rounded-3xl border border-ink-200 bg-white p-5">
+          <div className="flex items-center gap-3">
+            <div className={`${ui.skeleton} h-10 w-10`} />
+            <div className="flex-1 space-y-2">
+              <div className={`${ui.skeleton} h-4 w-2/3`} />
+              <div className={`${ui.skeleton} h-3 w-1/3`} />
+            </div>
+          </div>
+          <div className={`${ui.skeleton} mt-5 h-3 w-1/2`} />
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -172,25 +214,23 @@ function ActivityRow({
 }) {
   const content = (
     <div className="flex gap-3">
-      <span
-        className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
-          item.isUnread ? "bg-emerald-600" : "bg-transparent"
-        }`}
-        aria-hidden
-      />
+      <NotificationIcon type={item.type} size="sm" />
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium text-slate-900">{item.title}</p>
-        <p className="mt-0.5 line-clamp-1 text-sm text-slate-600">{item.body}</p>
-        <p className="mt-1 text-xs text-slate-400">
+        <p className="text-sm font-bold text-ink-900">{item.title}</p>
+        <p className="mt-0.5 line-clamp-1 text-sm text-ink-600">{item.body}</p>
+        <p className="mt-1 text-xs text-ink-500">
           {item.groupName && <span>{item.groupName} · </span>}
           <time>{formatWhen(item.createdAt)}</time>
         </p>
       </div>
+      {item.isUnread && (
+        <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full bg-brand-600" aria-label="Unread" />
+      )}
     </div>
   );
 
   const className =
-    "block w-full rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-slate-50";
+    "block w-full rounded-2xl px-3 py-2.5 text-left transition-colors hover:bg-ink-50";
 
   if (item.link) {
     return (
@@ -265,13 +305,15 @@ export function HomePage() {
 
   const metrics = [
     stats && stats.paymentsDue > 0
-      ? { label: "Due now", value: String(stats.paymentsDue), hint: "payments this cycle" }
+      ? { label: "Due now", value: String(stats.paymentsDue), hint: "payments this cycle", icon: "clock", tone: "warning" }
       : null,
     stats && stats.pendingConfirmations > 0
       ? {
           label: "To confirm",
           value: String(stats.pendingConfirmations),
           hint: "awaiting your review",
+          icon: "check",
+          tone: "success",
         }
       : null,
     stats && stats.totalOwed != null && Number(stats.totalOwed) > 0
@@ -279,12 +321,20 @@ export function HomePage() {
           label: "Owed to you",
           value: `₱${Number(stats.totalOwed).toLocaleString()}`,
           hint: "outstanding obligations",
+          icon: "wallet",
+          tone: "danger",
         }
       : null,
     stats && stats.unreadNotifications > 0
-      ? { label: "Unread", value: String(stats.unreadNotifications), hint: "notifications" }
+      ? { label: "Unread", value: String(stats.unreadNotifications), hint: "notifications", icon: "bell", tone: "neutral" }
       : null,
-  ].filter(Boolean) as { label: string; value: string; hint: string }[];
+  ].filter(Boolean) as {
+    label: string;
+    value: string;
+    hint: string;
+    icon: StatCardIconName;
+    tone: StatCardTone;
+  }[];
 
   const subtitle =
     ongoing.length === 0
@@ -294,13 +344,13 @@ export function HomePage() {
         : `${ongoing.length} ongoing paluwagan${ongoing.length === 1 ? "" : "s"}`;
 
   return (
-    <div className="space-y-8">
-      <header className="flex flex-wrap items-start justify-between gap-4">
+    <div className="space-y-10">
+      <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className={ui.pageTitle}>Hello, {firstName}</h1>
+          <h1 className={ui.pageTitle}>Kumusta, {firstName}!</h1>
           <p className={ui.pageSubtitle}>{subtitle}</p>
         </div>
-        <Link to="/groups/new" className={`${ui.btnPrimarySm} shrink-0`}>
+        <Link to="/groups/new" className={`${ui.btnPrimary} shrink-0`}>
           New paluwagan
         </Link>
       </header>
@@ -314,37 +364,38 @@ export function HomePage() {
         <p className={ui.error}>Some dashboard details could not be loaded.</p>
       )}
 
-      {groupsLoading && groups.length === 0 && <p className={ui.muted}>Loading your groups…</p>}
+      {groupsLoading && groups.length === 0 && <GroupGridSkeleton />}
 
       {!groupsLoading && !groupsError && groups.length === 0 && (
-        <div className={ui.emptyState}>
-          <p className="text-lg font-medium text-slate-900">No paluwagans yet</p>
-          <p className={`mt-2 ${ui.muted}`}>
-            Start one for your group or join with an invite link from your organizer.
+        <div className={`${ui.emptyState} flex flex-col items-center`}>
+          <KabanChest className="w-40" />
+          <p className="font-heading mt-4 text-xl font-bold text-ink-900">Your kaban is empty</p>
+          <p className={`mt-2 max-w-sm ${ui.muted}`}>
+            Start a paluwagan with your group, or join one with an invite link from your organizer.
           </p>
-          <Link to="/groups/new" className={`mt-5 inline-block ${ui.btnPrimarySm}`}>
+          <Link to="/groups/new" className={`mt-6 ${ui.btnPrimary}`}>
             Create your first paluwagan
           </Link>
         </div>
       )}
 
       {groups.length > 0 && metrics.length > 0 && (
-        <div className={`${ui.metricGrid2} sm:grid-cols-2 lg:grid-cols-4`}>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {metrics.map((metric) => (
-            <HomeMetric key={metric.label} {...metric} />
+            <StatCard key={metric.label} {...metric} />
           ))}
         </div>
       )}
 
       {!groupsLoading && !groupsError && overviewData && overviewData.attention.length > 0 && (
-        <section className={ui.sectionCard}>
+        <section>
           <SectionHeader
             title="Needs action"
             subtitle={`${overviewData.attention.length} item${overviewData.attention.length === 1 ? "" : "s"}`}
           />
-          <ul className="divide-y divide-gray-100">
+          <ul className="grid gap-3 md:grid-cols-2">
             {overviewData.attention.map((item) => (
-              <li key={item.id} className="first:pt-0 last:pb-0">
+              <li key={item.id}>
                 <AttentionItem item={item} />
               </li>
             ))}
@@ -353,14 +404,12 @@ export function HomePage() {
       )}
 
       {ongoing.length > 0 && (
-        <section className={`${ui.sectionCard} p-0`}>
-          <div className="border-b border-gray-100 px-6 py-4">
-            <SectionHeader title="Your groups" subtitle={`${ongoing.length} active or forming`} />
-          </div>
-          <ul className="divide-y divide-gray-100">
+        <section>
+          <SectionHeader title="Your groups" subtitle={`${ongoing.length} active or forming`} />
+          <ul className="grid gap-4 sm:grid-cols-2">
             {ongoing.map((group) => (
               <li key={group.id}>
-                <GroupRow group={group} onPrefetch={prefetchGroup} />
+                <GroupTile group={group} onPrefetch={prefetchGroup} />
               </li>
             ))}
           </ul>
@@ -382,11 +431,15 @@ export function HomePage() {
           }
         />
         {notificationsLoading ? (
-          <p className={`${ui.muted} text-sm`}>Loading activity…</p>
+          <div className="space-y-3" aria-hidden>
+            {[0, 1, 2].map((i) => (
+              <div key={i} className={`${ui.skeleton} h-12`} />
+            ))}
+          </div>
         ) : recentActivity.length === 0 ? (
           <p className={`${ui.muted} text-sm`}>No updates yet.</p>
         ) : (
-          <ul className="max-h-64 divide-y divide-gray-50 overflow-y-auto">
+          <ul className="-mx-3 divide-y divide-ink-100">
             {recentActivity.map((item) => (
               <li key={item.id}>
                 <ActivityRow
@@ -400,11 +453,12 @@ export function HomePage() {
       </section>
 
       {past.length > 0 && (
-        <section className={`${ui.sectionCard} p-0`}>
+        <section>
           <button
             type="button"
             onClick={() => setPastExpanded((v) => !v)}
-            className="flex w-full items-center justify-between px-6 py-4 text-left"
+            aria-expanded={past.length <= 2 || pastExpanded}
+            className="mb-4 flex w-full items-center justify-between gap-3 text-left"
           >
             <div>
               <h2 className={ui.sectionHeader}>
@@ -417,10 +471,10 @@ export function HomePage() {
             )}
           </button>
           {(past.length <= 2 || pastExpanded) && (
-            <ul className="divide-y divide-gray-100 border-t border-gray-100">
+            <ul className="grid gap-4 sm:grid-cols-2">
               {past.map((group) => (
                 <li key={group.id}>
-                  <GroupRow group={group} onPrefetch={prefetchGroup} muted />
+                  <GroupTile group={group} onPrefetch={prefetchGroup} muted />
                 </li>
               ))}
             </ul>

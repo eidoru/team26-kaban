@@ -22,7 +22,7 @@ export function ConfirmDialog({
 }) {
   const confirmClass =
     variant === "danger"
-      ? "rounded-xl bg-red-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-all hover:bg-red-700 disabled:opacity-60"
+      ? "inline-flex items-center justify-center rounded-full bg-danger-600 px-6 py-2.5 text-sm font-bold text-white shadow-[0_3px_0_var(--color-danger-800)] transition-all hover:bg-danger-700 active:translate-y-[2px] active:shadow-none disabled:opacity-50"
       : ui.btnPrimary;
 
   return (

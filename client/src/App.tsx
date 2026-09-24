@@ -4,6 +4,7 @@ import { AppLayout } from "./components/AppLayout";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { GuestRoute } from "./components/GuestRoute";
 import { LandingPage } from "./pages/LandingPage";
+import { Splash } from "./components/Splash";
 
 const HomePage = lazy(() => import("./pages/HomePage").then((m) => ({ default: m.HomePage })));
 const LoginPage = lazy(() => import("./pages/LoginPage").then((m) => ({ default: m.LoginPage })));
@@ -28,14 +29,10 @@ const ClaimLandingPage = lazy(() =>
   import("./pages/InvitePages").then((m) => ({ default: m.ClaimLandingPage })),
 );
 
-function PageFallback() {
-  return <p className="text-slate-500">Loading…</p>;
-}
-
 export function App() {
   return (
     <BrowserRouter>
-      <Suspense fallback={<PageFallback />}>
+      <Suspense fallback={<Splash />}>
         <Routes>
           <Route element={<GuestRoute />}>
             <Route path="/" element={<LandingPage />} />

@@ -1,4 +1,4 @@
-import { Group, GroupStatus, Membership, Prisma } from "@prisma/client";
+import { Group, GroupStatus, Membership, Prisma, RoundStatus } from "@prisma/client";
 import { createNotification, writeAuditLog } from "../lib/audit.js";
 import { resolveAppOrigin } from "../lib/origin.js";
 import { prisma } from "../lib/prisma.js";
@@ -172,6 +172,29 @@ export async function listUserGroups(userId: string) {
     .map((m) => m.groupId);
   const completedStats = await getCompletedGroupCardStats(completedIds);
 
+  // For active groups, the current round and the round that pays out to the viewer, so the
+  // home card can say how many rounds until their turn.
+  const activeMemberships = memberships.filter((m) => m.group.status === GroupStatus.active);
+  const activeRounds =
+    activeMemberships.length === 0
+      ? []
+      : await prisma.round.findMany({
+          where: {
+            groupId: { in: activeMemberships.map((m) => m.groupId) },
+            OR: [
+              { status: RoundStatus.current },
+              { recipientMembershipId: { in: activeMemberships.map((m) => m.id) } },
+            ],
+          },
+          select: { groupId: true, number: true, status: true, recipientMembershipId: true },
+        });
+  const currentRoundByGroup = new Map<string, number>();
+  const payoutRoundByMembership = new Map<string, number>();
+  for (const round of activeRounds) {
+    if (round.status === RoundStatus.current) currentRoundByGroup.set(round.groupId, round.number);
+    payoutRoundByMembership.set(round.recipientMembershipId, round.number);
+  }
+
   return memberships.map((m) => {
     const base = {
       ...serializeGroup(
@@ -181,6 +204,13 @@ export async function listUserGroups(userId: string) {
       ),
       membershipId: m.id,
     };
+    if (m.group.status === GroupStatus.active) {
+      return {
+        ...base,
+        currentRoundNumber: currentRoundByGroup.get(m.groupId) ?? null,
+        myPayoutRoundNumber: payoutRoundByMembership.get(m.id) ?? null,
+      };
+    }
     if (m.group.status !== GroupStatus.completed) return base;
     const stats = completedStats.get(m.groupId);
     if (!stats) return base;

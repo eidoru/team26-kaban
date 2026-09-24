@@ -12,7 +12,9 @@ import { useAuth } from "../context/AuthContext";
 import { invalidateHomeLists } from "../lib/homeQueries";
 import { formatFrequency } from "../lib/frequency";
 import { formatShortfallInterestRate } from "../lib/shortfallInterest";
-import { displayInitials } from "../lib/initials";
+import { Avatar } from "../components/Avatar";
+import { AuthShell } from "../components/AuthShell";
+import { KabanChest } from "../components/Illustration";
 import { statusBadgeClass, ui } from "../lib/ui";
 
 function statusLabel(status: GroupSummary["status"]) {
@@ -48,26 +50,17 @@ function InviteShell({
   children: ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-emerald-50/80 to-slate-50 px-4 py-10">
-      <div className="mx-auto w-full max-w-lg">
-        <div className="mb-8 text-center">
-          <Link to="/" className="font-heading text-2xl font-bold tracking-tight text-emerald-900">
-            Kaban
-          </Link>
-          <h1 className={`mt-6 ${ui.pageTitle}`}>{title}</h1>
-          <p className={`mt-2 text-base ${ui.muted}`}>{subtitle}</p>
-        </div>
-        {children}
-      </div>
-    </div>
+    <AuthShell title={title} subtitle={subtitle} width="lg">
+      {children}
+    </AuthShell>
   );
 }
 
 function DetailRow({ label, value }: { label: string; value: ReactNode }) {
   return (
-    <div className="flex items-start justify-between gap-4 py-2.5 text-sm">
-      <dt className="shrink-0 text-slate-500">{label}</dt>
-      <dd className="text-right font-medium text-slate-900">{value}</dd>
+    <div className="rounded-2xl bg-ink-50 px-4 py-3">
+      <dt className="text-xs font-bold uppercase tracking-wide text-ink-500">{label}</dt>
+      <dd className="mt-0.5 text-sm font-bold text-ink-900 tabular-nums">{value}</dd>
     </div>
   );
 }
@@ -80,29 +73,33 @@ function GroupInviteDetails({ data }: { data: InvitePreview }) {
   const startLabel = formatInviteDate(group.startDate);
   const filled = group.filledCount ?? 0;
   const openSlots = group.openSlots ?? Math.max(0, group.slotCount - filled);
+  const stack = members.slice(0, 5);
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-card">
-      <div className="border-b border-gray-100 bg-slate-50/80 px-5 py-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="truncate text-lg font-medium text-slate-900">{group.name}</p>
-            <p className="mt-0.5 text-sm text-slate-600">
-              Organized by <span className="font-medium text-slate-800">{manager.displayName}</span>
-            </p>
-          </div>
-          <span className={`${statusBadgeClass(group.status)} shrink-0`}>
-            {statusLabel(group.status)}
-          </span>
+    <div className="overflow-hidden rounded-3xl border border-ink-200 bg-white shadow-card">
+      <div className="flex items-start gap-3 p-5">
+        <Avatar name={group.name} size="md" shape="tile" />
+        <div className="min-w-0 flex-1">
+          <p className="font-heading truncate text-xl font-bold text-ink-900">{group.name}</p>
+          <p className="mt-0.5 text-sm text-ink-600">
+            Organized by <span className="font-bold text-ink-800">{manager.displayName}</span>
+          </p>
         </div>
+        <span className={`${statusBadgeClass(group.status)} shrink-0`}>{statusLabel(group.status)}</span>
       </div>
 
-      <dl className="divide-y divide-gray-50 px-5">
+      <div className="mx-5 rounded-2xl bg-brand-700 px-5 py-4 text-white">
+        <p className="text-xs font-bold uppercase tracking-wide text-brand-100">Each round&apos;s pot</p>
+        <p className="font-heading mt-1 text-3xl font-bold tabular-nums">₱{potAmount.toLocaleString()}</p>
+        <p className="mt-1 text-sm text-brand-50">
+          {amount} per member · {freq}
+        </p>
+      </div>
+
+      <dl className="grid grid-cols-2 gap-2 p-5">
         <DetailRow label="Contribution" value={amount} />
         <DetailRow label="Schedule" value={freq} />
-        <DetailRow label="Roster" value={`${filled} of ${group.slotCount} joined`} />
-        {startLabel && <DetailRow label="Start date" value={startLabel} />}
-        <DetailRow label="Round pot" value={`₱${potAmount.toLocaleString()}`} />
+        {startLabel && <DetailRow label="Starts" value={startLabel} />}
         <DetailRow
           label="Shortfall interest"
           value={formatShortfallInterestRate(
@@ -113,60 +110,66 @@ function GroupInviteDetails({ data }: { data: InvitePreview }) {
         />
       </dl>
 
-      {group.status === "forming" && (
-        <div className="border-t border-gray-100 px-5 py-4">
-          <div className="mb-1.5 flex items-center justify-between text-xs text-slate-500">
-            <span>Roster progress</span>
-            <span>
-              {openSlots > 0
-                ? `${openSlots} seat${openSlots === 1 ? "" : "s"} open`
-                : "Roster full"}
-            </span>
+      <div className="border-t border-ink-100 px-5 py-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            {stack.length > 0 && (
+              <div className="flex">
+                {stack.map((member, index) => (
+                  <Avatar
+                    key={index}
+                    name={member.displayName}
+                    placeholder={member.isPlaceholder}
+                    className={`ring-2 ring-white ${index > 0 ? "-ml-2" : ""}`}
+                  />
+                ))}
+              </div>
+            )}
+            <p className="text-sm font-bold text-ink-900">
+              {filled} of {group.slotCount} joined
+            </p>
           </div>
-          <div className="h-1.5 overflow-hidden rounded-full bg-gray-100">
+          {group.status === "forming" && (
+            <span className="text-xs font-semibold text-ink-500">
+              {openSlots > 0 ? `${openSlots} seat${openSlots === 1 ? "" : "s"} open` : "Roster full"}
+            </span>
+          )}
+        </div>
+        {group.status === "forming" && (
+          <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-ink-100">
             <div
-              className="h-full rounded-full bg-emerald-600 transition-all"
+              className="h-full rounded-full bg-gradient-to-r from-brand-500 to-brand-400 transition-all"
               style={{ width: `${rosterFillPercent(group)}%` }}
             />
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {members.length > 0 && (
-        <div className="border-t border-gray-100 px-5 py-4">
-          <p className="mb-3 text-xs font-medium uppercase tracking-wide text-slate-500">Members</p>
-          <ul className="space-y-2">
+        <div className="border-t border-ink-100 px-5 py-4">
+          <p className="mb-3 text-xs font-bold uppercase tracking-wide text-ink-500">Who&apos;s in</p>
+          <ul className="space-y-2.5">
             {members.map((member, index) => (
               <li key={index} className="flex items-center gap-3">
-                <span className={ui.avatarInitialsSm} aria-hidden>
-                  {displayInitials(member.displayName)}
-                </span>
+                <Avatar name={member.displayName} placeholder={member.isPlaceholder} />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-slate-900">
-                    {member.displayName}
-                    {member.isPlaceholder && (
-                      <span className="ml-1.5 font-normal text-slate-400">(placeholder)</span>
-                    )}
-                  </p>
+                  <p className="truncate text-sm font-bold text-ink-900">{member.displayName}</p>
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
                   {member.turnNumber != null && (
-                    <span className="rounded-lg bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                    <span className="rounded-full bg-ink-100 px-2.5 py-0.5 text-xs font-bold text-ink-600">
                       Turn {member.turnNumber}
                     </span>
                   )}
-                  {member.isManager && (
-                    <span className="rounded-full border border-emerald-100 bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700">
-                      Manager
-                    </span>
-                  )}
+                  {member.isManager && <span className={ui.badgeActive}>Manager</span>}
                 </div>
               </li>
             ))}
-            {group.status === "forming" && openSlots > 0 &&
+            {group.status === "forming" &&
+              openSlots > 0 &&
               Array.from({ length: Math.min(openSlots, 3) }).map((_, index) => (
-                <li key={`open-${index}`} className="flex items-center gap-3 text-sm text-slate-400">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-dashed border-gray-200 bg-slate-50 text-xs">
+                <li key={`open-${index}`} className="flex items-center gap-3 text-sm font-semibold text-ink-500">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-dashed border-ink-300 text-xs">
                     ?
                   </span>
                   Open seat
@@ -184,23 +187,24 @@ function ClaimSeatCallout({ data }: { data: InvitePreview }) {
   if (!placeholder) return null;
 
   return (
-    <div className="mt-4 rounded-xl border border-emerald-100 bg-emerald-50/60 px-4 py-4">
-      <p className="text-xs font-medium uppercase tracking-wide text-emerald-800/70">Your seat</p>
-      <p className="mt-1 text-lg font-medium text-slate-900">{placeholder.displayName}</p>
-      <div className="mt-2 space-y-1 text-sm text-slate-600">
-        {placeholder.turnNumber != null && (
-          <p>
-            Payout turn <span className="font-medium text-slate-900">#{placeholder.turnNumber}</span>
-          </p>
-        )}
-        {placeholder.contact && (
-          <p>
-            Contact on file: <span className="text-slate-800">{placeholder.contact}</span>
-          </p>
-        )}
-        <p className="text-slate-500">
-          Sign in with your Kaban account to link this seat to your profile.
-        </p>
+    <div className="mb-4 flex items-start gap-4 rounded-3xl border-2 border-sun-200 bg-sun-100 p-5">
+      <Avatar name={placeholder.displayName} size="md" className="ring-2 ring-white" />
+      <div className="min-w-0">
+        <p className="text-xs font-bold uppercase tracking-wide text-sun-800">Your seat</p>
+        <p className="font-heading mt-0.5 text-xl font-bold text-ink-900">{placeholder.displayName}</p>
+        <div className="mt-2 space-y-1 text-sm text-ink-700">
+          {placeholder.turnNumber != null && (
+            <p>
+              Payout turn <span className="font-bold text-ink-900">#{placeholder.turnNumber}</span>
+            </p>
+          )}
+          {placeholder.contact && (
+            <p>
+              Contact on file: <span className="font-semibold text-ink-900">{placeholder.contact}</span>
+            </p>
+          )}
+          <p>Sign in with your Kaban account to link this seat to your profile.</p>
+        </div>
       </div>
     </div>
   );
@@ -210,8 +214,15 @@ function InviteMeta({ expiresAt }: { expiresAt: string | null }) {
   const expiresLabel = formatInviteDate(expiresAt);
   if (!expiresLabel) return null;
 
+  return <p className="mt-4 text-center text-xs font-semibold text-ink-500">This link expires {expiresLabel}</p>;
+}
+
+function InviteLoading({ label }: { label: string }) {
   return (
-    <p className="mt-4 text-center text-xs text-slate-400">This link expires {expiresLabel}</p>
+    <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-cream" role="status">
+      <KabanChest className="w-28 animate-pulse" />
+      <p className="text-sm font-semibold text-ink-500">{label}</p>
+    </div>
   );
 }
 
@@ -249,7 +260,7 @@ function InviteActions({
           <Link to="/register" className={ui.btnSecondaryFull}>
             {registerLabel}
           </Link>
-          <p className="pt-1 text-center text-xs text-slate-500">
+          <p className="pt-1 text-center text-xs text-ink-500">
             You&apos;ll return here after signing in to complete joining.
           </p>
         </div>
@@ -257,8 +268,9 @@ function InviteActions({
 
       {canJoin && user && (
         <div className="space-y-3">
-          <p className="text-center text-sm text-slate-600">
-            Signed in as <span className="font-medium text-slate-900">{user.displayName}</span>
+          <p className="flex items-center justify-center gap-2 text-sm text-ink-600">
+            <Avatar name={user.displayName} />
+            Signed in as <span className="font-bold text-ink-900">{user.displayName}</span>
           </p>
           <button
             type="button"
@@ -332,11 +344,7 @@ export function InviteLandingPage() {
   }, [token]);
 
   if (isLoading || authLoading) {
-    return (
-      <div className={`flex min-h-screen items-center justify-center ${ui.muted}`}>
-        Loading invitation…
-      </div>
-    );
+    return <InviteLoading label="Loading invitation…" />;
   }
 
   if (loadError || !data) {
@@ -406,11 +414,7 @@ export function ClaimLandingPage() {
   }, [token]);
 
   if (isLoading || authLoading) {
-    return (
-      <div className={`flex min-h-screen items-center justify-center ${ui.muted}`}>
-        Loading claim link…
-      </div>
-    );
+    return <InviteLoading label="Loading claim link…" />;
   }
 
   if (loadError || !data) {

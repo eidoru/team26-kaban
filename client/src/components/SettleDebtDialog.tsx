@@ -49,20 +49,28 @@ export function SettleDebtDialog({
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label htmlFor="settle-amount" className={ui.label}>
-            Amount (₱)
+            Amount
           </label>
-          <input
-            id="settle-amount"
-            type="text"
-            inputMode="decimal"
-            value={amount}
-            onChange={(e) => {
-              setAmount(e.target.value);
-              setError(null);
-            }}
-            placeholder="0.00"
-            className={ui.input}
-          />
+          <div className="relative">
+            <span
+              aria-hidden
+              className="pointer-events-none absolute inset-y-0 left-4 flex items-center text-sm font-bold text-ink-500"
+            >
+              ₱
+            </span>
+            <input
+              id="settle-amount"
+              type="text"
+              inputMode="decimal"
+              value={amount}
+              onChange={(e) => {
+                setAmount(e.target.value);
+                setError(null);
+              }}
+              placeholder="0.00"
+              className={`${ui.input.replace("px-4", "pl-9 pr-4")} tabular-nums`}
+            />
+          </div>
         </div>
         <div>
           <label htmlFor="settle-note" className={ui.label}>
@@ -77,7 +85,11 @@ export function SettleDebtDialog({
             className={ui.input}
           />
         </div>
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && (
+          <p className={ui.error} role="alert">
+            {error}
+          </p>
+        )}
         <div className="flex flex-wrap justify-end gap-3">
           <button type="button" onClick={onCancel} className={ui.btnSecondary}>
             {cancelLabel}
