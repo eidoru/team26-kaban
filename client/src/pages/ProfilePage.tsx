@@ -476,7 +476,7 @@ export function ProfilePage() {
         <section>
           <div className="mb-4">
             <h2 className={ui.sectionHeading}>Developer</h2>
-            <p className={`mt-1 text-sm ${ui.muted}`}>Testing aids. Only available on development builds.</p>
+            <p className={`mt-1 text-sm ${ui.muted}`}>Testing aids. Only available on builds with demo tools enabled.</p>
           </div>
           <div className={`${ui.sectionCard} space-y-2`}>
             <ToggleSwitch

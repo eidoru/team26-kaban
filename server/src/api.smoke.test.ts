@@ -102,6 +102,18 @@ describe("Groups advance-round environment gate", () => {
     vi.unstubAllEnvs();
   });
 
+  it("is reachable on Vercel production when ALLOW_DEMO_TOOLS=true", async () => {
+    vi.stubEnv("VERCEL_ENV", "production");
+    vi.stubEnv("ALLOW_DEMO_TOOLS", "true");
+
+    const res = await request(app).post(
+      "/api/v1/groups/00000000-0000-0000-0000-000000000001/advance-round",
+    );
+
+    // Past the environment gate; the auth check is what rejects this anonymous request.
+    expect(res.status).toBe(401);
+  });
+
   it("returns 404 on Vercel production", async () => {
     vi.stubEnv("VERCEL_ENV", "production");
 

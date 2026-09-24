@@ -93,5 +93,18 @@ export function requireNonProductionDeploy(_req: Request, res: Response, next: N
   next();
 }
 
+/**
+ * Organizer demo tools (advance round). Off on Vercel production unless ALLOW_DEMO_TOOLS=true
+ * opts in; only for the authenticated manager routes, never the unauthenticated testing endpoints.
+ */
+export function requireDemoTools(_req: Request, res: Response, next: NextFunction) {
+  if (process.env.VERCEL_ENV === "production" && process.env.ALLOW_DEMO_TOOLS !== "true") {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+
+  next();
+}
+
 /** @deprecated Use requireNonProductionDeploy */
 export const requireCronTesting = requireNonProductionDeploy;
