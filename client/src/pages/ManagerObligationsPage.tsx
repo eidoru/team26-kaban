@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
-import { displayInitials } from "../lib/initials";
+import { Avatar } from "../components/Avatar";
 import { statusBadgeClass, ui } from "../lib/ui";
 import { StatCard } from "../components/StatCard";
 
@@ -64,8 +64,8 @@ export function ManagerObligationsPage() {
 
           {groups.length === 0 ? (
             <div className={ui.emptyState}>
-              <p className="font-heading text-base font-medium text-slate-900">You're all square</p>
-              <p className="mt-1 text-sm text-slate-500">
+              <p className="font-heading text-base font-medium text-ink-900">You're all square</p>
+              <p className="mt-1 text-sm text-ink-500">
                 No one owes you anything across the paluwagans you manage.
               </p>
             </div>
@@ -84,26 +84,24 @@ export function ManagerObligationsPage() {
                       <span className={statusBadgeClass(g.groupStatus)}>{groupStatusLabel(g.groupStatus)}</span>
                     </div>
                     <div className="text-right">
-                      <p className="text-lg font-medium tabular-nums text-red-800">
+                      <p className="text-lg font-medium tabular-nums text-danger-800">
                         {formatPeso(g.totalOutstanding)}
                       </p>
-                      <p className="text-xs text-slate-500">
+                      <p className="text-xs text-ink-500">
                         {g.count} obligation{g.count === 1 ? "" : "s"}
                       </p>
                     </div>
                   </div>
 
-                  <ul className="mt-4 divide-y divide-gray-50 border-t border-gray-100">
+                  <ul className="mt-4 divide-y divide-ink-50 border-t border-ink-100">
                     {g.items.map((item) => (
                       <li key={item.id} className="flex items-center gap-3 py-3">
-                        <span className={ui.avatarInitialsSm} aria-hidden>
-                          {displayInitials(item.displayName)}
-                        </span>
+                        <Avatar name={item.displayName} />
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium text-slate-900">{item.displayName}</p>
-                          <p className="text-xs text-slate-500">Round {item.roundNumber}</p>
+                          <p className="truncate text-sm font-medium text-ink-900">{item.displayName}</p>
+                          <p className="text-xs text-ink-500">Round {item.roundNumber}</p>
                         </div>
-                        <p className="text-sm font-medium tabular-nums text-slate-900">
+                        <p className="text-sm font-medium tabular-nums text-ink-900">
                           {formatPeso(item.remaining)}
                         </p>
                       </li>

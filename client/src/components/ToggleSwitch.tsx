@@ -14,7 +14,7 @@ export function ToggleSwitch({
 }) {
   return (
     <label htmlFor={id} className="flex cursor-pointer items-center justify-between gap-4">
-      <span className="text-sm font-normal text-slate-700">{label}</span>
+      <span className="text-sm font-normal text-ink-700">{label}</span>
       <button
         id={id}
         type="button"

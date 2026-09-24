@@ -1,9 +1,89 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Figtree", ui-sans-serif, system-ui, sans-serif;
-  --font-heading: "Funnel Sans", ui-sans-serif, system-ui, sans-serif;
-  --shadow-card: 0 4px 20px -2px rgba(0, 0, 0, 0.05), 0 2px 8px -2px rgba(0, 0, 0, 0.03);
+  /* Nunito and Bricolage Grotesque both include the ₱ glyph (U+20B1). */
+  --font-sans: "Nunito", ui-sans-serif, system-ui, sans-serif;
+  --font-heading: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+
+  --color-cream: #fff9f0;
+
+  --color-brand-50: #eefbf4;
+  --color-brand-100: #d5f5e3;
+  --color-brand-200: #aeeacb;
+  --color-brand-300: #78d8ab;
+  --color-brand-400: #3fbf86;
+  --color-brand-500: #1ca36b;
+  --color-brand-600: #0e8456;
+  --color-brand-700: #0b6a47;
+  --color-brand-800: #0c543a;
+  --color-brand-900: #0b4531;
+  --color-brand-950: #04271b;
+
+  --color-sun-50: #fff9eb;
+  --color-sun-100: #ffefc6;
+  --color-sun-200: #ffdd88;
+  --color-sun-300: #ffc84a;
+  --color-sun-400: #ffb420;
+  --color-sun-500: #f99307;
+  --color-sun-600: #dd6d02;
+  --color-sun-700: #b74b06;
+  --color-sun-800: #94390c;
+  --color-sun-900: #7a300d;
+  --color-sun-950: #461602;
+
+  /* Warm neutrals. 400 and lighter are for borders/icons only, never text (fails AA). */
+  --color-ink-50: #faf7f2;
+  --color-ink-100: #f2ede4;
+  --color-ink-200: #e4dccf;
+  --color-ink-300: #cec3b2;
+  --color-ink-400: #a89b88;
+  --color-ink-500: #76695a;
+  --color-ink-600: #62574a;
+  --color-ink-700: #4b4238;
+  --color-ink-800: #342d26;
+  --color-ink-900: #231e19;
+  --color-ink-950: #15110d;
+
+  --color-warn-50: #fff7ed;
+  --color-warn-100: #ffedd5;
+  --color-warn-200: #fed7aa;
+  --color-warn-300: #fdba74;
+  --color-warn-400: #fb923c;
+  --color-warn-500: #f97316;
+  --color-warn-600: #ea580c;
+  --color-warn-700: #c2410c;
+  --color-warn-800: #9a3412;
+  --color-warn-900: #7c2d12;
+  --color-warn-950: #431407;
+
+  --color-danger-50: #fef2f2;
+  --color-danger-100: #fee2e2;
+  --color-danger-200: #fecaca;
+  --color-danger-300: #fca5a5;
+  --color-danger-400: #f87171;
+  --color-danger-500: #ef4444;
+  --color-danger-600: #dc2626;
+  --color-danger-700: #b91c1c;
+  --color-danger-800: #991b1b;
+  --color-danger-900: #7f1d1d;
+  --color-danger-950: #450a0a;
+
+  --shadow-card: 0 1px 2px rgb(35 30 25 / 0.04), 0 8px 24px -8px rgb(35 30 25 / 0.1);
+  --shadow-lift: 0 2px 4px rgb(35 30 25 / 0.05), 0 16px 32px -10px rgb(35 30 25 / 0.16);
+  --shadow-press: 0 3px 0 var(--color-brand-900);
+  --shadow-press-sun: 0 3px 0 var(--color-sun-500);
+
+  --animate-pop: pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  --animate-rise: rise 0.4s ease-out both;
+
+  @keyframes pop {
+    0% { transform: scale(0.9); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+  @keyframes rise {
+    0% { transform: translateY(8px); opacity: 0; }
+    100% { transform: translateY(0); opacity: 1; }
+  }
 }
 
 html {
@@ -11,7 +91,12 @@ html {
 }
 
 body {
-  @apply min-h-screen overflow-x-hidden bg-slate-50 font-sans text-slate-900 antialiased;
+  @apply min-h-screen overflow-x-hidden bg-cream font-sans text-ink-900 antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-brand-600);
+  outline-offset: 2px;
 }
 
 input:not([type="checkbox"]):not([type="radio"]):focus,
@@ -23,8 +108,19 @@ textarea:focus {
 select:not([multiple]):not([size]) {
   appearance: none;
   -webkit-appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%2394a3b8'%3E%3Cpath fill-rule='evenodd' d='M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.25a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z' clip-rule='evenodd'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%23a89b88'%3E%3Cpath fill-rule='evenodd' d='M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.25a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z' clip-rule='evenodd'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 0.75rem center;
   background-size: 1rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

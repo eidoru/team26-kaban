@@ -1,5 +1,5 @@
 import { type DragEvent, type FormEvent, useEffect, useMemo, useState } from "react";
-import { displayInitials } from "../lib/initials";
+import { Avatar } from "../components/Avatar";
 import { formatFrequency } from "../lib/frequency";
 import { formatShortfallInterestRate } from "../lib/shortfallInterest";
 import { ui } from "../lib/ui";
@@ -70,12 +70,12 @@ function SetupChecklist({
         <li
           key={item.label}
           className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm ${
-            item.done ? "bg-emerald-50 text-emerald-800" : "bg-gray-100 text-slate-500"
+            item.done ? "bg-brand-50 text-brand-800" : "bg-ink-100 text-ink-500"
           }`}
         >
           <span
             className={`flex h-5 w-5 items-center justify-center rounded-full ${
-              item.done ? "bg-emerald-900 text-white" : "border border-gray-300 bg-white text-xs text-slate-400"
+              item.done ? "bg-brand-900 text-white" : "border border-ink-300 bg-white text-xs text-ink-500"
             }`}
           >
             {item.done ? <CheckMark /> : "·"}
@@ -108,22 +108,20 @@ function MemberTableRow({
 }) {
   return (
     <tr className={ui.tableRow}>
-      <td className="w-12 px-4 py-3 text-sm font-medium text-slate-500">{turn ?? "—"}</td>
+      <td className="w-12 px-4 py-3 text-sm font-medium text-ink-500">{turn ?? "—"}</td>
       <td className="px-4 py-3">
         <div className="flex items-center gap-3">
-          <span className={ui.avatarInitialsSm} aria-hidden>
-            {displayInitials(member.displayName)}
-          </span>
+          <Avatar name={member.displayName} />
           <div className="min-w-0">
-            <p className="font-medium text-slate-900">{member.displayName}</p>
-            <p className="text-xs text-slate-500">
+            <p className="font-medium text-ink-900">{member.displayName}</p>
+            <p className="text-xs text-ink-500">
               {member.isManager && "Organizer · "}
               {member.isPlaceholder ? "Placeholder" : "Member"}
             </p>
           </div>
         </div>
       </td>
-      <td className="hidden px-4 py-3 text-sm text-slate-500 sm:table-cell">{member.contact ?? "—"}</td>
+      <td className="hidden px-4 py-3 text-sm text-ink-500 sm:table-cell">{member.contact ?? "—"}</td>
       {managerView && (
         <td className="px-4 py-3 text-right">
           {member.isPlaceholder && (
@@ -132,7 +130,7 @@ function MemberTableRow({
                 type="button"
                 onClick={onClaimInvite}
                 disabled={claimPending}
-                className="text-sm text-emerald-900 hover:underline disabled:opacity-50"
+                className="text-sm text-brand-900 hover:underline disabled:opacity-50"
               >
                 Claim link
               </button>
@@ -141,7 +139,7 @@ function MemberTableRow({
                   type="button"
                   onClick={onRemoveMember}
                   disabled={removePending}
-                  className="text-sm text-red-600 hover:underline disabled:opacity-50"
+                  className="text-sm text-danger-600 hover:underline disabled:opacity-50"
                 >
                   Remove
                 </button>
@@ -162,8 +160,8 @@ function MemberTableRow({
 function OpenSlotRow() {
   return (
     <tr className={ui.tableRow}>
-      <td className="px-4 py-3 text-sm text-slate-400">—</td>
-      <td className="px-4 py-3 text-sm text-slate-400" colSpan={3}>
+      <td className="px-4 py-3 text-sm text-ink-500">—</td>
+      <td className="px-4 py-3 text-sm text-ink-500" colSpan={3}>
         Open slot
       </td>
     </tr>
@@ -203,19 +201,17 @@ function OrderRow({
       onDragEnd={onDragEnd}
       onDragOver={onDragOver}
       onDrop={onDrop}
-      className={`flex items-center gap-4 border-b border-gray-50 px-4 py-3 last:border-0 ${
+      className={`flex items-center gap-4 border-b border-ink-50 px-4 py-3 last:border-0 ${
         draggable ? "cursor-grab active:cursor-grabbing" : ""
-      } ${isDragging ? "opacity-40" : ""} ${isDragOver ? "bg-emerald-50/80" : ""}`}
+      } ${isDragging ? "opacity-40" : ""} ${isDragOver ? "bg-brand-50/80" : ""}`}
     >
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-sm font-medium text-slate-700">
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-ink-100 text-sm font-medium text-ink-700">
         {position}
       </span>
-      <span className={ui.avatarInitialsSm} aria-hidden>
-        {displayInitials(member.displayName)}
-      </span>
-      <span className="min-w-0 flex-1 truncate font-medium text-slate-900">{member.displayName}</span>
+      <Avatar name={member.displayName} />
+      <span className="min-w-0 flex-1 truncate font-medium text-ink-900">{member.displayName}</span>
       {draggable && (
-        <span className="text-xs text-slate-400" aria-hidden>
+        <span className="text-xs text-ink-500" aria-hidden>
           Drag
         </span>
       )}
@@ -358,8 +354,8 @@ export function FormingManagerPanel({
   return (
     <div className="space-y-6">
       <div className={ui.sectionCard}>
-        <p className="text-sm text-slate-600">
-          Finish setup to open Round 1. Pot size: <span className="font-medium text-slate-900">{pot}</span>
+        <p className="text-sm text-ink-600">
+          Finish setup to open Round 1. Pot size: <span className="font-medium text-ink-900">{pot}</span>
         </p>
         <div className="mt-4">
           <SetupChecklist
@@ -425,9 +421,9 @@ export function FormingManagerPanel({
               inert={pending.openSlots === 0}
             >
               <div className="min-h-0 overflow-hidden">
-                <div className="grid gap-6 border-t border-gray-100 pt-6 md:grid-cols-2">
+                <div className="grid gap-6 border-t border-ink-100 pt-6 md:grid-cols-2">
                   <form onSubmit={onAddMember} className="space-y-3">
-                    <p className="text-sm font-medium text-slate-900">Add placeholder</p>
+                    <p className="text-sm font-medium text-ink-900">Add placeholder</p>
                     <input
                       required
                       value={addName}
@@ -446,7 +442,7 @@ export function FormingManagerPanel({
                     </button>
                   </form>
                   <div>
-                    <p className="mb-2 text-sm font-medium text-slate-900">Invite link</p>
+                    <p className="mb-2 text-sm font-medium text-ink-900">Invite link</p>
                     {inviteUrl ? (
                       <CopyableLink url={inviteUrl} label="Group invite" compact />
                     ) : (
@@ -489,7 +485,7 @@ export function FormingManagerPanel({
               <p className={ui.warning}>Draft — not saved until you lock in.</p>
             )}
 
-            <ol className="overflow-hidden rounded-xl border border-gray-100">
+            <ol className="overflow-hidden rounded-xl border border-ink-100">
               {orderedMembers.map((member, index) => (
                 <OrderRow
                   key={member.id}
@@ -555,24 +551,24 @@ export function FormingManagerPanel({
 
             <dl className="grid gap-3 text-sm sm:grid-cols-2">
               <div>
-                <dt className="text-slate-500">Contribution</dt>
-                <dd className="font-medium text-slate-900">
+                <dt className="text-ink-500">Contribution</dt>
+                <dd className="font-medium text-ink-900">
                   ₱{Number(group.contributionAmount).toLocaleString()}
                 </dd>
               </div>
               <div>
-                <dt className="text-slate-500">Schedule</dt>
-                <dd className="font-medium text-slate-900">
+                <dt className="text-ink-500">Schedule</dt>
+                <dd className="font-medium text-ink-900">
                   {formatFrequency(group.frequency, group.frequencyDays)}
                 </dd>
               </div>
               <div>
-                <dt className="text-slate-500">Round pot</dt>
-                <dd className="font-medium text-slate-900">{pot}</dd>
+                <dt className="text-ink-500">Round pot</dt>
+                <dd className="font-medium text-ink-900">{pot}</dd>
               </div>
               <div>
-                <dt className="text-slate-500">Shortfall interest</dt>
-                <dd className="font-medium text-slate-900">
+                <dt className="text-ink-500">Shortfall interest</dt>
+                <dd className="font-medium text-ink-900">
                   {formatShortfallInterestRate(
                     group.shortfallInterestRatePercent,
                     group.frequency,
@@ -583,7 +579,7 @@ export function FormingManagerPanel({
             </dl>
 
             {pending.startDateMissing && (
-              <div className="flex flex-wrap items-end gap-3 border-t border-gray-100 pt-4">
+              <div className="flex flex-wrap items-end gap-3 border-t border-ink-100 pt-4">
                 <div className="min-w-[12rem] flex-1">
                   <label htmlFor="formingStartDate" className={ui.label}>
                     First round due
@@ -608,14 +604,14 @@ export function FormingManagerPanel({
             )}
 
             {!pending.startDateMissing && displayStartDate && (
-              <p className="text-sm text-slate-600">
+              <p className="text-sm text-ink-600">
                 First round due{" "}
-                <span className="font-medium text-slate-900">{formatGroupDate(displayStartDate)}</span>
+                <span className="font-medium text-ink-900">{formatGroupDate(displayStartDate)}</span>
               </p>
             )}
 
             {pending.unclaimedSeats > 0 && (
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-ink-500">
                 {pending.unclaimedSeats} unclaimed placeholder
                 {pending.unclaimedSeats === 1 ? "" : "s"} on the roster.
               </p>
@@ -700,8 +696,8 @@ export function FormingMemberPanel({
   return (
     <div className="space-y-6">
       <div className={ui.callout}>
-        <p className="text-sm font-medium text-emerald-900">Forming</p>
-        <p className="mt-1 text-sm text-emerald-800/90">{memberStatusMessage(pending)}</p>
+        <p className="text-sm font-medium text-brand-900">Forming</p>
+        <p className="mt-1 text-sm text-brand-800/90">{memberStatusMessage(pending)}</p>
         <div className="mt-4">
           <SetupChecklist
             rosterDone={rosterDone}
@@ -715,14 +711,14 @@ export function FormingMemberPanel({
 
       {myMembership && (
         <div className={ui.cardFlat}>
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Your seat</p>
-          <p className="mt-1 text-lg font-medium text-slate-900">{myMembership.displayName}</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-ink-500">Your seat</p>
+          <p className="mt-1 text-lg font-medium text-ink-900">{myMembership.displayName}</p>
           {myMembership.turnNumber != null ? (
-            <p className="mt-1 text-sm text-slate-600">
+            <p className="mt-1 text-sm text-ink-600">
               Payout turn #{myMembership.turnNumber} of {group.slotCount}
             </p>
           ) : (
-            <p className="mt-1 text-sm text-slate-600">Turn assigned after payout order is set.</p>
+            <p className="mt-1 text-sm text-ink-600">Turn assigned after payout order is set.</p>
           )}
         </div>
       )}
@@ -763,7 +759,7 @@ export function FormingMemberPanel({
           <section className={ui.sectionCard}>
             <h2 className={ui.sectionHeader}>Payout order</h2>
             {orderDone ? (
-              <ol className="mt-4 overflow-hidden rounded-xl border border-gray-100">
+              <ol className="mt-4 overflow-hidden rounded-xl border border-ink-100">
                 {displayMembers.map((member, index) => (
                   <OrderRow
                     key={member.id}
@@ -792,24 +788,24 @@ export function FormingMemberPanel({
             <h2 className={ui.sectionHeader}>Terms</h2>
             <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
               <div>
-                <dt className="text-slate-500">Organizer</dt>
-                <dd className="font-medium text-slate-900">{manager?.displayName ?? "—"}</dd>
+                <dt className="text-ink-500">Organizer</dt>
+                <dd className="font-medium text-ink-900">{manager?.displayName ?? "—"}</dd>
               </div>
               <div>
-                <dt className="text-slate-500">Contribution</dt>
-                <dd className="font-medium text-slate-900">
+                <dt className="text-ink-500">Contribution</dt>
+                <dd className="font-medium text-ink-900">
                   ₱{Number(group.contributionAmount).toLocaleString()}
                 </dd>
               </div>
               <div>
-                <dt className="text-slate-500">Schedule</dt>
-                <dd className="font-medium text-slate-900">
+                <dt className="text-ink-500">Schedule</dt>
+                <dd className="font-medium text-ink-900">
                   {formatFrequency(group.frequency, group.frequencyDays)}
                 </dd>
               </div>
               <div>
-                <dt className="text-slate-500">Round 1 due</dt>
-                <dd className="font-medium text-slate-900">
+                <dt className="text-ink-500">Round 1 due</dt>
+                <dd className="font-medium text-ink-900">
                   {startDone ? formatGroupDate(displayStartDate || group.startDate) : "Not set yet"}
                 </dd>
               </div>

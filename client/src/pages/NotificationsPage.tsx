@@ -62,7 +62,7 @@ export function NotificationsPage() {
 
       {!isLoading && !error && notifications.length === 0 && (
         <div className={`mt-10 ${ui.emptyState}`}>
-          <p className="text-slate-600">No notifications yet.</p>
+          <p className="text-ink-600">No notifications yet.</p>
         </div>
       )}
 
@@ -73,15 +73,15 @@ export function NotificationsPage() {
               key={n.id}
               className={`rounded-2xl border px-4 py-3 ${
                 n.isUnread
-                  ? "border-emerald-100 bg-emerald-50/50"
-                  : "border-gray-100 bg-white opacity-90"
+                  ? "border-brand-100 bg-brand-50/50"
+                  : "border-ink-100 bg-white opacity-90"
               }`}
             >
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
-                  <p className="font-medium text-slate-900">{n.title}</p>
-                  <p className="mt-1 text-sm text-slate-600">{n.body}</p>
-                  <p className="mt-1 text-xs text-slate-400">
+                  <p className="font-medium text-ink-900">{n.title}</p>
+                  <p className="mt-1 text-sm text-ink-600">{n.body}</p>
+                  <p className="mt-1 text-xs text-ink-500">
                     {formatWhen(n.createdAt)}
                     {n.groupName && <> · {n.groupName}</>}
                   </p>
@@ -103,7 +103,7 @@ export function NotificationsPage() {
                       type="button"
                       onClick={() => void markRead.mutateAsync(n.id)}
                       disabled={markRead.isPending}
-                      className="text-sm font-normal text-slate-500 hover:text-slate-800"
+                      className="text-sm font-normal text-ink-500 hover:text-ink-800"
                     >
                       Mark read
                     </button>

@@ -12,7 +12,7 @@ import { useAuth } from "../context/AuthContext";
 import { invalidateHomeLists } from "../lib/homeQueries";
 import { formatFrequency } from "../lib/frequency";
 import { formatShortfallInterestRate } from "../lib/shortfallInterest";
-import { displayInitials } from "../lib/initials";
+import { Avatar } from "../components/Avatar";
 import { statusBadgeClass, ui } from "../lib/ui";
 
 function statusLabel(status: GroupSummary["status"]) {
@@ -48,10 +48,10 @@ function InviteShell({
   children: ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-emerald-50/80 to-slate-50 px-4 py-10">
+    <div className="min-h-screen bg-gradient-to-b from-brand-50/80 to-ink-50 px-4 py-10">
       <div className="mx-auto w-full max-w-lg">
         <div className="mb-8 text-center">
-          <Link to="/" className="font-heading text-2xl font-bold tracking-tight text-emerald-900">
+          <Link to="/" className="font-heading text-2xl font-bold tracking-tight text-brand-900">
             Kaban
           </Link>
           <h1 className={`mt-6 ${ui.pageTitle}`}>{title}</h1>
@@ -66,8 +66,8 @@ function InviteShell({
 function DetailRow({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="flex items-start justify-between gap-4 py-2.5 text-sm">
-      <dt className="shrink-0 text-slate-500">{label}</dt>
-      <dd className="text-right font-medium text-slate-900">{value}</dd>
+      <dt className="shrink-0 text-ink-500">{label}</dt>
+      <dd className="text-right font-medium text-ink-900">{value}</dd>
     </div>
   );
 }
@@ -82,13 +82,13 @@ function GroupInviteDetails({ data }: { data: InvitePreview }) {
   const openSlots = group.openSlots ?? Math.max(0, group.slotCount - filled);
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-card">
-      <div className="border-b border-gray-100 bg-slate-50/80 px-5 py-4">
+    <div className="overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-card">
+      <div className="border-b border-ink-100 bg-ink-50/80 px-5 py-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="truncate text-lg font-medium text-slate-900">{group.name}</p>
-            <p className="mt-0.5 text-sm text-slate-600">
-              Organized by <span className="font-medium text-slate-800">{manager.displayName}</span>
+            <p className="truncate text-lg font-medium text-ink-900">{group.name}</p>
+            <p className="mt-0.5 text-sm text-ink-600">
+              Organized by <span className="font-medium text-ink-800">{manager.displayName}</span>
             </p>
           </div>
           <span className={`${statusBadgeClass(group.status)} shrink-0`}>
@@ -97,7 +97,7 @@ function GroupInviteDetails({ data }: { data: InvitePreview }) {
         </div>
       </div>
 
-      <dl className="divide-y divide-gray-50 px-5">
+      <dl className="divide-y divide-ink-50 px-5">
         <DetailRow label="Contribution" value={amount} />
         <DetailRow label="Schedule" value={freq} />
         <DetailRow label="Roster" value={`${filled} of ${group.slotCount} joined`} />
@@ -114,8 +114,8 @@ function GroupInviteDetails({ data }: { data: InvitePreview }) {
       </dl>
 
       {group.status === "forming" && (
-        <div className="border-t border-gray-100 px-5 py-4">
-          <div className="mb-1.5 flex items-center justify-between text-xs text-slate-500">
+        <div className="border-t border-ink-100 px-5 py-4">
+          <div className="mb-1.5 flex items-center justify-between text-xs text-ink-500">
             <span>Roster progress</span>
             <span>
               {openSlots > 0
@@ -123,9 +123,9 @@ function GroupInviteDetails({ data }: { data: InvitePreview }) {
                 : "Roster full"}
             </span>
           </div>
-          <div className="h-1.5 overflow-hidden rounded-full bg-gray-100">
+          <div className="h-1.5 overflow-hidden rounded-full bg-ink-100">
             <div
-              className="h-full rounded-full bg-emerald-600 transition-all"
+              className="h-full rounded-full bg-brand-600 transition-all"
               style={{ width: `${rosterFillPercent(group)}%` }}
             />
           </div>
@@ -133,30 +133,28 @@ function GroupInviteDetails({ data }: { data: InvitePreview }) {
       )}
 
       {members.length > 0 && (
-        <div className="border-t border-gray-100 px-5 py-4">
-          <p className="mb-3 text-xs font-medium uppercase tracking-wide text-slate-500">Members</p>
+        <div className="border-t border-ink-100 px-5 py-4">
+          <p className="mb-3 text-xs font-medium uppercase tracking-wide text-ink-500">Members</p>
           <ul className="space-y-2">
             {members.map((member, index) => (
               <li key={index} className="flex items-center gap-3">
-                <span className={ui.avatarInitialsSm} aria-hidden>
-                  {displayInitials(member.displayName)}
-                </span>
+                <Avatar name={member.displayName} />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-slate-900">
+                  <p className="truncate text-sm font-medium text-ink-900">
                     {member.displayName}
                     {member.isPlaceholder && (
-                      <span className="ml-1.5 font-normal text-slate-400">(placeholder)</span>
+                      <span className="ml-1.5 font-normal text-ink-500">(placeholder)</span>
                     )}
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
                   {member.turnNumber != null && (
-                    <span className="rounded-lg bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                    <span className="rounded-lg bg-ink-100 px-2 py-0.5 text-xs font-medium text-ink-600">
                       Turn {member.turnNumber}
                     </span>
                   )}
                   {member.isManager && (
-                    <span className="rounded-full border border-emerald-100 bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700">
+                    <span className="rounded-full border border-brand-100 bg-brand-50 px-2 py-0.5 text-xs text-brand-700">
                       Manager
                     </span>
                   )}
@@ -165,8 +163,8 @@ function GroupInviteDetails({ data }: { data: InvitePreview }) {
             ))}
             {group.status === "forming" && openSlots > 0 &&
               Array.from({ length: Math.min(openSlots, 3) }).map((_, index) => (
-                <li key={`open-${index}`} className="flex items-center gap-3 text-sm text-slate-400">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-dashed border-gray-200 bg-slate-50 text-xs">
+                <li key={`open-${index}`} className="flex items-center gap-3 text-sm text-ink-500">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-dashed border-ink-200 bg-ink-50 text-xs">
                     ?
                   </span>
                   Open seat
@@ -184,21 +182,21 @@ function ClaimSeatCallout({ data }: { data: InvitePreview }) {
   if (!placeholder) return null;
 
   return (
-    <div className="mt-4 rounded-xl border border-emerald-100 bg-emerald-50/60 px-4 py-4">
-      <p className="text-xs font-medium uppercase tracking-wide text-emerald-800/70">Your seat</p>
-      <p className="mt-1 text-lg font-medium text-slate-900">{placeholder.displayName}</p>
-      <div className="mt-2 space-y-1 text-sm text-slate-600">
+    <div className="mt-4 rounded-xl border border-brand-100 bg-brand-50/60 px-4 py-4">
+      <p className="text-xs font-medium uppercase tracking-wide text-brand-800/70">Your seat</p>
+      <p className="mt-1 text-lg font-medium text-ink-900">{placeholder.displayName}</p>
+      <div className="mt-2 space-y-1 text-sm text-ink-600">
         {placeholder.turnNumber != null && (
           <p>
-            Payout turn <span className="font-medium text-slate-900">#{placeholder.turnNumber}</span>
+            Payout turn <span className="font-medium text-ink-900">#{placeholder.turnNumber}</span>
           </p>
         )}
         {placeholder.contact && (
           <p>
-            Contact on file: <span className="text-slate-800">{placeholder.contact}</span>
+            Contact on file: <span className="text-ink-800">{placeholder.contact}</span>
           </p>
         )}
-        <p className="text-slate-500">
+        <p className="text-ink-500">
           Sign in with your Kaban account to link this seat to your profile.
         </p>
       </div>
@@ -211,7 +209,7 @@ function InviteMeta({ expiresAt }: { expiresAt: string | null }) {
   if (!expiresLabel) return null;
 
   return (
-    <p className="mt-4 text-center text-xs text-slate-400">This link expires {expiresLabel}</p>
+    <p className="mt-4 text-center text-xs text-ink-500">This link expires {expiresLabel}</p>
   );
 }
 
@@ -249,7 +247,7 @@ function InviteActions({
           <Link to="/register" className={ui.btnSecondaryFull}>
             {registerLabel}
           </Link>
-          <p className="pt-1 text-center text-xs text-slate-500">
+          <p className="pt-1 text-center text-xs text-ink-500">
             You&apos;ll return here after signing in to complete joining.
           </p>
         </div>
@@ -257,8 +255,8 @@ function InviteActions({
 
       {canJoin && user && (
         <div className="space-y-3">
-          <p className="text-center text-sm text-slate-600">
-            Signed in as <span className="font-medium text-slate-900">{user.displayName}</span>
+          <p className="text-center text-sm text-ink-600">
+            Signed in as <span className="font-medium text-ink-900">{user.displayName}</span>
           </p>
           <button
             type="button"

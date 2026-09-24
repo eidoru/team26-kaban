@@ -31,10 +31,10 @@ export function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-gradient-to-b from-emerald-50 to-slate-50 px-4 py-10">
+    <div className="flex min-h-screen flex-col bg-gradient-to-b from-brand-50 to-ink-50 px-4 py-10">
       <div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center">
         <div className="mb-8 text-center">
-          <Link to="/" className="font-heading text-2xl font-bold tracking-tight text-emerald-900">
+          <Link to="/" className="font-heading text-2xl font-bold tracking-tight text-brand-900">
             Kaban
           </Link>
           <p className={`mt-3 text-sm ${ui.muted}`}>Sign in to your account</p>

@@ -38,9 +38,9 @@ function formatPeso(amount: number): string {
 
 function SummaryRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-baseline justify-between gap-4 border-b border-gray-50 py-2.5 last:border-0">
-      <dt className="text-sm text-slate-500">{label}</dt>
-      <dd className="text-right text-sm font-medium text-slate-900">{value}</dd>
+    <div className="flex items-baseline justify-between gap-4 border-b border-ink-50 py-2.5 last:border-0">
+      <dt className="text-sm text-ink-500">{label}</dt>
+      <dd className="text-right text-sm font-medium text-ink-900">{value}</dd>
     </div>
   );
 }
@@ -61,7 +61,7 @@ function FormSection({
       <div className="flex items-start gap-3">
         {step != null && (
           <span
-            className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-900 text-xs font-medium text-white"
+            className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-900 text-xs font-medium text-white"
             aria-hidden
           >
             {step}
@@ -263,18 +263,18 @@ export function CreateGroupPage() {
 
       <div className="flex flex-col gap-6 lg:flex-row lg:gap-10">
         <aside className="space-y-4 lg:order-last lg:w-72 lg:shrink-0 lg:self-start lg:sticky lg:top-24">
-          <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-card">
-            <div className="bg-gradient-to-br from-emerald-900 to-emerald-800 px-6 py-6 text-white">
-              <p className="text-xs font-medium uppercase tracking-wide text-emerald-200">
+          <div className="overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-card">
+            <div className="bg-gradient-to-br from-brand-900 to-brand-800 px-6 py-6 text-white">
+              <p className="text-xs font-medium uppercase tracking-wide text-brand-200">
                 {name.trim() || "New paluwagan"}
               </p>
               <p className="mt-3 text-3xl font-semibold tracking-tight">{summary.total}</p>
-              <p className="mt-1 text-sm text-emerald-100">
+              <p className="mt-1 text-sm text-brand-100">
                 total pot · {summary.contribution} per member
               </p>
               <div className="mt-5">
                 <RosterDots totalSlots={slots} />
-                <p className="mt-2 text-xs text-emerald-200">{summary.roster} slots claimed</p>
+                <p className="mt-2 text-xs text-brand-200">{summary.roster} slots claimed</p>
               </div>
             </div>
             <dl className="px-6 py-2">
@@ -283,7 +283,7 @@ export function CreateGroupPage() {
               <SummaryRow label="Shortfall interest" value={summary.shortfallInterest} />
             </dl>
           </div>
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-ink-500">
             After creating, fill the roster, set payout order, then activate to open Round 1.
           </p>
         </aside>
@@ -392,7 +392,7 @@ export function CreateGroupPage() {
             </div>
 
             {amountMode === "total" && summary.contribution !== "—" && (
-              <p className="rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+              <p className="rounded-xl bg-brand-50 px-4 py-3 text-sm text-brand-900">
                 That's <span className="font-medium">{summary.contribution}</span> per member, per
                 round.
                 {totalRoundedUp && (

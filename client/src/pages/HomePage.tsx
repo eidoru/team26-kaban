@@ -5,7 +5,7 @@ import { api, type GroupSummary, type HomeAttentionItem, type NotificationItem }
 import { useAuth } from "../context/AuthContext";
 import { formatWhen } from "../lib/formatWhen";
 import { formatFrequency } from "../lib/frequency";
-import { displayInitials } from "../lib/initials";
+import { Avatar } from "../components/Avatar";
 import { patchNotificationRead } from "../lib/homeQueries";
 import { statusBadgeClass, ui } from "../lib/ui";
 
@@ -79,10 +79,10 @@ function HomeMetric({
   hint?: string;
 }) {
   return (
-    <div className="rounded-xl border border-gray-100 bg-gray-50/80 px-4 py-3">
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="mt-1 text-xl font-medium tabular-nums text-slate-900">{value}</p>
-      {hint && <p className="mt-0.5 text-xs text-slate-500">{hint}</p>}
+    <div className="rounded-xl border border-ink-100 bg-ink-50/80 px-4 py-3">
+      <p className="text-xs font-medium uppercase tracking-wide text-ink-500">{label}</p>
+      <p className="mt-1 text-xl font-medium tabular-nums text-ink-900">{value}</p>
+      {hint && <p className="mt-0.5 text-xs text-ink-500">{hint}</p>}
     </div>
   );
 }
@@ -105,33 +105,26 @@ function GroupRow({
       to={`/groups/${group.id}`}
       onMouseEnter={() => onPrefetch(group.id)}
       onFocus={() => onPrefetch(group.id)}
-      className={`flex items-center gap-4 px-4 py-3.5 transition-colors hover:bg-slate-50 ${
+      className={`flex items-center gap-4 px-4 py-3.5 transition-colors hover:bg-ink-50 ${
         muted ? "opacity-75" : ""
       }`}
     >
-      <span
-        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-medium text-white ${
-          muted ? "bg-slate-400" : "bg-emerald-900"
-        }`}
-        aria-hidden
-      >
-        {displayInitials(group.name)}
-      </span>
+      <Avatar name={group.name} size="md" shape="tile" className={muted ? "opacity-60 grayscale" : ""} />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-          <h3 className="font-heading truncate font-medium text-slate-900">{group.name}</h3>
+          <h3 className="font-heading truncate font-medium text-ink-900">{group.name}</h3>
           {group.role === "manager" && (
-            <span className="text-xs font-medium text-emerald-700">Organizing</span>
+            <span className="text-xs font-medium text-brand-700">Organizing</span>
           )}
         </div>
-        <p className="mt-0.5 truncate text-sm text-slate-500">
+        <p className="mt-0.5 truncate text-sm text-ink-500">
           {amount} · {freq} · {groupStatusDetail(group)}
         </p>
         {group.status === "forming" && !muted && (
           <div className="mt-2 max-w-xs">
-            <div className="h-1 overflow-hidden rounded-full bg-gray-100">
+            <div className="h-1 overflow-hidden rounded-full bg-ink-100">
               <div
-                className="h-full rounded-full bg-emerald-600 transition-all"
+                className="h-full rounded-full bg-brand-600 transition-all"
                 style={{ width: `${fillPercent}%` }}
               />
             </div>
@@ -139,7 +132,7 @@ function GroupRow({
         )}
       </div>
       <span className={`${statusBadgeClass(group.status)} shrink-0`}>{statusLabel(group.status)}</span>
-      <span className="shrink-0 text-slate-300" aria-hidden>
+      <span className="shrink-0 text-ink-300" aria-hidden>
         →
       </span>
     </Link>
@@ -150,13 +143,13 @@ function AttentionItem({ item }: { item: HomeAttentionItem }) {
   return (
     <Link
       to={item.link}
-      className="flex items-start justify-between gap-3 border-l-2 border-amber-400 py-2 pl-4 pr-1 transition-colors hover:bg-amber-50/40"
+      className="flex items-start justify-between gap-3 border-l-2 border-warn-400 py-2 pl-4 pr-1 transition-colors hover:bg-warn-50/40"
     >
       <div className="min-w-0">
-        <p className="text-sm font-medium text-slate-900">{item.title}</p>
-        <p className="mt-0.5 text-sm text-slate-600">{item.body}</p>
+        <p className="text-sm font-medium text-ink-900">{item.title}</p>
+        <p className="mt-0.5 text-sm text-ink-600">{item.body}</p>
       </div>
-      <span className="shrink-0 pt-0.5 text-slate-400" aria-hidden>
+      <span className="shrink-0 pt-0.5 text-ink-400" aria-hidden>
         →
       </span>
     </Link>
@@ -174,14 +167,14 @@ function ActivityRow({
     <div className="flex gap-3">
       <span
         className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
-          item.isUnread ? "bg-emerald-600" : "bg-transparent"
+          item.isUnread ? "bg-brand-600" : "bg-transparent"
         }`}
         aria-hidden
       />
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium text-slate-900">{item.title}</p>
-        <p className="mt-0.5 line-clamp-1 text-sm text-slate-600">{item.body}</p>
-        <p className="mt-1 text-xs text-slate-400">
+        <p className="text-sm font-medium text-ink-900">{item.title}</p>
+        <p className="mt-0.5 line-clamp-1 text-sm text-ink-600">{item.body}</p>
+        <p className="mt-1 text-xs text-ink-500">
           {item.groupName && <span>{item.groupName} · </span>}
           <time>{formatWhen(item.createdAt)}</time>
         </p>
@@ -190,7 +183,7 @@ function ActivityRow({
   );
 
   const className =
-    "block w-full rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-slate-50";
+    "block w-full rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-ink-50";
 
   if (item.link) {
     return (
@@ -318,7 +311,7 @@ export function HomePage() {
 
       {!groupsLoading && !groupsError && groups.length === 0 && (
         <div className={ui.emptyState}>
-          <p className="text-lg font-medium text-slate-900">No paluwagans yet</p>
+          <p className="text-lg font-medium text-ink-900">No paluwagans yet</p>
           <p className={`mt-2 ${ui.muted}`}>
             Start one for your group or join with an invite link from your organizer.
           </p>
@@ -342,7 +335,7 @@ export function HomePage() {
             title="Needs action"
             subtitle={`${overviewData.attention.length} item${overviewData.attention.length === 1 ? "" : "s"}`}
           />
-          <ul className="divide-y divide-gray-100">
+          <ul className="divide-y divide-ink-100">
             {overviewData.attention.map((item) => (
               <li key={item.id} className="first:pt-0 last:pb-0">
                 <AttentionItem item={item} />
@@ -354,10 +347,10 @@ export function HomePage() {
 
       {ongoing.length > 0 && (
         <section className={`${ui.sectionCard} p-0`}>
-          <div className="border-b border-gray-100 px-6 py-4">
+          <div className="border-b border-ink-100 px-6 py-4">
             <SectionHeader title="Your groups" subtitle={`${ongoing.length} active or forming`} />
           </div>
-          <ul className="divide-y divide-gray-100">
+          <ul className="divide-y divide-ink-100">
             {ongoing.map((group) => (
               <li key={group.id}>
                 <GroupRow group={group} onPrefetch={prefetchGroup} />
@@ -386,7 +379,7 @@ export function HomePage() {
         ) : recentActivity.length === 0 ? (
           <p className={`${ui.muted} text-sm`}>No updates yet.</p>
         ) : (
-          <ul className="max-h-64 divide-y divide-gray-50 overflow-y-auto">
+          <ul className="max-h-64 divide-y divide-ink-50 overflow-y-auto">
             {recentActivity.map((item) => (
               <li key={item.id}>
                 <ActivityRow
@@ -417,7 +410,7 @@ export function HomePage() {
             )}
           </button>
           {(past.length <= 2 || pastExpanded) && (
-            <ul className="divide-y divide-gray-100 border-t border-gray-100">
+            <ul className="divide-y divide-ink-100 border-t border-ink-100">
               {past.map((group) => (
                 <li key={group.id}>
                   <GroupRow group={group} onPrefetch={prefetchGroup} muted />

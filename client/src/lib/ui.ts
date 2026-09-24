@@ -1,86 +1,74 @@
+const btnBase =
+  "inline-flex items-center justify-center gap-2 rounded-full text-sm font-bold transition-all disabled:cursor-not-allowed disabled:opacity-50";
+// Primary buttons sit on a darker "lip" that presses flat on click.
+const btnPrimaryBase = `${btnBase} bg-brand-700 text-white shadow-press hover:bg-brand-600 active:translate-y-[2px] active:shadow-none disabled:translate-y-0 disabled:shadow-press`;
+const btnSecondaryBase = `${btnBase} border-2 border-ink-200 bg-white text-ink-700 hover:border-brand-200 hover:bg-brand-50`;
+const inputBase =
+  "rounded-2xl border-2 border-ink-200 bg-white px-4 py-2.5 text-sm text-ink-900 placeholder:text-ink-400 transition-colors focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-500/15";
+const badgeBase = "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold";
+
 export const ui = {
-  avatarInitials:
-    "flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-emerald-900 text-lg font-medium text-white",
-  avatarInitialsSm:
-    "flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-emerald-900 text-xs font-medium text-white",
   page: "max-w-5xl",
   backLink:
-    "group mb-8 flex items-center gap-2 text-sm font-normal text-emerald-700 transition-colors hover:text-emerald-900",
+    "group mb-8 flex items-center gap-2 text-sm font-semibold text-brand-700 transition-colors hover:text-brand-900",
   backLinkArrow: "transition-transform group-hover:-translate-x-1",
-  // Headings share the display face (Funnel Sans) so titles read distinctly from body copy (Figtree).
-  pageTitle: "font-heading text-3xl font-medium tracking-tight text-slate-900",
-  pageSubtitle: "mt-2 text-base text-slate-600",
-  sectionTitle: "font-heading mb-4 text-sm font-medium text-slate-900",
-  sectionHeading: "font-heading text-base font-medium text-slate-900",
-  card: "rounded-2xl border border-gray-100 bg-white p-8 shadow-card",
-  cardCompact: "rounded-2xl border border-gray-100 bg-white p-6 shadow-card",
-  cardFlat: "rounded-2xl border border-gray-100 bg-white p-4",
-  callout: "rounded-2xl border border-emerald-100 bg-emerald-50 p-8",
-  emptyState: "rounded-2xl border border-dashed border-gray-200 bg-white p-10 text-center",
-  label: "mb-1.5 block text-sm font-normal text-slate-500",
-  input:
-    "w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm shadow-sm placeholder:text-gray-300 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/20",
-  inputInline:
-    "rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm shadow-sm focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/20",
-  select:
-    "appearance-none rounded-xl border border-gray-200 bg-white py-2.5 pl-4 pr-10 text-sm shadow-sm focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/20",
-  helperText: "mt-2 text-xs font-normal text-slate-500",
-  btnPrimary:
-    "rounded-xl bg-emerald-900 px-8 py-2.5 text-sm font-medium text-white shadow-sm transition-all hover:bg-emerald-950 active:scale-[0.98] disabled:opacity-60",
-  btnPrimarySm:
-    "rounded-xl bg-emerald-900 px-4 py-2 text-sm font-medium text-white shadow-sm transition-all hover:bg-emerald-950 disabled:opacity-60",
-  btnPrimaryFull:
-    "flex w-full items-center justify-center rounded-xl bg-emerald-900 py-2.5 text-sm font-medium text-white shadow-sm transition-all hover:bg-emerald-950 active:scale-[0.98] disabled:opacity-60",
-  btnSecondary:
-    "rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-normal text-slate-600 transition-all hover:border-emerald-200 hover:bg-emerald-50 disabled:opacity-60",
-  btnSecondarySm:
-    "rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-normal text-slate-600 transition-all hover:border-emerald-200 hover:bg-emerald-50 disabled:opacity-60",
-  btnSecondaryFull:
-    "flex w-full items-center justify-center rounded-xl border border-gray-200 bg-white py-2.5 text-sm font-normal text-slate-600 transition-all hover:border-emerald-200 hover:bg-emerald-50",
-  btnOutline:
-    "rounded-xl border border-emerald-900 px-6 py-2.5 text-sm font-normal text-emerald-900 transition-all hover:bg-emerald-900 hover:text-white disabled:opacity-60",
-  btnGhost:
-    "rounded-xl border border-gray-200 px-3 py-1.5 text-sm font-normal text-slate-600 transition-all hover:bg-gray-50 disabled:opacity-60",
-  btnDangerGhost: "text-sm font-normal text-red-600 hover:text-red-800 disabled:opacity-50",
-  error: "rounded-xl bg-red-50 px-4 py-2.5 text-sm font-normal text-red-700",
-  success: "rounded-xl bg-emerald-50 px-4 py-2.5 text-sm font-normal text-emerald-800",
-  warning: "rounded-xl bg-orange-50 px-4 py-2.5 text-sm font-normal text-orange-700",
-  listItem:
-    "block rounded-2xl border border-gray-100 bg-white p-4 shadow-card transition-colors hover:border-emerald-200",
-  listItemMuted: "block rounded-2xl border border-gray-100 bg-white p-4 opacity-80 transition-colors hover:border-gray-200",
-  badgeForming: "rounded-full border border-orange-100 bg-orange-50 px-3 py-1 text-xs font-normal text-orange-700",
-  badgeActive: "rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-xs font-normal text-emerald-700",
-  badgeCompleted: "rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs font-normal text-slate-600",
-  badgeDanger: "rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-normal text-red-700",
-  link: "text-sm font-normal text-emerald-700 hover:text-emerald-900",
-  muted: "text-slate-500",
-  stack: "space-y-8",
+  pageTitle: "font-heading text-3xl font-bold tracking-tight text-ink-900 text-balance",
+  pageSubtitle: "mt-2 text-base text-ink-600",
+  sectionHeading: "font-heading text-lg font-semibold text-ink-900",
+  card: "rounded-3xl border border-ink-200 bg-white p-8 shadow-card",
+  cardCompact: "rounded-3xl border border-ink-200 bg-white p-6 shadow-card",
+  cardFlat: "rounded-3xl border border-ink-200 bg-white p-4",
+  callout: "rounded-3xl border border-brand-100 bg-brand-50 p-8",
+  emptyState: "rounded-3xl border-2 border-dashed border-ink-300 bg-ink-50 p-10 text-center",
+  label: "mb-1.5 block text-sm font-semibold text-ink-600",
+  input: `w-full ${inputBase}`,
+  helperText: "mt-2 text-xs text-ink-500",
+  money: "tabular-nums",
+  btnPrimary: `${btnPrimaryBase} px-7 py-2.5`,
+  btnPrimarySm: `${btnPrimaryBase} px-4 py-2`,
+  btnPrimaryFull: `${btnPrimaryBase} w-full py-2.5`,
+  btnSecondary: `${btnSecondaryBase} px-5 py-2`,
+  btnSecondarySm: `${btnSecondaryBase} px-4 py-1.5`,
+  btnSecondaryFull: `${btnSecondaryBase} w-full py-2`,
+  btnOutline: `${btnBase} border-2 border-brand-700 px-6 py-2 text-brand-700 hover:bg-brand-700 hover:text-white`,
+  btnGhost: `${btnBase} px-3 py-1.5 font-semibold text-ink-600 hover:bg-ink-100`,
+  btnDangerGhost:
+    "rounded-full px-2 py-1 text-sm font-semibold text-danger-700 transition-colors hover:bg-danger-50 disabled:opacity-50",
+  error: "rounded-2xl bg-danger-50 px-4 py-3 text-sm font-semibold text-danger-700",
+  success: "rounded-2xl bg-brand-50 px-4 py-3 text-sm font-semibold text-brand-800",
+  warning: "rounded-2xl bg-warn-50 px-4 py-3 text-sm font-semibold text-warn-700",
+  badgeForming: `${badgeBase} bg-warn-50 text-warn-700`,
+  badgeActive: `${badgeBase} bg-brand-100 text-brand-700`,
+  badgeCompleted: `${badgeBase} bg-ink-100 text-ink-600`,
+  badgeTurn: `${badgeBase} bg-sun-100 text-sun-800`,
+  link: "text-sm font-semibold text-brand-700 underline-offset-2 hover:text-brand-900 hover:underline",
+  muted: "text-ink-500",
+  skeleton: "animate-pulse rounded-2xl bg-ink-100",
   formStack: "space-y-6",
-  tableWrap: "mt-3 overflow-x-auto rounded-2xl border border-gray-100 bg-white",
-  tableHead: "border-b border-gray-100 bg-gray-50 text-left text-sm font-normal text-slate-500",
-  tableRow: "border-b border-gray-50 last:border-0",
-  // Shared section + layout primitives (uniform across all paluwagan phases)
-  sectionCard: "rounded-2xl border border-gray-100 bg-white p-6 shadow-card",
-  sectionHeader: "font-heading text-base font-medium text-slate-900",
-  sectionSubtitle: "mt-0.5 text-sm text-slate-500",
+  tableWrap: "mt-3 overflow-x-auto rounded-3xl border border-ink-200 bg-white",
+  tableHead: "border-b border-ink-200 bg-ink-50 text-left text-xs font-bold uppercase tracking-wide text-ink-500",
+  tableRow: "border-b border-ink-100 last:border-0",
+  sectionCard: "rounded-3xl border border-ink-200 bg-white p-6 shadow-card",
+  sectionHeader: "font-heading text-lg font-semibold text-ink-900",
+  sectionSubtitle: "mt-0.5 text-sm text-ink-500",
   metricGrid: "grid gap-3 sm:grid-cols-2 lg:grid-cols-4",
   metricGrid2: "grid gap-3 sm:grid-cols-2",
-  factStrip: "mt-4 flex flex-wrap gap-x-8 gap-y-2",
-  actionBar: "flex flex-wrap justify-end gap-2 border-t border-gray-100 pt-4",
+  factStrip: "mt-5 flex flex-wrap gap-x-8 gap-y-3",
+  actionBar: "flex flex-wrap justify-end gap-2 border-t border-ink-100 pt-4",
   sidebarNav: "flex gap-1 overflow-x-auto pb-1 md:flex-col md:overflow-visible md:pb-0",
   sidebarNavItem:
-    "flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-left text-sm transition-colors",
-  sidebarNavItemActive: "bg-emerald-900 font-medium text-white",
-  sidebarNavItemIdle: "text-slate-600 hover:bg-slate-100",
-  sidebarNavItemDisabled: "cursor-not-allowed text-slate-300",
-  // Segmented control (radio-style pill group) — shared by SegmentedControl.tsx.
-  segmentedTrack: "inline-flex flex-wrap gap-1 rounded-xl bg-gray-100 p-1",
-  segmentedOption: "rounded-lg px-3.5 py-1.5 text-sm font-medium transition-all text-slate-500 hover:text-slate-700",
-  segmentedOptionActive: "rounded-lg px-3.5 py-1.5 text-sm font-medium transition-all bg-white text-emerald-900 shadow-sm",
-  // Toggle switch — shared by ToggleSwitch.tsx.
+    "flex w-full items-center justify-between gap-2 whitespace-nowrap rounded-full px-4 py-2 text-left text-sm transition-colors",
+  sidebarNavItemActive: "bg-brand-700 font-bold text-white",
+  sidebarNavItemIdle: "font-semibold text-ink-600 hover:bg-ink-100",
+  sidebarNavItemDisabled: "cursor-not-allowed font-semibold text-ink-300",
+  segmentedTrack: "inline-flex flex-wrap gap-1 rounded-full bg-ink-100 p-1",
+  segmentedOption:
+    "rounded-full px-4 py-1.5 text-sm font-bold text-ink-500 transition-all hover:text-ink-700",
+  segmentedOptionActive:
+    "rounded-full px-4 py-1.5 text-sm font-bold bg-white text-brand-700 shadow-sm transition-all",
   toggleTrack: "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors",
-  toggleTrackOn: "bg-emerald-900",
-  toggleTrackOff: "bg-gray-200",
+  toggleTrackOn: "bg-brand-600",
+  toggleTrackOff: "bg-ink-300",
   toggleThumb: "inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform",
 } as const;
 
@@ -96,16 +84,6 @@ export function statusBadgeClass(status: string): string {
 }
 
 export function navLinkClass(active: boolean): string {
-  const base = "inline-flex h-10 items-center rounded-xl px-3 font-bold";
-  return active
-    ? `${base} bg-emerald-50 text-emerald-900`
-    : `${base} text-slate-500 transition-colors hover:text-slate-700`;
-}
-
-/** A single pill button, e.g. for an ad-hoc filter chip. For a full multi-option
- * control, prefer the shared <SegmentedControl> component instead. */
-export function pillButtonClass(selected: boolean): string {
-  return selected
-    ? "rounded-xl bg-emerald-900 px-4 py-2.5 text-sm font-normal text-white shadow-sm"
-    : "rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-normal text-slate-600 transition-all hover:border-emerald-200 hover:bg-emerald-50";
+  const base = "inline-flex h-10 items-center gap-2 rounded-full px-4 text-sm font-bold transition-colors";
+  return active ? `${base} bg-brand-100 text-brand-800` : `${base} text-ink-600 hover:bg-ink-100 hover:text-ink-900`;
 }

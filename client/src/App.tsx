@@ -29,7 +29,7 @@ const ClaimLandingPage = lazy(() =>
 );
 
 function PageFallback() {
-  return <p className="text-slate-500">Loading…</p>;
+  return <p className="text-ink-500">Loading…</p>;
 }
 
 export function App() {
