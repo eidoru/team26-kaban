@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 
-/** Builds allowed to show demo tools: local dev, or a deploy built with VITE_DEMO_TOOLS=true. */
+/** Builds allowed to show demo tools: local dev, or any deploy built with VITE_DEMO_TOOLS=true (pair with ALLOW_DEMO_TOOLS=true on the server for production). */
 export const demoToolsAvailable = import.meta.env.DEV || import.meta.env.VITE_DEMO_TOOLS === "true";
 
 const STORAGE_KEY = "kaban.showDemoTools";
