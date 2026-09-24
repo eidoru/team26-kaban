@@ -1,4 +1,4 @@
-import { type FormEvent, type ReactNode, useEffect, useId, useState } from "react";
+import { type FormEvent, type ReactNode, useId, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api, ApiError, patchSession, storeAuth } from "../api/client";
 import { useAuth } from "../context/AuthContext";
@@ -36,7 +36,7 @@ function ActivityMetricCard({
 }) {
   return (
     <div
-      className={`rounded-2xl border p-5 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.05),0_2px_8px_-2px_rgba(0,0,0,0.03)] ${
+      className={`rounded-2xl border p-5 shadow-card ${
         highlight ? "border-red-200 bg-red-50/40" : "border-gray-100 bg-white"
       }`}
     >
@@ -145,11 +145,6 @@ export function ProfilePage() {
     queryKey: ["profile-activity"],
     queryFn: () => api.getProfileActivity(),
   });
-
-  useEffect(() => {
-    setDisplayName(user?.displayName ?? "");
-    setContact(user?.contact ?? "");
-  }, [user?.displayName, user?.contact]);
 
   const initials = displayInitials(user?.displayName);
 
@@ -274,7 +269,7 @@ export function ProfilePage() {
         <p className={ui.pageSubtitle}>How you appear in groups and how you sign in</p>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-emerald-100 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.05),0_2px_8px_-2px_rgba(0,0,0,0.03)]">
+      <div className="overflow-hidden rounded-2xl border border-emerald-100 shadow-card">
         <div className="bg-emerald-50 p-6 sm:p-8">
           <div className="flex items-center gap-4">
             <div className={ui.avatarInitials} aria-hidden>
@@ -339,7 +334,7 @@ export function ProfilePage() {
 
       <section>
         <div className="mb-4">
-          <h2 className="text-lg font-medium text-slate-900">Account security</h2>
+          <h2 className="font-heading text-lg font-medium text-slate-900">Account security</h2>
           <p className={`mt-1 text-sm ${ui.muted}`}>Change sign-in details when you need to</p>
         </div>
 
@@ -463,7 +458,7 @@ export function ProfilePage() {
 
       <section>
         <div className="mb-4">
-          <h2 className="text-lg font-medium text-slate-900">Your activity</h2>
+          <h2 className="font-heading text-lg font-medium text-slate-900">Your activity</h2>
           <p className={`mt-1 text-sm ${ui.muted}`}>
             Self-scoped — never an aggregated profile others can see
           </p>

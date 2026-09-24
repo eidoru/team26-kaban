@@ -230,6 +230,26 @@ export function patchPayoutOrder(queryClient: QueryClient, groupId: string, memb
   });
 }
 
+/** The value being saved is already known client-side, so this can apply immediately
+ * rather than waiting on the round trip before the date shows as set. */
+export function patchStartDate(queryClient: QueryClient, groupId: string, startDate: string) {
+  queryClient.setQueryData<GroupDetail>(groupQueryKey(groupId), (current) => {
+    if (!current) return current;
+    return {
+      ...current,
+      group: { ...current.group, startDate },
+      pending: {
+        ...current.pending,
+        startDateMissing: false,
+        canActivate:
+          current.group.status === "forming" &&
+          current.pending.openSlots === 0 &&
+          !current.pending.payoutOrder,
+      },
+    };
+  });
+}
+
 /** Sync home list after roster changes without refetching the group detail view. */
 export function deferStructureSideEffects(queryClient: QueryClient, groupId: string) {
   void queryClient.invalidateQueries({ queryKey: ["groups"] });

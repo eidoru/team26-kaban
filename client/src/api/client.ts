@@ -45,6 +45,16 @@ export interface AuthResponse {
   refreshToken: string;
 }
 
+export interface GroupSettingsInput {
+  name: string;
+  contributionAmount: number;
+  frequency: "weekly" | "biweekly" | "monthly" | "custom";
+  frequencyDays?: number;
+  slotCount: number;
+  startDate: string;
+  shortfallInterestRatePercent?: number;
+}
+
 export interface GroupSummary {
   id: string;
   name: string;
@@ -628,21 +638,15 @@ export const api = {
 
   getHomeOverview: () => request<HomeOverview>("/home/overview"),
 
-  createGroup: (body: {
-    name: string;
-    contributionAmount: number;
-    frequency: "weekly" | "biweekly" | "monthly" | "custom";
-    frequencyDays?: number;
-    slotCount: number;
-    startDate: string;
-    shortfallInterestRatePercent?: number;
-  }) =>
+  createGroup: (body: GroupSettingsInput) =>
     request<{ group: GroupSummary; membershipId: string }>("/groups", {
       method: "POST",
       body: JSON.stringify(body),
     }),
 
-  getGroup: (id: string) => request<GroupDetail>(`/groups/${id}`),
+  /** Pass TanStack Query's `signal` so `cancelQueries()` actually aborts an in-flight fetch
+   * instead of letting a stale response land on top of a fresher optimistic update. */
+  getGroup: (id: string, signal?: AbortSignal) => request<GroupDetail>(`/groups/${id}`, { signal }),
 
   getMemberReliability: (groupId: string) =>
     request<{ reliability: MemberReliability[] }>(`/groups/${groupId}/member-reliability`),

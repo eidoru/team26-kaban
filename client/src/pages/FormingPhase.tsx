@@ -207,7 +207,7 @@ function OrderRow({
         draggable ? "cursor-grab active:cursor-grabbing" : ""
       } ${isDragging ? "opacity-40" : ""} ${isDragOver ? "bg-emerald-50/80" : ""}`}
     >
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-900 text-sm font-medium text-white">
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-sm font-medium text-slate-700">
         {position}
       </span>
       <span className={ui.avatarInitialsSm} aria-hidden>
@@ -302,14 +302,15 @@ export function FormingManagerPanel({
   const startDone = !pending.startDateMissing;
   const orderLocked = orderDone && !payoutDraftActive;
 
-  const defaultTab: ManagerTab = !rosterDone ? "members" : !orderDone ? "order" : "start";
-  const [tab, setTab] = useState<ManagerTab>(defaultTab);
+  // Picks the sensible starting tab (e.g. landing on "order" if the roster was already
+  // full last time you visited) but only once, on mount. It intentionally does NOT keep
+  // re-syncing afterward — completing the roster used to force-switch the tab to "order"
+  // mid-edit, which is exactly the bug the "Continue to payout order" button below exists
+  // to avoid: the user decides when to move on, not a background effect.
+  const initialTab: ManagerTab = !rosterDone ? "members" : !orderDone ? "order" : "start";
+  const [tab, setTab] = useState<ManagerTab>(initialTab);
   const [dragId, setDragId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
-
-  useEffect(() => {
-    setTab(defaultTab);
-  }, [defaultTab]);
 
   useEffect(() => {
     if (tab === "order" && rosterDone && !orderLocked && !payoutDraftActive) {
@@ -351,7 +352,7 @@ export function FormingManagerPanel({
   const navItems: SectionNavItem[] = [
     { id: "members", label: "Members" },
     { id: "order", label: "Payout order", disabled: !rosterDone },
-    { id: "start", label: "Launch", disabled: !rosterDone || !orderDone },
+    { id: "start", label: "Launch", disabled: !rosterDone || !orderLocked },
   ];
 
   return (
@@ -363,7 +364,7 @@ export function FormingManagerPanel({
         <div className="mt-4">
           <SetupChecklist
             rosterDone={rosterDone}
-            orderDone={orderDone}
+            orderDone={orderLocked}
             startDone={startDone}
             needsStartDate={pending.startDateMissing}
             ready={readyToActivate}
@@ -413,44 +414,55 @@ export function FormingManagerPanel({
               </table>
             </div>
 
-            {pending.openSlots > 0 && (
-              <div className="grid gap-6 border-t border-gray-100 pt-6 md:grid-cols-2">
-                <form onSubmit={onAddMember} className="space-y-3">
-                  <p className="text-sm font-medium text-slate-900">Add placeholder</p>
-                  <input
-                    required
-                    value={addName}
-                    onChange={(e) => onAddNameChange(e.target.value)}
-                    placeholder="Name"
-                    className={ui.input}
-                  />
-                  <input
-                    value={addContact}
-                    onChange={(e) => onAddContactChange(e.target.value)}
-                    placeholder="Contact (optional)"
-                    className={ui.input}
-                  />
-                  <button type="submit" disabled={addMemberPending} className={ui.btnPrimarySm}>
-                    {addMemberPending ? "Adding…" : "Add"}
-                  </button>
-                </form>
-                <div>
-                  <p className="mb-2 text-sm font-medium text-slate-900">Invite link</p>
-                  {inviteUrl ? (
-                    <CopyableLink url={inviteUrl} label="Group invite" compact />
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={onGroupInvite}
-                      disabled={groupInvitePending}
-                      className={ui.btnSecondary}
-                    >
-                      {groupInvitePending ? "Generating…" : "Generate invite link"}
+            {/* Stays mounted so it can animate closed when the last slot fills, instead of
+                vanishing in a single frame. Collapses via the grid-rows 1fr → 0fr technique (no
+                animation library needed); `mb-0` cancels the parent's space-y gap while collapsed,
+                and `inert` keeps the hidden inputs out of tab order and the accessibility tree. */}
+            <div
+              className={`grid transition-all duration-300 ease-out ${
+                pending.openSlots > 0 ? "grid-rows-[1fr] opacity-100" : "mb-0 grid-rows-[0fr] opacity-0"
+              }`}
+              inert={pending.openSlots === 0}
+            >
+              <div className="min-h-0 overflow-hidden">
+                <div className="grid gap-6 border-t border-gray-100 pt-6 md:grid-cols-2">
+                  <form onSubmit={onAddMember} className="space-y-3">
+                    <p className="text-sm font-medium text-slate-900">Add placeholder</p>
+                    <input
+                      required
+                      value={addName}
+                      onChange={(e) => onAddNameChange(e.target.value)}
+                      placeholder="Name"
+                      className={ui.input}
+                    />
+                    <input
+                      value={addContact}
+                      onChange={(e) => onAddContactChange(e.target.value)}
+                      placeholder="Contact (optional)"
+                      className={ui.input}
+                    />
+                    <button type="submit" disabled={addMemberPending} className={ui.btnPrimarySm}>
+                      {addMemberPending ? "Adding…" : "Add"}
                     </button>
-                  )}
+                  </form>
+                  <div>
+                    <p className="mb-2 text-sm font-medium text-slate-900">Invite link</p>
+                    {inviteUrl ? (
+                      <CopyableLink url={inviteUrl} label="Group invite" compact />
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={onGroupInvite}
+                        disabled={groupInvitePending}
+                        className={ui.btnSecondary}
+                      >
+                        {groupInvitePending ? "Generating…" : "Generate invite link"}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
-            )}
+            </div>
 
             {rosterDone && (
               <div className={ui.actionBar}>
@@ -505,9 +517,11 @@ export function FormingManagerPanel({
             </ol>
 
             <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={onRandomize} className={ui.btnOutline}>
-                Randomize
-              </button>
+              {!orderLocked && (
+                <button type="button" onClick={onRandomize} className={ui.btnOutline}>
+                  Randomize
+                </button>
+              )}
               {!orderLocked && (
                 <button type="button" onClick={onLockIn} disabled={lockingInPayout} className={ui.btnPrimary}>
                   {lockingInPayout ? "Locking in…" : "Lock in order"}
@@ -520,7 +534,9 @@ export function FormingManagerPanel({
               )}
             </div>
 
-            {orderDone && (
+            {/* orderLocked, not orderDone: randomize/drag write draft turn numbers into the
+                cache before anything is saved, so only a locked-in order may move on. */}
+            {orderLocked && (
               <div className={ui.actionBar}>
                 <button type="button" onClick={() => setTab("start")} className={ui.btnPrimary}>
                   Continue to launch
@@ -530,7 +546,7 @@ export function FormingManagerPanel({
           </section>
         )}
 
-        {tab === "start" && rosterDone && orderDone && (
+        {tab === "start" && rosterDone && orderLocked && (
           <section className={`${ui.sectionCard} space-y-6`}>
             <div>
               <h2 className={ui.sectionHeader}>Launch</h2>

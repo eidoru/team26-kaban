@@ -119,7 +119,7 @@ function GroupRow({
       </span>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-          <h3 className="truncate font-medium text-slate-900">{group.name}</h3>
+          <h3 className="font-heading truncate font-medium text-slate-900">{group.name}</h3>
           {group.role === "manager" && (
             <span className="text-xs font-medium text-emerald-700">Organizing</span>
           )}
@@ -245,7 +245,7 @@ export function HomePage() {
   function prefetchGroup(groupId: string) {
     void queryClient.prefetchQuery({
       queryKey: ["group", groupId],
-      queryFn: () => api.getGroup(groupId),
+      queryFn: ({ signal }) => api.getGroup(groupId, signal),
       staleTime: 60_000,
     });
   }

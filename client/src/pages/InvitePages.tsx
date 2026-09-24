@@ -4,7 +4,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ApiError,
   api,
-  getStoredTokens,
   PENDING_INVITE_KEY,
   type GroupSummary,
   type InvitePreview,
@@ -52,10 +51,10 @@ function InviteShell({
     <div className="min-h-screen bg-gradient-to-b from-emerald-50/80 to-slate-50 px-4 py-10">
       <div className="mx-auto w-full max-w-lg">
         <div className="mb-8 text-center">
-          <Link to="/" className="text-2xl font-bold tracking-tight text-emerald-900">
+          <Link to="/" className="font-heading text-2xl font-bold tracking-tight text-emerald-900">
             Kaban
           </Link>
-          <h1 className="mt-6 text-3xl font-medium tracking-tight text-slate-900">{title}</h1>
+          <h1 className={`mt-6 ${ui.pageTitle}`}>{title}</h1>
           <p className={`mt-2 text-base ${ui.muted}`}>{subtitle}</p>
         </div>
         {children}
@@ -83,7 +82,7 @@ function GroupInviteDetails({ data }: { data: InvitePreview }) {
   const openSlots = group.openSlots ?? Math.max(0, group.slotCount - filled);
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-[0_4px_20px_-2px_rgba(0,0,0,0.05),0_2px_8px_-2px_rgba(0,0,0,0.03)]">
+    <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-card">
       <div className="border-b border-gray-100 bg-slate-50/80 px-5 py-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -446,25 +445,4 @@ export function ClaimLandingPage() {
       />
     </InviteShell>
   );
-}
-
-export async function resolvePendingInvite(navigate: (path: string) => void): Promise<boolean> {
-  const token = sessionStorage.getItem(PENDING_INVITE_KEY);
-  if (!token || !getStoredTokens()) return false;
-
-  try {
-    const preview = await api.previewInvite(token);
-    if (!preview.invite.canJoin) {
-      const path = preview.invite.type === "membership_claim" ? `/claim/${token}` : `/invite/${token}`;
-      navigate(path);
-      return true;
-    }
-    const result = await api.resolveInvite(token);
-    sessionStorage.removeItem(PENDING_INVITE_KEY);
-    navigate(`/groups/${result.groupId}`);
-    return true;
-  } catch {
-    sessionStorage.removeItem(PENDING_INVITE_KEY);
-    return false;
-  }
 }

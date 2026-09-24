@@ -148,11 +148,6 @@ export function LandingPage() {
             shortfalls — with a shared ledger everyone can trust. Money still moves the way you
             already handle it; Kaban keeps the record straight.
           </p>
-          <div className="mt-10 flex justify-center">
-            <Link to="/register" className={ui.btnPrimary}>
-              Create account
-            </Link>
-          </div>
         </section>
 
         <section className="mx-auto max-w-5xl px-6 pb-20">

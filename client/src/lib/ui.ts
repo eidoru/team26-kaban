@@ -7,12 +7,13 @@ export const ui = {
   backLink:
     "group mb-8 flex items-center gap-2 text-sm font-normal text-emerald-700 transition-colors hover:text-emerald-900",
   backLinkArrow: "transition-transform group-hover:-translate-x-1",
-  pageTitle: "text-3xl font-medium tracking-tight text-slate-900",
+  // Headings share the display face (Funnel Sans) so titles read distinctly from body copy (Figtree).
+  pageTitle: "font-heading text-3xl font-medium tracking-tight text-slate-900",
   pageSubtitle: "mt-2 text-base text-slate-600",
-  sectionTitle: "mb-4 text-sm font-medium text-slate-900",
-  sectionHeading: "text-base font-medium text-slate-900",
-  card: "rounded-2xl border border-gray-100 bg-white p-8 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.05),0_2px_8px_-2px_rgba(0,0,0,0.03)]",
-  cardCompact: "rounded-2xl border border-gray-100 bg-white p-6 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.05),0_2px_8px_-2px_rgba(0,0,0,0.03)]",
+  sectionTitle: "font-heading mb-4 text-sm font-medium text-slate-900",
+  sectionHeading: "font-heading text-base font-medium text-slate-900",
+  card: "rounded-2xl border border-gray-100 bg-white p-8 shadow-card",
+  cardCompact: "rounded-2xl border border-gray-100 bg-white p-6 shadow-card",
   cardFlat: "rounded-2xl border border-gray-100 bg-white p-4",
   callout: "rounded-2xl border border-emerald-100 bg-emerald-50 p-8",
   emptyState: "rounded-2xl border border-dashed border-gray-200 bg-white p-10 text-center",
@@ -45,11 +46,12 @@ export const ui = {
   success: "rounded-xl bg-emerald-50 px-4 py-2.5 text-sm font-normal text-emerald-800",
   warning: "rounded-xl bg-orange-50 px-4 py-2.5 text-sm font-normal text-orange-700",
   listItem:
-    "block rounded-2xl border border-gray-100 bg-white p-4 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.05),0_2px_8px_-2px_rgba(0,0,0,0.03)] transition-colors hover:border-emerald-200",
+    "block rounded-2xl border border-gray-100 bg-white p-4 shadow-card transition-colors hover:border-emerald-200",
   listItemMuted: "block rounded-2xl border border-gray-100 bg-white p-4 opacity-80 transition-colors hover:border-gray-200",
   badgeForming: "rounded-full border border-orange-100 bg-orange-50 px-3 py-1 text-xs font-normal text-orange-700",
   badgeActive: "rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-xs font-normal text-emerald-700",
   badgeCompleted: "rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs font-normal text-slate-600",
+  badgeDanger: "rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-normal text-red-700",
   link: "text-sm font-normal text-emerald-700 hover:text-emerald-900",
   muted: "text-slate-500",
   stack: "space-y-8",
@@ -58,9 +60,8 @@ export const ui = {
   tableHead: "border-b border-gray-100 bg-gray-50 text-left text-sm font-normal text-slate-500",
   tableRow: "border-b border-gray-50 last:border-0",
   // Shared section + layout primitives (uniform across all paluwagan phases)
-  sectionCard:
-    "rounded-2xl border border-gray-100 bg-white p-6 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.05),0_2px_8px_-2px_rgba(0,0,0,0.03)]",
-  sectionHeader: "text-base font-medium text-slate-900",
+  sectionCard: "rounded-2xl border border-gray-100 bg-white p-6 shadow-card",
+  sectionHeader: "font-heading text-base font-medium text-slate-900",
   sectionSubtitle: "mt-0.5 text-sm text-slate-500",
   metricGrid: "grid gap-3 sm:grid-cols-2 lg:grid-cols-4",
   metricGrid2: "grid gap-3 sm:grid-cols-2",
@@ -72,6 +73,15 @@ export const ui = {
   sidebarNavItemActive: "bg-emerald-900 font-medium text-white",
   sidebarNavItemIdle: "text-slate-600 hover:bg-slate-100",
   sidebarNavItemDisabled: "cursor-not-allowed text-slate-300",
+  // Segmented control (radio-style pill group) — shared by SegmentedControl.tsx.
+  segmentedTrack: "inline-flex flex-wrap gap-1 rounded-xl bg-gray-100 p-1",
+  segmentedOption: "rounded-lg px-3.5 py-1.5 text-sm font-medium transition-all text-slate-500 hover:text-slate-700",
+  segmentedOptionActive: "rounded-lg px-3.5 py-1.5 text-sm font-medium transition-all bg-white text-emerald-900 shadow-sm",
+  // Toggle switch — shared by ToggleSwitch.tsx.
+  toggleTrack: "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors",
+  toggleTrackOn: "bg-emerald-900",
+  toggleTrackOff: "bg-gray-200",
+  toggleThumb: "inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform",
 } as const;
 
 export function statusBadgeClass(status: string): string {
@@ -92,6 +102,8 @@ export function navLinkClass(active: boolean): string {
     : `${base} text-slate-500 transition-colors hover:text-slate-700`;
 }
 
+/** A single pill button, e.g. for an ad-hoc filter chip. For a full multi-option
+ * control, prefer the shared <SegmentedControl> component instead. */
 export function pillButtonClass(selected: boolean): string {
   return selected
     ? "rounded-xl bg-emerald-900 px-4 py-2.5 text-sm font-normal text-white shadow-sm"
