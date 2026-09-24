@@ -1,6 +1,7 @@
 ﻿import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { CloudOff } from "lucide-react";
 import { ApiError, api, type GroupDetail, type GroupMember } from "../api/client";
 import { useDialog } from "../context/DialogContext";
 import { formatFrequency } from "../lib/frequency";
@@ -21,6 +22,8 @@ import {
 } from "../components/GroupChrome";
 import { FormingManagerPanel, FormingMemberPanel, formatGroupDate } from "./FormingPhase";
 
+const CYCLE_TABS: CycleTab[] = ["overview", "schedule", "ledger", "issues", "audit"];
+
 export function GroupLobbyPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -38,15 +41,14 @@ export function GroupLobbyPage() {
   const [activating, setActivating] = useState(false);
   // Keyed by group id so the celebration never leaks onto another group's page.
   const [launchedGroupId, setLaunchedGroupId] = useState<string | null>(null);
-  const [cycleTab, setCycleTab] = useState<CycleTab>("overview");
+  const [searchParams, setSearchParams] = useSearchParams();
 
   useEffect(() => {
-    setCycleTab("overview");
     setPayoutDraftActive(false);
     setManualOrder({});
   }, [id]);
 
-  const { data, isPending, error } = useQuery({
+  const { data, isPending, error, refetch, isFetching } = useQuery({
     queryKey: ["group", id],
     queryFn: ({ signal }) => api.getGroup(id!, signal),
     enabled: !!id,
@@ -65,6 +67,17 @@ export function GroupLobbyPage() {
   const cycleStarted = groupLoaded && data.group.status !== "forming";
 
   const isManagerView = data?.group.role === "manager";
+
+  // The active tab lives in the URL (?tab=issues), so it survives refreshes and can be linked to;
+  // opening another group has no ?tab and lands on the default.
+  const requestedTab = searchParams.get("tab") as CycleTab | null;
+  const cycleTab: CycleTab =
+    requestedTab && CYCLE_TABS.includes(requestedTab) && (requestedTab !== "audit" || isManagerView)
+      ? requestedTab
+      : "overview";
+  function setCycleTab(tab: CycleTab) {
+    setSearchParams(tab === "overview" ? {} : { tab }, { replace: true });
+  }
 
   const handleGroupRealtimeUpdate = useCallback(
     (scope: GroupRealtimeScope) => {
@@ -314,14 +327,17 @@ export function GroupLobbyPage() {
   if (groupUnavailable) return <p className={ui.muted}>This paluwagan is no longer available…</p>;
   if (error || !data) {
     return (
-      <div>
-        <p className={ui.error}>
-          {error instanceof ApiError ? error.message : "Failed to load group"}
+      <div className={`${ui.emptyState} flex flex-col items-center`} role="alert">
+        <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-danger-600" aria-hidden>
+          <CloudOff className="h-6 w-6" />
+        </span>
+        <p className="font-heading mt-3 text-lg font-bold text-ink-900">Couldn&apos;t load this paluwagan</p>
+        <p className={`mt-1 max-w-sm text-sm ${ui.muted}`}>
+          {error instanceof ApiError ? error.message : "Check your connection, then try again."}
         </p>
-        <Link to="/home" className={`mt-4 inline-block ${ui.backLink}`}>
-          <span className={ui.backLinkArrow}>←</span>
-          Back to home
-        </Link>
+        <button type="button" onClick={() => void refetch()} disabled={isFetching} className={`mt-5 ${ui.btnPrimarySm}`}>
+          {isFetching ? "Retrying…" : "Try again"}
+        </button>
       </div>
     );
   }

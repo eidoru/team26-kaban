@@ -213,7 +213,14 @@ export interface ManagerObligationsOverview {
     groupStatus: string;
     count: number;
     totalOutstanding: string;
-    items: { id: string; displayName: string; roundNumber: number; remaining: string }[];
+    items: {
+      id: string;
+      debtorMembershipId: string;
+      displayName: string;
+      isPlaceholder: boolean;
+      roundNumber: number;
+      remaining: string;
+    }[];
   }[];
 }
 

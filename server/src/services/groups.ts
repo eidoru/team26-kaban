@@ -13,22 +13,11 @@ export class GroupError extends Error {
   }
 }
 
+/** A completed paluwagan's roster is closed: placeholder seats can no longer be claimed. */
+export const CLAIM_CLOSED_MESSAGE = "This paluwagan has finished, so this seat can no longer be claimed.";
+
 export async function countFilledSlots(groupId: string): Promise<number> {
   return prisma.membership.count({ where: { groupId } });
-}
-
-export async function countFilledSlotsByGroupIds(
-  groupIds: string[],
-): Promise<Map<string, number>> {
-  if (groupIds.length === 0) return new Map();
-
-  const rows = await prisma.membership.groupBy({
-    by: ["groupId"],
-    where: { groupId: { in: groupIds } },
-    _count: { _all: true },
-  });
-
-  return new Map(rows.map((row) => [row.groupId, row._count._all]));
 }
 
 export function shouldResetPayoutOrder(opts: {

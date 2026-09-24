@@ -12,23 +12,15 @@ import type {
 } from "../api/client";
 import { Check, ChevronDown, CircleCheck, Clock, FastForward, Inbox, TriangleAlert, Wrench } from "lucide-react";
 import { formatFrequency } from "../lib/frequency";
-import { formatDueDate, parseDateOnly } from "../lib/dates";
+import { formatDueDate, formatLocalDate, parseDateOnly } from "../lib/dates";
 import { Avatar } from "../components/Avatar";
 import { statusBadgeClass, ui } from "../lib/ui";
 import { CopyableLink } from "../components/CopyableLink";
 import { StatCard } from "../components/StatCard";
 import { Celebration } from "../components/Celebration";
+import { CycleNetChart } from "../components/CycleNetChart";
 
 export type CycleTab = "overview" | "schedule" | "ledger" | "issues" | "audit";
-
-function formatCompletionDate(iso: string | null): string | null {
-  if (!iso) return null;
-  return new Date(iso).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
 
 function CompletionSummaryPanel({ summary }: { summary: CompletionSummary }) {
   const amount = Number(summary.contributionAmount);
@@ -36,8 +28,8 @@ function CompletionSummaryPanel({ summary }: { summary: CompletionSummary }) {
   const expected = Number(summary.totalExpected);
   const outstanding = Number(summary.outstandingDebt);
   const potPerRound = Number(summary.potPerRound);
-  const startLabel = formatCompletionDate(summary.startDate);
-  const endLabel = formatCompletionDate(summary.completedAt);
+  const startLabel = summary.startDate ? formatDueDate(summary.startDate) : null;
+  const endLabel = summary.completedAt ? formatLocalDate(summary.completedAt) : null;
   const freq = formatFrequency(summary.frequency, summary.frequencyDays);
 
   return (
@@ -932,7 +924,7 @@ function ScheduleTimeline({
                   <p className="text-ink-600">
                     <span className="font-bold text-ink-900">Round {round?.number ?? member.turnNumber ?? index + 1}</span>
                     {due &&
-                      ` · Due ${due.toLocaleDateString(undefined, { weekday: "short", month: "long", day: "numeric", year: "numeric" })}`}
+                      ` · Due ${formatDueDate(round?.dueDate)}`}
                     {status === "closed" && " · Paid out"}
                   </p>
                   <p className="text-ink-600">
@@ -1274,7 +1266,7 @@ function LedgerRoundCard({
               {due && (
                 <span className="font-sans text-sm font-semibold text-ink-500">
                   {" "}
-                  · {due.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                  · {formatDueDate(first.roundDueDate)}
                 </span>
               )}
             </p>
@@ -1730,13 +1722,14 @@ export function GroupCycleTabPanels(props: GroupCycleTabsProps) {
     }
     return (
       <>
-        <p className="mb-3 text-sm text-ink-500">
-          {sortedMembers.length} member{sortedMembers.length === 1 ? "" : "s"} in payout order
-          {unclaimedSeats > 0 &&
-            isManager &&
-            ` · ${unclaimedSeats} unclaimed placeholder${unclaimedSeats === 1 ? "" : "s"}`}
-        </p>
-        {isManager && unclaimedSeats > 0 && (
+        <div className="mb-6">
+          <CycleNetChart
+            schedule={schedule}
+            viewerMembershipId={viewerMembershipId}
+            contributionAmount={group.contributionAmount}
+          />
+        </div>
+        {isManager && !isCompleted && unclaimedSeats > 0 && (
           <p className="mb-3 text-sm text-ink-600">
             Tap an unclaimed seat to create a claim link so someone can take it over during the cycle.
           </p>
@@ -1747,7 +1740,8 @@ export function GroupCycleTabPanels(props: GroupCycleTabsProps) {
           isManager={isManager}
           viewerMembershipId={viewerMembershipId}
           claimUrls={claimUrls}
-          onClaimInvite={onClaimInvite}
+          // A completed paluwagan's roster is closed (the server refuses claims too).
+          onClaimInvite={isCompleted ? undefined : onClaimInvite}
           claimPending={claimPending}
         />
       </>

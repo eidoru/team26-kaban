@@ -8,10 +8,7 @@ export function parseDateOnly(value: string | null | undefined): Date | null {
   return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
 }
 
-/** "Fri, Oct 9" — adds the year only when it isn't the current one. Falls back to the raw value. */
-export function formatDueDate(value: string | null | undefined): string {
-  const date = parseDateOnly(value);
-  if (!date) return value ?? "";
+function formatDay(date: Date): string {
   const sameYear = date.getFullYear() === new Date().getFullYear();
   return date.toLocaleDateString(undefined, {
     weekday: "short",
@@ -19,6 +16,22 @@ export function formatDueDate(value: string | null | undefined): string {
     day: "numeric",
     ...(sameYear ? {} : { year: "numeric" }),
   });
+}
+
+/**
+ * The app's one date style for calendar dates (due/start dates): "Fri, Oct 9", or
+ * "Fri, Jan 1, 2027" outside the current year. Falls back to the raw value.
+ */
+export function formatDueDate(value: string | null | undefined): string {
+  const date = parseDateOnly(value);
+  return date ? formatDay(date) : (value ?? "");
+}
+
+/** Same style for real timestamps (expiry, completion), shown as the viewer's local day. */
+export function formatLocalDate(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? iso : formatDay(date);
 }
 
 /** Relative hint for a due date: "today", "tomorrow", "in 3 days", "2 days overdue". */

@@ -4,6 +4,7 @@ import { prisma } from "../lib/prisma.js";
 import { createNotification, writeAuditLog } from "../lib/audit.js";
 import { requireAuth } from "../middleware/auth.js";
 import {
+  CLAIM_CLOSED_MESSAGE,
   countFilledSlots,
   getMembership,
   GroupError,
@@ -60,11 +61,12 @@ router.get("/:token", async (req, res, next) => {
         canJoin = false;
         reason = "This group is full.";
       }
-    } else {
-      if (!invite.targetMembership || invite.targetMembership.userId !== null) {
-        canJoin = false;
-        reason = "This chair has already been claimed.";
-      }
+    } else if (group.status === "completed") {
+      canJoin = false;
+      reason = CLAIM_CLOSED_MESSAGE;
+    } else if (!invite.targetMembership || invite.targetMembership.userId !== null) {
+      canJoin = false;
+      reason = "This chair has already been claimed.";
     }
 
     res.json({
@@ -154,6 +156,10 @@ router.post("/:token/resolve", requireAuth, async (req, res, next) => {
     }
 
     // membership_claim
+    if (group.status === "completed") {
+      res.status(409).json({ error: CLAIM_CLOSED_MESSAGE });
+      return;
+    }
     const placeholder = invite.targetMembership;
     if (!placeholder || placeholder.userId !== null) {
       res.status(409).json({ error: "This chair has already been claimed" });

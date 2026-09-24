@@ -3,6 +3,7 @@ import { prisma } from "../lib/prisma.js";
 import { getManagerTotalOutstanding } from "./dashboard.js";
 import { countUnreadNotifications } from "./notifications.js";
 import { startOfUtcDay } from "./schedule.js";
+import { formatDisplayDate } from "../lib/dates.js";
 
 export type AttentionKind =
   | "forming_ready"
@@ -207,8 +208,8 @@ function buildAttentionItems(params: {
         ? `Overdue payment in ${due.groupName}`
         : `Payment due in ${due.groupName}`,
       body: due.isOverdue
-        ? `Round ${due.roundNumber} was due ${due.dueDate}. Report or complete your contribution.`
-        : `Round ${due.roundNumber} is due ${due.dueDate}.`,
+        ? `Round ${due.roundNumber} was due ${formatDisplayDate(due.dueDate)}. Report or complete your contribution.`
+        : `Round ${due.roundNumber} is due ${formatDisplayDate(due.dueDate)}.`,
       link: `/groups/${due.groupId}`,
       priority: due.isOverdue ? "high" : "normal",
     });

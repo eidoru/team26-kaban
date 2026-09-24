@@ -11,6 +11,7 @@ import {
 import { useAuth } from "../context/AuthContext";
 import { invalidateHomeLists } from "../lib/homeQueries";
 import { formatFrequency } from "../lib/frequency";
+import { formatDueDate, formatLocalDate } from "../lib/dates";
 import { formatShortfallInterestRate } from "../lib/shortfallInterest";
 import { Avatar } from "../components/Avatar";
 import { AuthShell } from "../components/AuthShell";
@@ -26,13 +27,6 @@ function statusLabel(status: GroupSummary["status"]) {
     case "completed":
       return "Completed";
   }
-}
-
-function formatInviteDate(iso: string | null | undefined): string | null {
-  if (!iso) return null;
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
 function rosterFillPercent(group: InvitePreview["group"]): number {
@@ -70,7 +64,7 @@ function GroupInviteDetails({ data }: { data: InvitePreview }) {
   const amount = `₱${Number(group.contributionAmount).toLocaleString()}`;
   const freq = formatFrequency(group.frequency, group.frequencyDays);
   const potAmount = Number(group.contributionAmount) * group.slotCount;
-  const startLabel = formatInviteDate(group.startDate);
+  const startLabel = group.startDate ? formatDueDate(group.startDate) : null;
   const filled = group.filledCount ?? 0;
   const openSlots = group.openSlots ?? Math.max(0, group.slotCount - filled);
   const stack = members.slice(0, 5);
@@ -211,7 +205,7 @@ function ClaimSeatCallout({ data }: { data: InvitePreview }) {
 }
 
 function InviteMeta({ expiresAt }: { expiresAt: string | null }) {
-  const expiresLabel = formatInviteDate(expiresAt);
+  const expiresLabel = formatLocalDate(expiresAt);
   if (!expiresLabel) return null;
 
   return <p className="mt-4 text-center text-xs font-semibold text-ink-500">This link expires {expiresLabel}</p>;

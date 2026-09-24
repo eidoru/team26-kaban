@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { api } from "../api/client";
+import { ArrowRight } from "lucide-react";
+import { api, type ManagerObligationsOverview } from "../api/client";
 import { Avatar } from "../components/Avatar";
 import { statusBadgeClass, ui } from "../lib/ui";
 import { StatCard } from "../components/StatCard";
@@ -15,6 +16,28 @@ function groupStatusLabel(status: string): string {
   return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
+const PREVIEW_COUNT = 3;
+
+type Debtor = { id: string; name: string; isPlaceholder: boolean; rounds: number; total: number };
+
+/** One entry per member (not per unpaid round), biggest balance first. */
+function debtorsOf(items: ManagerObligationsOverview["groups"][number]["items"]): Debtor[] {
+  const byMember = new Map<string, Debtor>();
+  for (const item of items) {
+    const debtor = byMember.get(item.debtorMembershipId) ?? {
+      id: item.debtorMembershipId,
+      name: item.displayName,
+      isPlaceholder: item.isPlaceholder,
+      rounds: 0,
+      total: 0,
+    };
+    debtor.rounds += 1;
+    debtor.total += Number(item.remaining);
+    byMember.set(item.debtorMembershipId, debtor);
+  }
+  return [...byMember.values()].sort((a, b) => b.total - a.total);
+}
+
 export function ManagerObligationsPage() {
   const { data, isLoading, error } = useQuery({
     queryKey: ["manager-obligations"],
@@ -24,12 +47,9 @@ export function ManagerObligationsPage() {
   // Biggest debts first, both across groups and within each group.
   const groups = [...(data?.groups ?? [])]
     .sort((a, b) => Number(b.totalOutstanding) - Number(a.totalOutstanding))
-    .map((g) => ({
-      ...g,
-      items: [...g.items].sort((a, b) => Number(b.remaining) - Number(a.remaining)),
-    }));
+    .map((g) => ({ ...g, debtors: debtorsOf(g.items) }));
   const totalOutstanding = Number(data?.totalOutstanding ?? 0);
-  const obligationCount = groups.reduce((sum, g) => sum + g.count, 0);
+  const debtorCount = groups.reduce((sum, g) => sum + g.debtors.length, 0);
 
   return (
     <div>
@@ -65,9 +85,9 @@ export function ManagerObligationsPage() {
               icon="users"
             />
             <StatCard
-              label="Unsettled obligations"
-              value={String(obligationCount)}
-              tone={obligationCount > 0 ? "warning" : "neutral"}
+              label="Members who owe"
+              value={String(debtorCount)}
+              tone={debtorCount > 0 ? "warning" : "neutral"}
               icon="alert"
             />
           </div>
@@ -81,46 +101,65 @@ export function ManagerObligationsPage() {
               </p>
             </div>
           ) : (
-            <div className="space-y-4">
-              {groups.map((g) => (
-                <section key={g.groupId} className={ui.cardCompact}>
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="flex min-w-0 flex-wrap items-center gap-2">
-                      <Link
-                        to={`/groups/${g.groupId}`}
-                        className="font-heading truncate text-lg font-bold text-ink-900 hover:text-brand-700 hover:underline"
-                      >
-                        {g.groupName}
-                      </Link>
-                      <span className={statusBadgeClass(g.groupStatus)}>{groupStatusLabel(g.groupStatus)}</span>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-heading text-xl font-bold tabular-nums text-danger-700">
+            <ul className="grid gap-4 lg:grid-cols-2">
+              {groups.map((g) => {
+                const shown = g.debtors.slice(0, PREVIEW_COUNT);
+                const hidden = g.debtors.length - shown.length;
+                return (
+                  <li key={g.groupId} className="flex flex-col rounded-3xl border border-ink-200 bg-white p-5 shadow-card">
+                    <div className="flex items-start gap-3">
+                      <Avatar name={g.groupName} size="md" shape="tile" />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Link
+                            to={`/groups/${g.groupId}`}
+                            className="font-heading truncate text-lg font-bold text-ink-900 hover:text-brand-700 hover:underline"
+                          >
+                            {g.groupName}
+                          </Link>
+                          <span className={statusBadgeClass(g.groupStatus)}>{groupStatusLabel(g.groupStatus)}</span>
+                        </div>
+                        <p className="mt-0.5 text-xs text-ink-500">
+                          {g.debtors.length} member{g.debtors.length === 1 ? "" : "s"} owe · {g.count} round
+                          {g.count === 1 ? "" : "s"} unpaid
+                        </p>
+                      </div>
+                      <p className="font-heading shrink-0 text-xl font-bold tabular-nums text-danger-700">
                         {formatPeso(g.totalOutstanding)}
                       </p>
-                      <p className="text-xs text-ink-500">
-                        {g.count} obligation{g.count === 1 ? "" : "s"}
-                      </p>
                     </div>
-                  </div>
 
-                  <ul className="mt-4 divide-y divide-ink-100 border-t border-ink-100">
-                    {g.items.map((item) => (
-                      <li key={item.id} className="flex items-center gap-3 py-3">
-                        <Avatar name={item.displayName} />
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-bold text-ink-900">{item.displayName}</p>
-                          <p className="text-xs text-ink-500">Round {item.roundNumber}</p>
-                        </div>
-                        <p className="text-sm font-bold tabular-nums text-ink-900">
-                          {formatPeso(item.remaining)}
-                        </p>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              ))}
-            </div>
+                    <ul className="mb-3 mt-4 space-y-1">
+                      {shown.map((d) => (
+                        <li key={d.id} className="flex items-center gap-3 rounded-2xl px-2 py-1.5">
+                          <Avatar name={d.name} placeholder={d.isPlaceholder} />
+                          <p className="min-w-0 flex-1 truncate text-sm font-bold text-ink-900">{d.name}</p>
+                          <p className="shrink-0 text-xs text-ink-500">
+                            {d.rounds} round{d.rounds === 1 ? "" : "s"}
+                          </p>
+                          <p className="w-20 shrink-0 text-right text-sm font-bold tabular-nums text-ink-900">
+                            {formatPeso(d.total)}
+                          </p>
+                        </li>
+                      ))}
+                    </ul>
+
+                    <div className="mt-auto flex items-center justify-between gap-3 border-t border-ink-100 pt-3">
+                      <span className="text-xs font-semibold text-ink-500">
+                        {hidden > 0 ? `+${hidden} more` : ""}
+                      </span>
+                      <Link
+                        to={`/groups/${g.groupId}?tab=issues`}
+                        className="group inline-flex items-center gap-1.5 text-sm font-bold text-brand-700 hover:text-brand-900"
+                      >
+                        Open issues
+                        <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" aria-hidden />
+                      </Link>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
           )}
         </div>
       )}

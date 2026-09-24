@@ -9,9 +9,6 @@ const badgeBase = "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-
 
 export const ui = {
   page: "max-w-5xl",
-  backLink:
-    "group mb-8 flex items-center gap-2 text-sm font-semibold text-brand-700 transition-colors hover:text-brand-900",
-  backLinkArrow: "transition-transform group-hover:-translate-x-1",
   pageTitle: "font-heading text-3xl font-bold tracking-tight text-ink-900 text-balance",
   pageSubtitle: "mt-2 text-base text-ink-600",
   sectionHeading: "font-heading text-lg font-semibold text-ink-900",

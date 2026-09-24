@@ -1,3 +1,5 @@
+import { formatLocalDate } from "./dates";
+
 export function formatWhen(iso: string) {
   const d = new Date(iso);
   const now = new Date();
@@ -8,5 +10,5 @@ export function formatWhen(iso: string) {
   if (sameDay) {
     return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
   }
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return formatLocalDate(iso);
 }
