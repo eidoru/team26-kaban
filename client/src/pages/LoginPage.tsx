@@ -4,6 +4,7 @@ import { ApiError } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { prefetchHomeData } from "../lib/homeQueries";
 import { ui } from "../lib/ui";
+import { AuthShell } from "../components/AuthShell";
 import { resolvePendingInvite } from "../lib/pendingInvite";
 
 export function LoginPage() {
@@ -31,66 +32,61 @@ export function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-gradient-to-b from-brand-50 to-ink-50 px-4 py-10">
-      <div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center">
-        <div className="mb-8 text-center">
-          <Link to="/" className="font-heading text-2xl font-bold tracking-tight text-brand-900">
-            Kaban
-          </Link>
-          <p className={`mt-3 text-sm ${ui.muted}`}>Sign in to your account</p>
-        </div>
-
-        <div className={ui.cardCompact}>
-          <form onSubmit={handleSubmit} className={ui.formStack}>
-            {error && (
-              <p className={ui.error} role="alert">
-                {error}
-              </p>
-            )}
-
-            <div>
-              <label htmlFor="email" className={ui.label}>
-                Email
-              </label>
-              <input
-                id="email"
-                type="email"
-                required
-                autoComplete="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className={ui.input}
-              />
-            </div>
-
-            <div>
-              <label htmlFor="password" className={ui.label}>
-                Password
-              </label>
-              <input
-                id="password"
-                type="password"
-                required
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className={ui.input}
-              />
-            </div>
-
-            <button type="submit" disabled={submitting} className={ui.btnPrimaryFull}>
-              {submitting ? "Signing in…" : "Sign in"}
-            </button>
-          </form>
-        </div>
-
-        <p className={`mt-6 text-center text-sm ${ui.muted}`}>
-          No account?{" "}
+    <AuthShell
+      title="Welcome back"
+      subtitle="Sign in to check on your paluwagan."
+      footer={
+        <>
+          No account yet?{" "}
           <Link to="/register" className={ui.link}>
             Create one
           </Link>
-        </p>
+        </>
+      }
+    >
+      <div className={ui.cardCompact}>
+        <form onSubmit={handleSubmit} className={ui.formStack}>
+          {error && (
+            <p className={ui.error} role="alert">
+              {error}
+            </p>
+          )}
+
+          <div>
+            <label htmlFor="email" className={ui.label}>
+              Email
+            </label>
+            <input
+              id="email"
+              type="email"
+              required
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className={ui.input}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="password" className={ui.label}>
+              Password
+            </label>
+            <input
+              id="password"
+              type="password"
+              required
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className={ui.input}
+            />
+          </div>
+
+          <button type="submit" disabled={submitting} className={ui.btnPrimaryFull}>
+            {submitting ? "Signing in…" : "Sign in"}
+          </button>
+        </form>
       </div>
-    </div>
+    </AuthShell>
   );
 }

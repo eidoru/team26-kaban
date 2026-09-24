@@ -8,6 +8,7 @@ import { prefetchRealtimeToken } from "../lib/homeQueries";
 import { useNotificationsRealtime } from "../lib/useGroupRealtime";
 import { navLinkClass, ui } from "../lib/ui";
 import { Avatar } from "./Avatar";
+import { KabanLogo } from "./KabanLogo";
 
 type NavItem = { to: string; label: string; shortLabel: string; icon: LucideIcon; badge?: number };
 
@@ -135,16 +136,7 @@ export function AppLayout() {
     <div className="min-h-screen overflow-x-hidden bg-cream">
       <header className="sticky top-0 z-40 border-b border-ink-200 bg-cream/90 backdrop-blur">
         <div className={`mx-auto flex h-16 w-full min-w-0 ${ui.page} items-center justify-between gap-4 px-4 sm:px-6`}>
-          <Link
-            to="/home"
-            className="font-heading inline-flex shrink-0 items-center gap-2 text-xl font-bold tracking-tight text-brand-700"
-          >
-            <span aria-hidden className="flex items-center gap-0.5">
-              <span className="h-2.5 w-2.5 rounded-full bg-sun-300" />
-              <span className="h-2.5 w-2.5 rounded-full bg-brand-400" />
-            </span>
-            Kaban
-          </Link>
+          <KabanLogo to="/home" />
           <nav aria-label="Main" className="hidden items-center gap-1 md:flex">
             {navItems
               .filter((item) => item.to !== "/profile")
