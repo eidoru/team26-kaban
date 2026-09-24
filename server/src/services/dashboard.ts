@@ -168,7 +168,7 @@ export async function getManagerObligationsOverview(managerUserId: string) {
       status: { in: [ObligationStatus.unsettled, ObligationStatus.partially_settled] },
     },
     include: {
-      debtorMembership: { select: { displayName: true } },
+      debtorMembership: { select: { displayName: true, userId: true } },
       sourceRound: { select: { number: true, groupId: true } },
     },
     orderBy: { createdAt: "asc" },
@@ -185,7 +185,9 @@ export async function getManagerObligationsOverview(managerUserId: string) {
       totalOutstanding: Prisma.Decimal;
       items: {
         id: string;
+        debtorMembershipId: string;
         displayName: string;
+        isPlaceholder: boolean;
         roundNumber: number;
         remaining: string;
       }[];
@@ -224,7 +226,9 @@ export async function getManagerObligationsOverview(managerUserId: string) {
     entry.totalOutstanding = entry.totalOutstanding.plus(remaining);
     entry.items.push({
       id: o.id,
+      debtorMembershipId: o.debtorMembershipId,
       displayName: o.debtorMembership.displayName,
+      isPlaceholder: o.debtorMembership.userId === null,
       roundNumber: o.sourceRound.number,
       remaining: remaining.toString(),
     });

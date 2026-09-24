@@ -1,5 +1,6 @@
 import { AuditLog, Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
+import { formatDisplayDate } from "../lib/dates.js";
 
 type AuditMetadata = Record<string, unknown>;
 
@@ -85,12 +86,12 @@ function formatAction(
     }
     case "group.start_date_set": {
       const startDate = metaString(metadata, "startDate");
-      if (startDate) details.push(`Start date: ${startDate.slice(0, 10)}`);
+      if (startDate) details.push(`Start date: ${formatDisplayDate(startDate)}`);
       return {
         category: "group",
         title: "Start date set",
         summary: startDate
-          ? `Cycle start date set to ${startDate.slice(0, 10)}`
+          ? `Cycle start date set to ${formatDisplayDate(startDate)}`
           : "Cycle start date was updated",
         details,
       };
@@ -98,7 +99,7 @@ function formatAction(
     case "group.activated": {
       const startDate = metaString(metadata, "startDate");
       const rounds = metaNumber(metadata, "rounds");
-      if (startDate) details.push(`Start date: ${startDate.slice(0, 10)}`);
+      if (startDate) details.push(`Start date: ${formatDisplayDate(startDate)}`);
       if (rounds != null) details.push(`Schedule: ${rounds} rounds generated`);
       details.push("Round 1 opened for contributions");
       return {

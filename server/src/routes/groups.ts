@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { InviteTokenType, ObligationStatus, Prisma } from "@prisma/client";
+import { GroupStatus, InviteTokenType, Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { createNotification, writeAuditLog } from "../lib/audit.js";
 import { resolveAppOrigin } from "../lib/origin.js";
@@ -13,8 +13,8 @@ import {
 } from "../middleware/groupAccess.js";
 import {
   assertForming,
+  CLAIM_CLOSED_MESSAGE,
   countFilledSlots,
-  countFilledSlotsByGroupIds,
   deleteFormingGroup,
   getGroupOrThrow,
   GroupError,
@@ -53,7 +53,6 @@ import {
 } from "../services/obligations.js";
 import {
   DisputeError,
-  canRaiseContributionDispute,
   getGroupDisputes,
   raiseDispute,
   resolveDispute,
@@ -233,123 +232,7 @@ router.delete("/:id", loadGroup, requireGroupManager, async (req, res, next) => 
 
 router.get("/:id", loadGroup, requireGroupMember, async (req, res, next) => {
   try {
-    const group = req.group!;
-
-    const [members, rounds, openDisputeCount, unsettledObligationCount] = await Promise.all([
-      prisma.membership.findMany({
-        where: { groupId: group.id },
-        orderBy: [{ turnNumber: "asc" }, { createdAt: "asc" }],
-      }),
-      group.status === "forming"
-        ? Promise.resolve([])
-        : prisma.round.findMany({
-            where: { groupId: group.id },
-            orderBy: { number: "asc" },
-          }),
-      group.status === "forming"
-        ? Promise.resolve(0)
-        : prisma.dispute.count({
-            where: {
-              status: "open",
-              contribution: { round: { groupId: group.id } },
-            },
-          }),
-      group.status === "forming"
-        ? Promise.resolve(0)
-        : prisma.obligation.count({
-            where: {
-              sourceRound: { groupId: group.id },
-              status: { in: [ObligationStatus.unsettled, ObligationStatus.partially_settled] },
-            },
-          }),
-    ]);
-
-    const filledCount = members.length;
-    const needsPayoutOrder = members.some((m) => m.turnNumber === null);
-    const unclaimedSeats = members.filter((m) => m.userId === null).length;
-    const openSlots = Math.max(0, group.slotCount - filledCount);
-    const memberById = new Map(members.map((m) => [m.id, m]));
-
-    let currentRound = null;
-    let schedule: ReturnType<typeof serializeRound>[] = [];
-
-    if (rounds.length > 0) {
-      schedule = rounds.map((r) => ({
-        ...serializeRound(r),
-        recipientName: memberById.get(r.recipientMembershipId)?.displayName ?? "Unknown",
-      }));
-
-      const current = rounds.find((r) => r.status === "current");
-      if (current) {
-        const [contributions, openDisputes] = await Promise.all([
-          prisma.contribution.findMany({ where: { roundId: current.id } }),
-          prisma.dispute.findMany({
-            where: {
-              status: "open",
-              contribution: { roundId: current.id },
-            },
-            select: { contributionId: true },
-          }),
-        ]);
-        const openDisputeIds = new Set(openDisputes.map((d) => d.contributionId));
-        const isManager = req.membership!.isManager;
-        const viewerUserId = req.user!.id;
-        const canRaiseDispute = group.status !== "forming";
-        currentRound = {
-          ...serializeRound(current),
-          recipientName: memberById.get(current.recipientMembershipId)?.displayName ?? "Unknown",
-          contributions: contributions.map((c) => {
-            const member = memberById.get(c.membershipId)!;
-            const base = serializeContributionForViewer(
-              c,
-              member,
-              viewerUserId,
-              isManager,
-              group.contributionAmount,
-            );
-            const canDispute = canRaiseContributionDispute({
-              groupStarted: canRaiseDispute,
-              isManager,
-              viewerMembershipId: req.membership!.id,
-              contributionMembershipId: c.membershipId,
-              contributionStatus: c.status,
-              hasOpenDispute: openDisputeIds.has(c.id),
-            });
-            return { ...base, canDispute };
-          }),
-        };
-      }
-    }
-
-    res.json({
-      group: {
-        ...serializeGroup(
-          group,
-          filledCount,
-          req.membership!.isManager ? "manager" : "member",
-        ),
-        membershipId: req.membership!.id,
-      },
-      members: members.map(serializeMember),
-      pending: {
-        payoutOrder: needsPayoutOrder,
-        startDateMissing: !group.startDate,
-        openSlots,
-        unclaimedSeats,
-        cycleStarted: group.status !== "forming",
-        canActivate:
-          group.status === "forming" &&
-          openSlots === 0 &&
-          !needsPayoutOrder &&
-          !!group.startDate,
-      },
-      currentRound,
-      schedule,
-      issueCounts: {
-        openDisputes: openDisputeCount,
-        unsettledObligations: unsettledObligationCount,
-      },
-    });
+    res.json(await loadGroupDetailPayload(req.group!, req.membership!, req.user!.id));
   } catch (err) {
     next(err);
   }
@@ -544,6 +427,10 @@ router.post(
       }
 
       if (type === InviteTokenType.membership_claim) {
+        if (group.status === GroupStatus.completed) {
+          res.status(409).json({ error: CLAIM_CLOSED_MESSAGE });
+          return;
+        }
         if (!membershipId) {
           res.status(400).json({ error: "membershipId is required for claim links" });
           return;

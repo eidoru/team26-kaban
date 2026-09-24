@@ -6,6 +6,7 @@ import { useAuth } from "../context/AuthContext";
 import { invalidateHomeLists } from "../lib/homeQueries";
 import { groupQueryKey } from "../lib/groupQueries";
 import { formatFrequency, type GroupFrequencyValue } from "../lib/frequency";
+import { formatDueDate } from "../lib/dates";
 import {
   formatShortfallInterestHint,
   formatShortfallInterestRate,
@@ -152,7 +153,7 @@ export function CreateGroupPage() {
         frequency === "custom" && !Number.isNaN(customDays) ? customDays : null,
       ),
       roster: !Number.isNaN(slots) && slots >= 2 ? `1 / ${slots}` : "—",
-      startDate: startDate || "—",
+      startDate: startDate ? formatDueDate(startDate) : "—",
       shortfallInterest: formatShortfallInterestRate(
         shortfallInterestRatePercent,
         frequency,

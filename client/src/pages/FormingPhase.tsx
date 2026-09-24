@@ -2,6 +2,7 @@ import { type DragEvent, type FormEvent, useEffect, useMemo, useState } from "re
 import { Check, GripVertical, Link2, UserPlus } from "lucide-react";
 import { Avatar } from "../components/Avatar";
 import { formatFrequency } from "../lib/frequency";
+import { formatDueDate } from "../lib/dates";
 import { formatShortfallInterestRate } from "../lib/shortfallInterest";
 import { ui } from "../lib/ui";
 import { useAuth } from "../context/AuthContext";
@@ -31,10 +32,7 @@ type ManagerTab = "members" | "order" | "start";
 type MemberTab = "members" | "terms";
 
 export function formatGroupDate(iso: string | null | undefined): string {
-  if (!iso) return "Not set yet";
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "Not set yet";
-  return date.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
+  return iso ? formatDueDate(iso) : "Not set yet";
 }
 
 function SetupChecklist({
@@ -426,54 +424,58 @@ export function FormingManagerPanel({
             {/* Stays mounted so it can animate closed when the last slot fills, instead of
                 vanishing in a single frame. Collapses via the grid-rows 1fr → 0fr technique (no
                 animation library needed); `mb-0` cancels the parent's space-y gap while collapsed,
-                and `inert` keeps the hidden inputs out of tab order and the accessibility tree. */}
+                and `inert` keeps the hidden inputs out of tab order and the accessibility tree.
+                The clip box is widened (-mx-2) and padded inside so button lips and focus rings
+                aren't cut off; the padding lives inside the clip so collapsing still reaches 0. */}
             <div
               className={`grid transition-all duration-300 ease-out ${
                 pending.openSlots > 0 ? "grid-rows-[1fr] opacity-100" : "mb-0 grid-rows-[0fr] opacity-0"
               }`}
               inert={pending.openSlots === 0}
             >
-              <div className="min-h-0 overflow-hidden">
-                <div className="grid gap-6 border-t border-ink-100 pt-6 md:grid-cols-2">
-                  <form onSubmit={onAddMember} className="space-y-3">
-                    <p className="flex items-center gap-2 text-sm font-bold text-ink-900">
-                      <UserPlus className="h-4 w-4 text-brand-700" aria-hidden />
-                      Add placeholder
-                    </p>
-                    <input
-                      required
-                      value={addName}
-                      onChange={(e) => onAddNameChange(e.target.value)}
-                      placeholder="Name"
-                      className={ui.input}
-                    />
-                    <input
-                      value={addContact}
-                      onChange={(e) => onAddContactChange(e.target.value)}
-                      placeholder="Contact (optional)"
-                      className={ui.input}
-                    />
-                    <button type="submit" disabled={addMemberPending} className={ui.btnPrimarySm}>
-                      {addMemberPending ? "Adding…" : "Add"}
-                    </button>
-                  </form>
-                  <div>
-                    <p className="mb-3 flex items-center gap-2 text-sm font-bold text-ink-900">
-                      <Link2 className="h-4 w-4 text-brand-700" aria-hidden />
-                      Invite link
-                    </p>
-                    {inviteUrl ? (
-                      <CopyableLink url={inviteUrl} label="Group invite" compact />
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={onGroupInvite}
-                        disabled={groupInvitePending}
-                        className={ui.btnSecondary}
-                      >
-                        {groupInvitePending ? "Generating…" : "Generate invite link"}
+              <div className="-mx-2 min-h-0 overflow-hidden">
+                <div className="px-2 pb-2">
+                  <div className="grid gap-6 border-t border-ink-100 pt-6 md:grid-cols-2">
+                    <form onSubmit={onAddMember} className="space-y-3">
+                      <p className="flex items-center gap-2 text-sm font-bold text-ink-900">
+                        <UserPlus className="h-4 w-4 text-brand-700" aria-hidden />
+                        Add placeholder
+                      </p>
+                      <input
+                        required
+                        value={addName}
+                        onChange={(e) => onAddNameChange(e.target.value)}
+                        placeholder="Name"
+                        className={ui.input}
+                      />
+                      <input
+                        value={addContact}
+                        onChange={(e) => onAddContactChange(e.target.value)}
+                        placeholder="Contact (optional)"
+                        className={ui.input}
+                      />
+                      <button type="submit" disabled={addMemberPending} className={ui.btnPrimarySm}>
+                        {addMemberPending ? "Adding…" : "Add"}
                       </button>
-                    )}
+                    </form>
+                    <div>
+                      <p className="mb-3 flex items-center gap-2 text-sm font-bold text-ink-900">
+                        <Link2 className="h-4 w-4 text-brand-700" aria-hidden />
+                        Invite link
+                      </p>
+                      {inviteUrl ? (
+                        <CopyableLink url={inviteUrl} label="Group invite" compact />
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={onGroupInvite}
+                          disabled={groupInvitePending}
+                          className={ui.btnSecondary}
+                        >
+                          {groupInvitePending ? "Generating…" : "Generate invite link"}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
