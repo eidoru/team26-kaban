@@ -127,9 +127,10 @@ function GroupTile({
         </div>
       )}
 
-      <div className="mt-auto flex items-center justify-between gap-3 text-sm">
+      {/* Wraps so the chips drop under the status line on narrow cards instead of widening them. */}
+      <div className="mt-auto flex flex-wrap items-center justify-between gap-x-3 gap-y-2 text-sm">
         <span className="min-w-0 truncate font-semibold text-ink-600">{groupStatusDetail(group)}</span>
-        <span className="flex shrink-0 items-center gap-2">
+        <span className="ml-auto flex flex-wrap items-center justify-end gap-2">
           {turnLabel && <span className={ui.badgeTurn}>{turnLabel}</span>}
           {group.role === "manager" && (
             <span className="rounded-full bg-ink-100 px-2.5 py-0.5 text-xs font-bold text-ink-600">
@@ -188,7 +189,7 @@ function AttentionItem({ item }: { item: HomeAttentionItem }) {
 
 function GroupGridSkeleton() {
   return (
-    <div className="grid gap-4 sm:grid-cols-2" aria-hidden>
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2" aria-hidden>
       {[0, 1].map((i) => (
         <div key={i} className="rounded-3xl border border-ink-200 bg-white p-5">
           <div className="flex items-center gap-3">
@@ -380,7 +381,7 @@ export function HomePage() {
       )}
 
       {groups.length > 0 && metrics.length > 0 && (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {metrics.map((metric) => (
             <StatCard key={metric.label} {...metric} />
           ))}
@@ -393,7 +394,7 @@ export function HomePage() {
             title="Needs action"
             subtitle={`${overviewData.attention.length} item${overviewData.attention.length === 1 ? "" : "s"}`}
           />
-          <ul className="grid gap-3 md:grid-cols-2">
+          <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
             {overviewData.attention.map((item) => (
               <li key={item.id}>
                 <AttentionItem item={item} />
@@ -406,7 +407,7 @@ export function HomePage() {
       {ongoing.length > 0 && (
         <section>
           <SectionHeader title="Your groups" subtitle={`${ongoing.length} active or forming`} />
-          <ul className="grid gap-4 sm:grid-cols-2">
+          <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {ongoing.map((group) => (
               <li key={group.id}>
                 <GroupTile group={group} onPrefetch={prefetchGroup} />
@@ -471,7 +472,7 @@ export function HomePage() {
             )}
           </button>
           {(past.length <= 2 || pastExpanded) && (
-            <ul className="grid gap-4 sm:grid-cols-2">
+            <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {past.map((group) => (
                 <li key={group.id}>
                   <GroupTile group={group} onPrefetch={prefetchGroup} muted />

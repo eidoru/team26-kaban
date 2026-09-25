@@ -12,7 +12,7 @@ import type {
 } from "../api/client";
 import { Check, ChevronDown, CircleCheck, Clock, FastForward, Inbox, TriangleAlert, Wrench } from "lucide-react";
 import { formatFrequency } from "../lib/frequency";
-import { formatDueDate, formatLocalDate, parseDateOnly } from "../lib/dates";
+import { formatDayHeading, formatDueDate, formatLocalDate, parseDateOnly } from "../lib/dates";
 import { Avatar } from "../components/Avatar";
 import { statusBadgeClass, ui } from "../lib/ui";
 import { CopyableLink } from "../components/CopyableLink";
@@ -454,7 +454,7 @@ function IssuesPanel({
 
   return (
     <div className="space-y-8">
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <StatCard
           label="Outstanding"
           value={`₱${totalOutstanding.toLocaleString()}`}
@@ -511,7 +511,7 @@ function IssuesPanel({
             Recorded when a round closes. Balances are owed to the organizer; interest may accrue each period until
             settled.
           </p>
-          <ul className="grid gap-3 lg:grid-cols-2">
+          <ul className="grid grid-cols-1 gap-3 lg:grid-cols-2">
             {debtors.map((group) => (
               <DebtorCard
                 key={group[0].debtorMembershipId}
@@ -617,20 +617,6 @@ function auditCategoryLabel(entry: AuditLogEntry) {
   return AUDIT_CATEGORIES.find((c) => c.id === entry.category)?.label ?? entry.categoryLabel;
 }
 
-function auditDayLabel(date: Date) {
-  const today = new Date();
-  const startOf = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  const diffDays = Math.round((startOf(today) - startOf(date)) / 86_400_000);
-  if (diffDays === 0) return "Today";
-  if (diffDays === 1) return "Yesterday";
-  return date.toLocaleDateString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    ...(date.getFullYear() === today.getFullYear() ? {} : { year: "numeric" }),
-  });
-}
-
 function AuditEntryRow({ entry }: { entry: AuditLogEntry }) {
   const [open, setOpen] = useState(false);
   const hasDetails = entry.details.length > 0;
@@ -718,7 +704,7 @@ function AuditLogPanel({
     const key = date.toDateString();
     const last = days.at(-1);
     if (last && last.key === key) last.items.push(entry);
-    else days.push({ key, label: auditDayLabel(date), items: [entry] });
+    else days.push({ key, label: formatDayHeading(date), items: [entry] });
   }
 
   function toggle(id: string) {
@@ -962,103 +948,111 @@ function ScheduleTimeline({
   );
 }
 
-const contributionActionBtn =
-  "inline-flex min-w-[7.5rem] items-center justify-center";
-
 function ContributionRow({
   contribution,
   contributionAmount,
   actionPending,
+  isViewer,
+  muted = false,
   onReportPayment,
   onConfirmPayment,
   onRecordPayment,
   onRaiseDispute,
-  muted = false,
 }: {
   contribution: RoundContribution;
   contributionAmount: string;
   actionPending: string | null;
+  isViewer: boolean;
+  muted?: boolean;
   onReportPayment: (contributionId: string, expectedAmount: string) => void;
   onConfirmPayment: (contributionId: string) => void;
   onRecordPayment: (contributionId: string, expectedAmount: string) => void;
   onRaiseDispute: (contributionId: string, memberName: string) => void;
-  muted?: boolean;
 }) {
   const expected = contribution.expectedAmount ?? contributionAmount;
-  const amountLabel =
-    contribution.isPartial && contribution.expectedAmount
-      ? `₱${Number(contribution.amount).toLocaleString()} / ₱${Number(contribution.expectedAmount).toLocaleString()}`
-      : `₱${Number(contribution.amount).toLocaleString()}`;
-  const hasActions =
-    contribution.canReport ||
-    contribution.canConfirm ||
-    contribution.canRecord ||
-    contribution.canDispute;
+  const name = contribution.displayName ?? "Member";
+  const paid = `₱${Number(contribution.amount).toLocaleString()}`;
+  const ofExpected = contribution.isPartial ? ` of ₱${Number(expected).toLocaleString()}` : "";
+  const pending = actionPending === contribution.id;
+
+  const statusLine =
+    contribution.status === "confirmed"
+      ? `Paid ${paid}${ofExpected}`
+      : contribution.status === "reported"
+        ? `Reported ${paid}${ofExpected} · needs confirming`
+        : "Not paid yet";
+
+  const icon =
+    contribution.status === "confirmed" ? (
+      <CircleCheck className="h-5 w-5 text-brand-600" aria-hidden />
+    ) : contribution.status === "reported" ? (
+      <Clock className="h-5 w-5 text-sun-700" aria-hidden />
+    ) : (
+      <span className="block h-5 w-5 rounded-full border-2 border-dashed border-ink-300" aria-hidden />
+    );
+
+  // One primary action per row, by priority; Dispute stays available as a quiet link.
+  const action = contribution.canConfirm ? (
+    <button
+      type="button"
+      onClick={() => onConfirmPayment(contribution.id)}
+      disabled={pending}
+      className={ui.btnPrimarySm}
+    >
+      {pending ? "…" : "Confirm"}
+    </button>
+  ) : contribution.canReport ? (
+    <button
+      type="button"
+      onClick={() => onReportPayment(contribution.id, expected)}
+      disabled={pending}
+      className={ui.btnPrimarySm}
+    >
+      {pending ? "…" : contribution.status === "reported" ? "Update payment" : "Report paid"}
+    </button>
+  ) : contribution.canRecord ? (
+    <button
+      type="button"
+      onClick={() => onRecordPayment(contribution.id, expected)}
+      disabled={pending}
+      className={ui.btnSecondarySm}
+    >
+      {pending ? "…" : "Mark paid"}
+    </button>
+  ) : null;
 
   return (
     <li
-      className={`flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 ${
+      className={`flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 ${isViewer ? "bg-brand-50/60" : ""} ${
         muted ? "opacity-70" : ""
       }`}
     >
-      <div className="flex min-w-0 flex-1 items-center gap-2.5">
-        <Avatar name={contribution.displayName ?? "?"} placeholder={contribution.isPlaceholder} />
-        <div className="min-w-0">
-          <p className="truncate font-bold text-ink-900">{contribution.displayName ?? "Member"}</p>
-          {contribution.isPartial && <p className="truncate text-xs text-ink-500">Partial payment</p>}
-        </div>
-      </div>
-      <div className="flex flex-wrap items-center justify-between gap-3 sm:justify-end">
-        <p className="text-sm font-bold tabular-nums text-ink-900">{amountLabel}</p>
-        {hasActions && (
-          <div className="flex flex-wrap gap-2">
-            {contribution.canReport && (
+      <span className="flex w-5 shrink-0 justify-center">{icon}</span>
+      <Avatar name={name} placeholder={contribution.isPlaceholder} />
+      <div className="min-w-0 flex-1">
+        <p className="truncate font-bold text-ink-900">
+          {name}
+          {isViewer && <span className="font-semibold text-ink-500"> (you)</span>}
+        </p>
+        <p className="text-xs text-ink-500">
+          <span className="tabular-nums">{statusLine}</span>
+          {contribution.canDispute && (
+            <>
+              {" · "}
               <button
                 type="button"
-                onClick={() => onReportPayment(contribution.id, expected)}
-                disabled={actionPending === contribution.id}
-                className={`${contributionActionBtn} ${ui.btnPrimarySm}`}
-              >
-                {actionPending === contribution.id
-                  ? "…"
-                  : contribution.status === "reported"
-                    ? "Update payment"
-                    : "Report paid"}
-              </button>
-            )}
-            {contribution.canConfirm && (
-              <button
-                type="button"
-                onClick={() => onConfirmPayment(contribution.id)}
-                disabled={actionPending === contribution.id}
-                className={`${contributionActionBtn} ${ui.btnPrimarySm}`}
-              >
-                {actionPending === contribution.id ? "…" : "Confirm"}
-              </button>
-            )}
-            {contribution.canRecord && (
-              <button
-                type="button"
-                onClick={() => onRecordPayment(contribution.id, expected)}
-                disabled={actionPending === contribution.id}
-                className={`${contributionActionBtn} ${ui.btnSecondarySm}`}
-              >
-                {actionPending === contribution.id ? "…" : "Mark paid"}
-              </button>
-            )}
-            {contribution.canDispute && (
-              <button
-                type="button"
-                onClick={() => onRaiseDispute(contribution.id, contribution.displayName ?? "Member")}
+                onClick={() => onRaiseDispute(contribution.id, name)}
                 disabled={actionPending === `dispute-${contribution.id}`}
-                className={ui.btnGhost}
+                className="font-bold text-ink-600 underline-offset-2 hover:text-danger-700 hover:underline disabled:opacity-50"
               >
                 Dispute
               </button>
-            )}
-          </div>
-        )}
+            </>
+          )}
+        </p>
       </div>
+      {/* Phones: the action drops under the name, indented to the text column (icon + avatar + gaps). */}
+      {action && <div className="w-full pl-[4.75rem] sm:w-auto sm:shrink-0 sm:pl-0">{action}</div>}
     </li>
   );
 }
@@ -1067,6 +1061,7 @@ function ContributionsList({
   contributions,
   contributionAmount,
   actionPending,
+  viewerMembershipId,
   onReportPayment,
   onConfirmPayment,
   onRecordPayment,
@@ -1075,20 +1070,25 @@ function ContributionsList({
   contributions: RoundContribution[];
   contributionAmount: string;
   actionPending: string | null;
+  viewerMembershipId?: string;
   onReportPayment: (contributionId: string, expectedAmount: string) => void;
   onConfirmPayment: (contributionId: string) => void;
   onRecordPayment: (contributionId: string, expectedAmount: string) => void;
   onRaiseDispute: (contributionId: string, memberName: string) => void;
 }) {
-  const reported = contributions.filter((c) => c.status === "reported");
-  const pending = contributions.filter((c) => c.status === "pending");
-  const confirmed = contributions.filter((c) => c.status === "confirmed");
+  const [paidOpen, setPaidOpen] = useState(false);
 
-  const groups = [
-    { id: "reported", label: "Awaiting confirmation", items: reported },
-    { id: "pending", label: "Not yet paid", items: pending },
-    { id: "confirmed", label: "Confirmed", items: confirmed },
-  ].filter((group) => group.items.length > 0);
+  const isViewer = (c: RoundContribution) => !!viewerMembershipId && c.membershipId === viewerMembershipId;
+  // The viewer's own row leads its group.
+  const ofStatus = (status: RoundContribution["status"]) =>
+    contributions
+      .filter((c) => c.status === status)
+      .sort((a, b) => Number(isViewer(b)) - Number(isViewer(a)));
+
+  const reported = ofStatus("reported");
+  const pending = ofStatus("pending");
+  const confirmed = ofStatus("confirmed");
+  const allPaid = reported.length === 0 && pending.length === 0;
 
   const rowProps = {
     contributionAmount,
@@ -1098,26 +1098,56 @@ function ContributionsList({
     onRecordPayment,
     onRaiseDispute,
   };
+  const heading = "border-b border-ink-100 bg-ink-50 px-4 py-2 text-xs font-bold uppercase tracking-wide text-ink-500";
+  const rows = (items: RoundContribution[], muted = false) =>
+    items.map((c) => <ContributionRow key={c.id} contribution={c} isViewer={isViewer(c)} muted={muted} {...rowProps} />);
 
   return (
-    <div className="space-y-5">
-      {groups.map((group) => (
-        <section key={group.id}>
-          <h4 className="mb-2 text-xs font-bold uppercase tracking-wide text-ink-500">
-            {group.label} · {group.items.length}
-          </h4>
-          <ul className="divide-y divide-ink-100 overflow-hidden rounded-3xl border border-ink-200 bg-white">
-            {group.items.map((contribution) => (
-              <ContributionRow
-                key={contribution.id}
-                contribution={contribution}
-                muted={group.id === "confirmed"}
-                {...rowProps}
-              />
-            ))}
-          </ul>
+    <div className="divide-y divide-ink-100 overflow-hidden rounded-3xl border border-ink-200 bg-white">
+      {reported.length > 0 && (
+        <section>
+          <h4 className={heading}>Needs confirming · {reported.length}</h4>
+          <ul className="divide-y divide-ink-100">{rows(reported)}</ul>
         </section>
-      ))}
+      )}
+      {pending.length > 0 && (
+        <section>
+          <h4 className={heading}>Not paid yet · {pending.length}</h4>
+          <ul className="divide-y divide-ink-100">{rows(pending)}</ul>
+        </section>
+      )}
+      {confirmed.length > 0 &&
+        (allPaid ? (
+          <section>
+            <h4 className={`${heading} flex items-center gap-1.5 text-brand-700`}>
+              <CircleCheck className="h-3.5 w-3.5" aria-hidden />
+              Everyone&apos;s paid · {confirmed.length}
+            </h4>
+            <ul className="divide-y divide-ink-100">{rows(confirmed)}</ul>
+          </section>
+        ) : (
+          <section>
+            <button
+              type="button"
+              onClick={() => setPaidOpen((v) => !v)}
+              aria-expanded={paidOpen}
+              aria-controls="round-paid-list"
+              className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm font-bold text-ink-700 transition-colors hover:bg-ink-50"
+            >
+              <CircleCheck className="h-5 w-5 text-brand-600" aria-hidden />
+              {confirmed.length} paid
+              <span className="ml-auto flex items-center gap-1 text-xs text-ink-500">
+                {paidOpen ? "Hide" : "Show"}
+                <ChevronDown className={`h-4 w-4 transition-transform ${paidOpen ? "rotate-180" : ""}`} aria-hidden />
+              </span>
+            </button>
+            {paidOpen && (
+              <ul id="round-paid-list" className="animate-rise divide-y divide-ink-100 border-t border-ink-100">
+                {rows(confirmed, true)}
+              </ul>
+            )}
+          </section>
+        ))}
     </div>
   );
 }
@@ -1662,6 +1692,7 @@ export function GroupCycleTabPanels(props: GroupCycleTabsProps) {
                   contributions={contributions}
                   contributionAmount={group.contributionAmount}
                   actionPending={actionPending}
+                  viewerMembershipId={viewerMembershipId}
                   onReportPayment={onReportPayment}
                   onConfirmPayment={onConfirmPayment}
                   onRecordPayment={onRecordPayment}

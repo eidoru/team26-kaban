@@ -197,19 +197,6 @@ export function shuffleMemberTurnOrder(members: GroupMember[]): GroupMember[] {
   return copy.map((member, index) => ({ ...member, turnNumber: index + 1 }));
 }
 
-export function applyManualTurnOrder(
-  members: GroupMember[],
-  order: { membershipId: string; turnNumber: number }[],
-): GroupMember[] {
-  const turnById = new Map(order.map((entry) => [entry.membershipId, entry.turnNumber]));
-  return members
-    .map((member) => ({
-      ...member,
-      turnNumber: turnById.get(member.id) ?? member.turnNumber,
-    }))
-    .sort((a, b) => (a.turnNumber ?? 0) - (b.turnNumber ?? 0));
-}
-
 export function payoutOrderFromMembers(
   members: GroupMember[],
 ): { membershipId: string; turnNumber: number }[] | null {

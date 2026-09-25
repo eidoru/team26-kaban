@@ -261,7 +261,7 @@ export function ProfilePage() {
         <div className="p-6 sm:p-8">
           <form onSubmit={handleProfileSubmit} className={ui.formStack}>
             <FormAlerts success={profileMessage} error={profileError} />
-            <div className="grid gap-6 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
               <div>
                 <label htmlFor="displayName" className={ui.label}>
                   Display name
@@ -377,7 +377,7 @@ export function ProfilePage() {
                   className={ui.input}
                 />
               </div>
-              <div className="grid gap-6 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
                 <div>
                   <label htmlFor="newPassword" className={ui.label}>
                     New password
@@ -433,13 +433,13 @@ export function ProfilePage() {
         </div>
 
         {activityLoading ? (
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-hidden>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-hidden>
             {[0, 1, 2, 3].map((i) => (
               <div key={i} className={`${ui.skeleton} h-32`} />
             ))}
           </div>
         ) : activityData ? (
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <StatCard
               label="Paluwagans"
               value={String(activityData.activity.paluwagans.total)}

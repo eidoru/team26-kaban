@@ -47,3 +47,13 @@ export function dueHint(value: string | null | undefined): { label: string; over
   const late = -days;
   return { label: `${late} day${late === 1 ? "" : "s"} overdue`, overdue: true };
 }
+
+/** Section heading for a local day: "Today", "Yesterday", or the app date style ("Fri, Oct 9"). */
+export function formatDayHeading(date: Date): string {
+  const now = new Date();
+  const startOf = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const diffDays = Math.round((startOf(now) - startOf(date)) / DAY_MS);
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Yesterday";
+  return formatDay(date);
+}
