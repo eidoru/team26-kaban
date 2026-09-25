@@ -146,6 +146,7 @@ In development, the browser console warns when a channel fails to connect.
 
 - The build runs `prisma generate`, **`prisma migrate deploy`** and the client build, so migrations apply on every deploy.
 - `api/index.ts` serves the Express app as one function under `/api/*`. Every other path serves the client.
+- The function runs in **`hnd1` (Tokyo)**, the same region as the Supabase database (`ap-northeast-1`). Keep the two in the same region: every query crosses the gap between them, so a mismatch adds about 150 ms per query.
 - Cron jobs close due rounds, open the next ones, and send reminders daily.
 
 Set the environment variables separately for **Preview** and **Production**. Use a separate database for Preview if you don't want preview deploys running migrations against production data.
