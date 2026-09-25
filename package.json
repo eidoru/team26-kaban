@@ -20,7 +20,8 @@
     "db:local:start": "supabase start && node scripts/local-env.mjs && npm run db:local:migrate",
     "db:local:stop": "supabase stop",
     "db:local:migrate": "dotenv -e .env.localdb -- prisma migrate deploy",
-    "db:local:reset": "supabase db reset && npm run db:local:migrate"
+    "db:local:reset": "supabase db reset && npm run db:local:migrate",
+    "bench": "node scripts/bench.mjs"
   },
   "devDependencies": {
     "@vercel/node": "^5.3.0",

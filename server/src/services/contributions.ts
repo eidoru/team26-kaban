@@ -151,7 +151,7 @@ export async function reportContribution(
     });
   }
 
-  await notifyGroupChangeSafe(groupId, "contributions");
+  notifyGroupChangeSafe(groupId, "contributions");
 
   return contribution;
 }
@@ -206,7 +206,7 @@ export async function confirmContribution(
     });
   }
 
-  await notifyGroupChangeSafe(groupId, "contributions");
+  notifyGroupChangeSafe(groupId, "contributions");
 
   return contribution;
 }
@@ -259,7 +259,7 @@ export async function recordContribution(
     },
   });
 
-  await notifyGroupChangeSafe(groupId, "contributions");
+  notifyGroupChangeSafe(groupId, "contributions");
 
   return contribution;
 }
