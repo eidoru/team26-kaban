@@ -11,9 +11,11 @@ import homeRoutes from "./routes/home.js";
 import devRoutes from "./routes/dev.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { resolveCorsOrigin } from "./lib/origin.js";
+import { serverTiming } from "./lib/timing.js";
 
 const app = express();
 
+app.use(serverTiming);
 app.use(helmet());
 app.use(
   cors({

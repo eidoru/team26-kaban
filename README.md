@@ -127,6 +127,7 @@ Run from the repo root.
 | `npm run db:migrate` | Create/apply migrations in development |
 | `npm run db:deploy` | Apply existing migrations (production and CI) |
 | `npm run db:studio` | Open Prisma Studio |
+| `npm run bench` | Time the main API endpoints (see [Performance](#performance)) |
 
 Lint the client with `cd client && npx eslint src`.
 
@@ -139,6 +140,18 @@ Each group page subscribes to a Supabase channel named `group:<id>`:
 - If the channel isn't connected, the page polls every 15 seconds instead.
 
 In development, the browser console warns when a channel fails to connect.
+
+## Performance
+
+Every API response carries a `Server-Timing` header (`db` = summed query time and count, `app` = everything else, `total`), shown in the browser under Network → a request → **Timing**. Requests slower than 800 ms are also logged, so they appear in Vercel's logs.
+
+To benchmark the read endpoints against any deployment:
+
+```bash
+BENCH_URL=https://your-app.vercel.app BENCH_EMAIL=you@example.com BENCH_PASSWORD=… npm run bench
+```
+
+It logs in with that account and compares client round-trip time with server time, so the difference is network overhead. It only reads data.
 
 ## Deploying to Vercel
 

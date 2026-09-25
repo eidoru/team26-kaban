@@ -2,6 +2,7 @@ import { Group, GroupFrequency, GroupStatus, Prisma, RoundStatus } from "@prisma
 import { prisma, prismaTransactionOptions } from "../lib/prisma.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { notifyGroupChangeSafe } from "../lib/realtimeNotify.js";
+import { runAfterResponse } from "../lib/background.js";
 import { GroupError } from "./groups.js";
 import { processRoundShortfall, notifyRoundShortfalls, type RoundShortfallNotifications } from "./obligations.js";
 
@@ -119,14 +120,17 @@ export async function setPayoutOrder(
       });
   }, prismaTransactionOptions);
 
-  void writeAuditLog({
-    groupId,
-    actorId,
-    action: "group.payout_order_set",
-    entityType: "group",
-    entityId: groupId,
-    metadata: { method },
-  }).catch((err) => console.error("Failed to write audit log", err));
+  runAfterResponse(
+    "audit group.payout_order_set",
+    writeAuditLog({
+      groupId,
+      actorId,
+      action: "group.payout_order_set",
+      entityType: "group",
+      entityId: groupId,
+      metadata: { method },
+    }),
+  );
 
   return memberRecords;
 }
@@ -227,7 +231,7 @@ export async function activateGroup(
     });
   }, prismaTransactionOptions);
 
-  await notifyGroupChangeSafe(groupId, "rounds");
+  notifyGroupChangeSafe(groupId, "rounds");
 
   return prisma.group.findUniqueOrThrow({ where: { id: groupId } });
 }
@@ -309,13 +313,11 @@ export async function closeRoundById(roundId: string, actorId?: string) {
   }, prismaTransactionOptions);
 
   if (shortfallNotifications) {
-    void notifyRoundShortfalls(shortfallNotifications).catch((err) => {
-      console.error("Failed to send round shortfall notifications", err);
-    });
+    runAfterResponse("round shortfall notifications", notifyRoundShortfalls(shortfallNotifications));
   }
 
   if (notifyGroupId) {
-    await notifyGroupChangeSafe(notifyGroupId, "rounds");
+    notifyGroupChangeSafe(notifyGroupId, "rounds");
   }
 }
 

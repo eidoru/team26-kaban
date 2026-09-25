@@ -155,7 +155,7 @@ router.post("/:token/resolve", requireAuth, async (req, res, next) => {
         metadata: { inviteTokenId: invite.id, displayName: req.user!.displayName },
       });
 
-      await notifyGroupChangeSafe(group.id, "memberships");
+      notifyGroupChangeSafe(group.id, "memberships");
       res.status(201).json({
         groupId: group.id,
         membershipId: membership.id,
@@ -220,7 +220,7 @@ router.post("/:token/resolve", requireAuth, async (req, res, next) => {
       });
     }
 
-    await notifyGroupChangeSafe(group.id, "memberships");
+    notifyGroupChangeSafe(group.id, "memberships");
     res.json({
       groupId: group.id,
       membershipId: membership.id,
