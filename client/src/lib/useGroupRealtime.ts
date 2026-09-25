@@ -1,9 +1,32 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { getSupabaseRealtimeClient, isSupabaseRealtimeConfigured } from "./supabaseClient";
 
 export type GroupRealtimeScope = "contributions" | "rounds" | "memberships";
+
+/**
+ * Subscribe and report whether the channel is actually live. `onLive` only reflects this channel:
+ * a replaced channel's late CLOSED must not mark its successor as down.
+ */
+function subscribeWithStatus(channel: RealtimeChannel, label: string, onLive: (live: boolean) => void) {
+  let current = true;
+  channel.subscribe((status, err) => {
+    if (!current) return;
+    if (status === "SUBSCRIBED") {
+      onLive(true);
+    } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+      onLive(false);
+      if (import.meta.env.DEV && status !== "CLOSED") {
+        console.warn(`[realtime] ${label} ${status}; falling back to polling`, err);
+      }
+    }
+  });
+  return () => {
+    current = false;
+  };
+}
 
 export function useGroupRealtime(options: {
   groupId: string | undefined;
@@ -29,7 +52,10 @@ export function useGroupRealtime(options: {
     retry: false,
   });
 
-  const realtimeActive = configured && tokenReady && !!tokenData;
+  const [subscribed, setSubscribed] = useState(false);
+  // Only "active" once the channel reports SUBSCRIBED, so the polling fallback kicks in whenever
+  // realtime silently fails (bad token, policy error, dropped connection).
+  const realtimeActive = configured && tokenReady && !!tokenData && subscribed;
 
   useEffect(() => {
     if (!configured || !enabled || !groupId || !tokenData) return;
@@ -67,9 +93,10 @@ export function useGroupRealtime(options: {
       );
     }
 
-    channel.subscribe();
+    const release = subscribeWithStatus(channel, `group:${groupId}`, setSubscribed);
 
     return () => {
+      release();
       void supabase.removeChannel(channel);
     };
   }, [configured, enabled, groupId, tokenData, currentRoundId]);
@@ -95,6 +122,7 @@ export function useNotificationsRealtime(options: {
     staleTime: 50 * 60 * 1000,
     retry: false,
   });
+  const [subscribed, setSubscribed] = useState(false);
 
   useEffect(() => {
     if (!configured || !enabled || !userId || !tokenData) return;
@@ -108,12 +136,15 @@ export function useNotificationsRealtime(options: {
       () => onUpdateRef.current(),
     );
 
-    channel.subscribe();
+    const release = subscribeWithStatus(channel, `notifications:${userId}`, setSubscribed);
 
     return () => {
+      release();
       void supabase.removeChannel(channel);
     };
   }, [configured, enabled, userId, tokenData]);
+
+  return { realtimeActive: configured && !!tokenData && subscribed };
 }
 
 export function isRealtimeFallbackNeeded(
