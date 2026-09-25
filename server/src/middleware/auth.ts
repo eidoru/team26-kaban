@@ -33,6 +33,20 @@ function setCachedUser(user: AuthUser) {
   userCache.set(user.id, { user, expiresAt: Date.now() + USER_CACHE_TTL_MS });
 }
 
+/** Verifies a bearer access token and loads its user; throws on an invalid token, null if the user is gone. */
+async function userFromBearer(token: string): Promise<AuthUser | null> {
+  const payload = verifyAccessToken(token);
+  const cached = getCachedUser(payload.sub);
+  if (cached) return cached;
+
+  const user = await prisma.user.findUnique({
+    where: { id: payload.sub },
+    select: { id: true, email: true, displayName: true },
+  });
+  if (user) setCachedUser(user);
+  return user;
+}
+
 export async function requireAuth(req: Request, res: Response, next: NextFunction) {
   const header = req.headers.authorization;
   if (!header?.startsWith("Bearer ")) {
@@ -41,30 +55,29 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   }
 
   try {
-    const payload = verifyAccessToken(header.slice(7));
-    const cached = getCachedUser(payload.sub);
-    if (cached) {
-      req.user = cached;
-      next();
-      return;
-    }
-
-    const user = await prisma.user.findUnique({
-      where: { id: payload.sub },
-      select: { id: true, email: true, displayName: true },
-    });
-
+    const user = await userFromBearer(header.slice(7));
     if (!user) {
       res.status(401).json({ error: "User not found" });
       return;
     }
-
     req.user = user;
-    setCachedUser(user);
     next();
   } catch {
     res.status(401).json({ error: "Invalid or expired token" });
   }
+}
+
+/** For public routes that personalize when signed in: sets req.user if the token is valid, never rejects. */
+export async function optionalAuth(req: Request, _res: Response, next: NextFunction) {
+  const header = req.headers.authorization;
+  if (header?.startsWith("Bearer ")) {
+    try {
+      req.user = (await userFromBearer(header.slice(7))) ?? undefined;
+    } catch {
+      // Expired or invalid token: treat as a guest.
+    }
+  }
+  next();
 }
 
 export function requireCronSecret(req: Request, res: Response, next: NextFunction) {

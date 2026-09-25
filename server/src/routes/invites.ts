@@ -2,7 +2,7 @@ import { Router } from "express";
 import { InviteTokenType } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { createNotification, writeAuditLog } from "../lib/audit.js";
-import { requireAuth } from "../middleware/auth.js";
+import { optionalAuth, requireAuth } from "../middleware/auth.js";
 import {
   CLAIM_CLOSED_MESSAGE,
   countFilledSlots,
@@ -28,12 +28,12 @@ async function loadInvite(token: string) {
   return invite;
 }
 
-router.get("/:token", async (req, res, next) => {
+router.get("/:token", optionalAuth, async (req, res, next) => {
   try {
     const invite = await loadInvite(String(req.params.token));
     const group = invite.group;
 
-    const [filledCount, members, manager] = await Promise.all([
+    const [filledCount, members, manager, viewerMembership] = await Promise.all([
       countFilledSlots(group.id),
       prisma.membership.findMany({
         where: { groupId: group.id },
@@ -49,12 +49,17 @@ router.get("/:token", async (req, res, next) => {
         where: { id: group.managerId },
         select: { displayName: true },
       }),
+      req.user ? getMembership(req.user.id, group.id) : Promise.resolve(null),
     ]);
 
     let canJoin = true;
     let reason: string | undefined;
+    const alreadyMember = !!viewerMembership;
 
-    if (invite.type === InviteTokenType.group_invite) {
+    if (alreadyMember) {
+      canJoin = false;
+      reason = "You're already in this paluwagan.";
+    } else if (invite.type === InviteTokenType.group_invite) {
       if (group.status !== "forming") {
         canJoin = false;
         reason = "This group is no longer accepting new members.";
@@ -76,6 +81,7 @@ router.get("/:token", async (req, res, next) => {
         token: invite.token,
         canJoin,
         reason,
+        alreadyMember,
         expiresAt: invite.expiresAt?.toISOString() ?? null,
       },
       group: serializeGroup(group, filledCount),
