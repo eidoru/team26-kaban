@@ -1,51 +1,41 @@
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-
 export type GroupChangeScope = "contributions" | "rounds" | "memberships";
 
-let serviceClient: SupabaseClient | null = null;
+const BROADCAST_TIMEOUT_MS = 1500;
 
-function getServiceClient(): SupabaseClient | null {
+/**
+ * Tell browsers subscribed to `group:<id>` that something changed, via Supabase Realtime's HTTP
+ * broadcast endpoint: one request, no websocket handshake. Callers must await it (see
+ * notifyGroupChangeSafe) — on Vercel, work left running after the response is usually dropped.
+ */
+export async function notifyGroupChange(groupId: string, scope: GroupChangeScope): Promise<void> {
   const url = process.env.SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !serviceKey) return null;
+  if (!url || !serviceKey) return;
 
-  if (!serviceClient) {
-    serviceClient = createClient(url, serviceKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
+  const res = await fetch(`${url.replace(/\/$/, "")}/realtime/v1/api/broadcast`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: serviceKey,
+      Authorization: `Bearer ${serviceKey}`,
+    },
+    body: JSON.stringify({
+      messages: [{ topic: `group:${groupId}`, event: "group_update", payload: { scope } }],
+    }),
+    signal: AbortSignal.timeout(BROADCAST_TIMEOUT_MS),
+  });
+  if (!res.ok) {
+    throw new Error(`Realtime broadcast failed: ${res.status} ${await res.text().catch(() => "")}`);
   }
-  return serviceClient;
 }
 
-/** Push a group change to browsers subscribed on the group channel (e.g. after cron advance-round). */
-export async function notifyGroupChange(
-  groupId: string,
-  scope: GroupChangeScope,
-): Promise<void> {
-  const supabase = getServiceClient();
-  if (!supabase) return;
-
-  await new Promise<void>((resolve, reject) => {
-    const channel = supabase.channel(`group:${groupId}`);
-    channel.subscribe((status) => {
-      if (status === "SUBSCRIBED") {
-        void channel
-          .send({
-            type: "broadcast",
-            event: "group_update",
-            payload: { scope },
-          })
-          .then(() => {
-            void supabase.removeChannel(channel);
-            resolve();
-          })
-          .catch(reject);
-      } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-        void supabase.removeChannel(channel);
-        reject(new Error(`Realtime broadcast failed: ${status}`));
-      }
-    });
-  });
+/** Broadcast without ever failing the caller's request; clients also have a polling fallback. */
+export async function notifyGroupChangeSafe(groupId: string, scope: GroupChangeScope): Promise<void> {
+  try {
+    await notifyGroupChange(groupId, scope);
+  } catch (err) {
+    console.error(`Failed to broadcast ${scope} change for group ${groupId}`, err);
+  }
 }
 
 export function isGroupBroadcastConfigured(): boolean {

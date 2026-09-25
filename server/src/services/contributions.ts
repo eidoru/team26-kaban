@@ -1,6 +1,6 @@
 import { Contribution, ContributionSource, ContributionStatus, GroupStatus, Prisma } from "@prisma/client";
 import { createNotification, writeAuditLog } from "../lib/audit.js";
-import { notifyGroupChange } from "../lib/realtimeNotify.js";
+import { notifyGroupChangeSafe } from "../lib/realtimeNotify.js";
 import { prisma } from "../lib/prisma.js";
 import { GroupError } from "./groups.js";
 
@@ -151,9 +151,7 @@ export async function reportContribution(
     });
   }
 
-  void notifyGroupChange(groupId, "contributions").catch((err) => {
-    console.error("Failed to broadcast contribution change", err);
-  });
+  await notifyGroupChangeSafe(groupId, "contributions");
 
   return contribution;
 }
@@ -208,9 +206,7 @@ export async function confirmContribution(
     });
   }
 
-  void notifyGroupChange(groupId, "contributions").catch((err) => {
-    console.error("Failed to broadcast contribution change", err);
-  });
+  await notifyGroupChangeSafe(groupId, "contributions");
 
   return contribution;
 }
@@ -263,9 +259,7 @@ export async function recordContribution(
     },
   });
 
-  void notifyGroupChange(groupId, "contributions").catch((err) => {
-    console.error("Failed to broadcast contribution change", err);
-  });
+  await notifyGroupChangeSafe(groupId, "contributions");
 
   return contribution;
 }
