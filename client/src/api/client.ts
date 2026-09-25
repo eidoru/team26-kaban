@@ -344,6 +344,8 @@ export interface InvitePreview {
     token: string;
     canJoin: boolean;
     reason?: string;
+    /** The signed-in viewer already has a seat in this group. */
+    alreadyMember?: boolean;
     expiresAt: string | null;
   };
   group: Omit<GroupSummary, "role" | "membershipId">;
@@ -589,8 +591,13 @@ async function request<T>(path: string, options: RequestInit = {}, retry = true)
   return res.json() as Promise<T>;
 }
 
-async function publicRequest<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`);
+/** No refresh-and-retry. With `withAuth`, sends the stored token so the server can personalize;
+ * an expired token is simply treated as a guest there. */
+async function publicRequest<T>(path: string, { withAuth = false }: { withAuth?: boolean } = {}): Promise<T> {
+  const tokens = withAuth ? getStoredTokens() : null;
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: tokens ? { Authorization: `Bearer ${tokens.accessToken}` } : undefined,
+  });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new ApiError(res.status, err.error ?? "Request failed");
@@ -823,7 +830,7 @@ export const api = {
   markAllNotificationsRead: () =>
     request<{ marked: number }>("/notifications/read-all", { method: "PATCH", body: JSON.stringify({}) }),
 
-  previewInvite: (token: string) => publicRequest<InvitePreview>(`/invites/${token}`),
+  previewInvite: (token: string) => publicRequest<InvitePreview>(`/invites/${token}`, { withAuth: true }),
 
   resolveInvite: (token: string) =>
     request<{ groupId: string; membershipId: string; alreadyMember?: boolean }>(

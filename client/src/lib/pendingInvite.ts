@@ -11,6 +11,11 @@ export async function resolvePendingInvite(navigate: (path: string) => void): Pr
 
   try {
     const preview = await api.previewInvite(token);
+    if (preview.invite.alreadyMember) {
+      sessionStorage.removeItem(PENDING_INVITE_KEY);
+      navigate(`/groups/${preview.group.id}`);
+      return true;
+    }
     if (!preview.invite.canJoin) {
       const path = preview.invite.type === "membership_claim" ? `/claim/${token}` : `/invite/${token}`;
       navigate(path);
