@@ -97,19 +97,7 @@ export function AppLayout() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const { data: notificationsData } = useQuery({
-    queryKey: ["notifications"],
-    queryFn: () => api.getNotifications(),
-    enabled: !!user,
-    staleTime: 30_000,
-    refetchOnWindowFocus: false,
-  });
-
-  useEffect(() => {
-    if (user) prefetchRealtimeToken();
-  }, [user]);
-
-  useNotificationsRealtime({
+  const { realtimeActive: notificationsLive } = useNotificationsRealtime({
     userId: user?.id,
     enabled: !!user,
     onUpdate: () => {
@@ -117,6 +105,20 @@ export function AppLayout() {
       void queryClient.invalidateQueries({ queryKey: ["home-overview"] });
     },
   });
+
+  const { data: notificationsData } = useQuery({
+    queryKey: ["notifications"],
+    queryFn: () => api.getNotifications(),
+    enabled: !!user,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+    // Poll only while the realtime channel isn't live.
+    refetchInterval: notificationsLive ? false : 30_000,
+  });
+
+  useEffect(() => {
+    if (user) prefetchRealtimeToken();
+  }, [user]);
 
   async function handleLogout() {
     await logout();

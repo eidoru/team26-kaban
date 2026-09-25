@@ -42,6 +42,7 @@ import {
   serializeContributionForViewer,
 } from "../services/contributions.js";
 import { getGroupAuditLog } from "../services/auditLog.js";
+import { notifyGroupChangeSafe } from "../lib/realtimeNotify.js";
 import {
   settleMemberDebts,
   coverObligationExternally,
@@ -220,6 +221,7 @@ router.post("/", validateBody(createGroupSchema), async (req, res, next) => {
 router.delete("/:id", loadGroup, requireGroupManager, async (req, res, next) => {
   try {
     await deleteFormingGroup(req.group!.id, req.user!.id);
+    await notifyGroupChangeSafe(req.group!.id, "memberships");
     res.status(204).send();
   } catch (err) {
     if (err instanceof GroupError) {
@@ -286,6 +288,7 @@ router.post(
         metadata: { displayName: membership.displayName },
       }).catch((err) => console.error("Failed to write audit log", err));
 
+      await notifyGroupChangeSafe(req.group!.id, "memberships");
       res.status(201).json({ member: serializeMember(membership) });
     } catch (err) {
       if (err instanceof GroupError) {
@@ -333,6 +336,7 @@ router.patch(
         entityId: membership.id,
       });
 
+      await notifyGroupChangeSafe(req.group!.id, "memberships");
       res.json({ member: serializeMember(membership) });
     } catch (err) {
       if (err instanceof GroupError) {
@@ -391,6 +395,7 @@ router.delete(
         metadata: { displayName: existing.displayName },
       });
 
+      await notifyGroupChangeSafe(req.group!.id, "memberships");
       res.status(204).send();
     } catch (err) {
       if (err instanceof GroupError) {
@@ -508,6 +513,7 @@ router.post(
         req.body.method,
         req.body.order,
       );
+      await notifyGroupChangeSafe(req.group!.id, "memberships");
       res.json({ members: members.map(serializeMember) });
     } catch (err) {
       if (err instanceof GroupError) {
@@ -552,6 +558,7 @@ router.patch(
       });
 
       const filledCount = await countFilledSlots(group.id);
+      await notifyGroupChangeSafe(req.group!.id, "memberships");
       res.json({
         group: serializeGroup(updated, filledCount, "manager"),
       });
@@ -836,6 +843,7 @@ router.post(
         req.body.amount,
         req.body.note,
       );
+      await notifyGroupChangeSafe(req.group!.id, "rounds");
       res.json(result);
     } catch (err) {
       if (err instanceof ObligationError) {
@@ -865,6 +873,7 @@ router.post(
         req.user!.id,
         req.body.note,
       );
+      await notifyGroupChangeSafe(req.group!.id, "rounds");
       res.json(result);
     } catch (err) {
       if (err instanceof ObligationError) {
@@ -909,6 +918,7 @@ router.post(
         req.user!.id,
         req.body,
       );
+      await notifyGroupChangeSafe(req.group!.id, "rounds");
       res.json({ claim });
     } catch (err) {
       if (err instanceof ObligationError) {
@@ -939,6 +949,7 @@ router.patch(
         req.body.decision,
         req.body.reviewNote,
       );
+      await notifyGroupChangeSafe(req.group!.id, "rounds");
       res.json(result);
     } catch (err) {
       if (err instanceof ObligationError) {
@@ -1005,6 +1016,7 @@ router.post(
         req.user!.id,
         req.body,
       );
+      await notifyGroupChangeSafe(req.group!.id, "rounds");
       res.status(201).json({ dispute: { id: dispute.id, status: dispute.status } });
     } catch (err) {
       if (err instanceof DisputeError) {
@@ -1033,6 +1045,7 @@ router.patch(
         req.user!.id,
         req.body.resolution,
       );
+      await notifyGroupChangeSafe(req.group!.id, "rounds");
       res.json({ dispute: { id: dispute.id, status: dispute.status } });
     } catch (err) {
       if (err instanceof DisputeError) {
@@ -1098,6 +1111,7 @@ router.post("/:id/leave", loadGroup, requireGroupMember, async (req, res, next) 
       });
     }
 
+    await notifyGroupChangeSafe(req.group!.id, "memberships");
     res.status(204).send();
   } catch (err) {
     if (err instanceof GroupError) {

@@ -118,7 +118,8 @@ export function GroupLobbyPage() {
       await refreshGroupView(queryClient, id!);
       return null;
     },
-    enabled: !!id && groupLoaded && groupStatus === "active",
+    // Forming groups need it too (members joining), not just active ones.
+    enabled: !!id && groupLoaded && (groupStatus === "active" || groupStatus === "forming"),
     refetchInterval: needsFallbackSync ? 15_000 : 30_000,
     refetchOnWindowFocus: false,
     retry: shouldRetryGroupQuery,

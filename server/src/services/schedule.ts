@@ -1,7 +1,7 @@
 import { Group, GroupFrequency, GroupStatus, Prisma, RoundStatus } from "@prisma/client";
 import { prisma, prismaTransactionOptions } from "../lib/prisma.js";
 import { writeAuditLog } from "../lib/audit.js";
-import { notifyGroupChange } from "../lib/realtimeNotify.js";
+import { notifyGroupChangeSafe } from "../lib/realtimeNotify.js";
 import { GroupError } from "./groups.js";
 import { processRoundShortfall, notifyRoundShortfalls, type RoundShortfallNotifications } from "./obligations.js";
 
@@ -227,9 +227,7 @@ export async function activateGroup(
     });
   }, prismaTransactionOptions);
 
-  void notifyGroupChange(groupId, "rounds").catch((err) => {
-    console.error("Failed to broadcast group activation", err);
-  });
+  await notifyGroupChangeSafe(groupId, "rounds");
 
   return prisma.group.findUniqueOrThrow({ where: { id: groupId } });
 }
@@ -317,9 +315,7 @@ export async function closeRoundById(roundId: string, actorId?: string) {
   }
 
   if (notifyGroupId) {
-    void notifyGroupChange(notifyGroupId, "rounds").catch((err) => {
-      console.error("Failed to broadcast round change", err);
-    });
+    await notifyGroupChangeSafe(notifyGroupId, "rounds");
   }
 }
 
