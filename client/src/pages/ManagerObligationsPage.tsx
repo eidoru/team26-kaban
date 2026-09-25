@@ -58,7 +58,7 @@ export function ManagerObligationsPage() {
 
       {isLoading && (
         <div className="mt-8 space-y-4" aria-hidden>
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             {[0, 1, 2].map((i) => (
               <div key={i} className={`${ui.skeleton} h-28`} />
             ))}
@@ -70,7 +70,7 @@ export function ManagerObligationsPage() {
 
       {data && (
         <div className="mt-8 space-y-8">
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <StatCard
               label="Total outstanding"
               value={formatPeso(totalOutstanding)}
@@ -101,12 +101,12 @@ export function ManagerObligationsPage() {
               </p>
             </div>
           ) : (
-            <ul className="grid gap-4 lg:grid-cols-2">
+            <ul className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               {groups.map((g) => {
                 const shown = g.debtors.slice(0, PREVIEW_COUNT);
                 const hidden = g.debtors.length - shown.length;
                 return (
-                  <li key={g.groupId} className="flex flex-col rounded-3xl border border-ink-200 bg-white p-5 shadow-card">
+                  <li key={g.groupId} className="flex flex-col rounded-3xl border border-ink-200 bg-white p-4 shadow-card sm:p-5">
                     <div className="flex items-start gap-3">
                       <Avatar name={g.groupName} size="md" shape="tile" />
                       <div className="min-w-0 flex-1">
@@ -124,20 +124,30 @@ export function ManagerObligationsPage() {
                           {g.count === 1 ? "" : "s"} unpaid
                         </p>
                       </div>
-                      <p className="font-heading shrink-0 text-xl font-bold tabular-nums text-danger-700">
+                      <p className="font-heading hidden shrink-0 text-xl font-bold tabular-nums text-danger-700 sm:block">
                         {formatPeso(g.totalOutstanding)}
                       </p>
                     </div>
 
+                    {/* Phones: the total gets its own strip so the group name keeps the full row. */}
+                    <div className="mt-3 flex items-baseline justify-between gap-3 rounded-2xl bg-danger-50 px-4 py-2.5 sm:hidden">
+                      <span className="text-xs font-bold uppercase tracking-wide text-danger-700">Owed to you</span>
+                      <span className="font-heading text-xl font-bold tabular-nums text-danger-700">
+                        {formatPeso(g.totalOutstanding)}
+                      </span>
+                    </div>
+
                     <ul className="mb-3 mt-4 space-y-1">
                       {shown.map((d) => (
-                        <li key={d.id} className="flex items-center gap-3 rounded-2xl px-2 py-1.5">
+                        <li key={d.id} className="flex items-center gap-3 rounded-2xl px-1 py-1.5 sm:px-2">
                           <Avatar name={d.name} placeholder={d.isPlaceholder} />
-                          <p className="min-w-0 flex-1 truncate text-sm font-bold text-ink-900">{d.name}</p>
-                          <p className="shrink-0 text-xs text-ink-500">
-                            {d.rounds} round{d.rounds === 1 ? "" : "s"}
-                          </p>
-                          <p className="w-20 shrink-0 text-right text-sm font-bold tabular-nums text-ink-900">
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-bold text-ink-900">{d.name}</p>
+                            <p className="text-xs text-ink-500">
+                              {d.rounds} unpaid round{d.rounds === 1 ? "" : "s"}
+                            </p>
+                          </div>
+                          <p className="shrink-0 text-right text-sm font-bold tabular-nums text-ink-900">
                             {formatPeso(d.total)}
                           </p>
                         </li>

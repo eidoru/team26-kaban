@@ -324,12 +324,12 @@ export function CreateGroupPage() {
               value={amountMode}
               onChange={setAmountMode}
               options={[
-                { value: "total", label: "Set total pot" },
-                { value: "perMember", label: "Set per-member amount" },
+                { value: "total", label: "Total pot" },
+                { value: "perMember", label: "Per member" },
               ]}
             />
 
-            <div className="grid gap-6 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
               {amountMode === "total" ? (
                 <div>
                   <label htmlFor="totalAmount" className={ui.label}>
@@ -494,17 +494,20 @@ export function CreateGroupPage() {
 
           {/* Below lg the summary panel is hidden, so this bar carries the live total next to the
               submit button; it sits just above the mobile tab bar. */}
-          <div className="sticky bottom-24 z-30 flex items-center justify-between gap-3 rounded-3xl border border-ink-200 bg-white/95 p-3 pl-5 shadow-lift backdrop-blur md:bottom-4 lg:static lg:justify-end lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none lg:backdrop-blur-none">
+          <div className="sticky bottom-24 z-30 flex flex-col items-stretch gap-3 rounded-3xl border border-ink-200 bg-white/95 p-4 shadow-lift backdrop-blur sm:flex-row sm:items-center sm:justify-between sm:p-3 sm:pl-5 md:bottom-4 lg:static lg:justify-end lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none lg:backdrop-blur-none">
+            {/* Phones stack the summary over a full-width button so nothing gets truncated. */}
             <div className="min-w-0 lg:hidden">
-              <p className="text-xs font-bold uppercase tracking-wide text-ink-500">Total pot</p>
-              <p className="font-heading truncate text-lg font-bold leading-tight tabular-nums text-ink-900">
-                {summary.total}
-              </p>
-              <p className="truncate text-xs text-ink-500">
+              <div className="flex items-baseline justify-between gap-3 sm:block">
+                <p className="text-xs font-bold uppercase tracking-wide text-ink-500">Total pot</p>
+                <p className="font-heading text-lg font-bold leading-tight tabular-nums text-ink-900 sm:truncate">
+                  {summary.total}
+                </p>
+              </div>
+              <p className="mt-0.5 text-xs text-ink-500 sm:truncate">
                 {summary.contribution} each · {summary.frequency}
               </p>
             </div>
-            <button type="submit" disabled={mutation.isPending} className={`${ui.btnPrimary} shrink-0`}>
+            <button type="submit" disabled={mutation.isPending} className={`${ui.btnPrimary} w-full shrink-0 sm:w-auto`}>
               {mutation.isPending ? "Creating…" : "Create paluwagan"}
             </button>
           </div>
