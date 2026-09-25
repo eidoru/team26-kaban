@@ -22,16 +22,18 @@ const KINDS: Record<string, { icon: LucideIcon; tone: string }> = {
 
 const FALLBACK = { icon: Bell, tone: "bg-ink-100 text-ink-600" };
 
-export function NotificationIcon({ type, size = "md" }: { type: string; size?: "sm" | "md" }) {
+const SIZES = {
+  sm: { box: "h-8 w-8", icon: "h-4 w-4" },
+  md: { box: "h-10 w-10", icon: "h-5 w-5" },
+  // Small on phones, regular from sm up.
+  responsive: { box: "h-8 w-8 sm:h-10 sm:w-10", icon: "h-4 w-4 sm:h-5 sm:w-5" },
+} as const;
+
+export function NotificationIcon({ type, size = "md" }: { type: string; size?: keyof typeof SIZES }) {
   const { icon: Icon, tone } = KINDS[type] ?? FALLBACK;
   return (
-    <span
-      aria-hidden
-      className={`flex shrink-0 items-center justify-center rounded-full ${tone} ${
-        size === "sm" ? "h-8 w-8" : "h-10 w-10"
-      }`}
-    >
-      <Icon className={size === "sm" ? "h-4 w-4" : "h-5 w-5"} />
+    <span aria-hidden className={`flex shrink-0 items-center justify-center rounded-full ${tone} ${SIZES[size].box}`}>
+      <Icon className={SIZES[size].icon} />
     </span>
   );
 }

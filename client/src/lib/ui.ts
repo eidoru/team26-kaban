@@ -27,6 +27,8 @@ export const ui = {
   btnSecondary: `${btnSecondaryBase} px-5 py-2`,
   btnSecondarySm: `${btnSecondaryBase} px-4 py-1.5`,
   btnSecondaryFull: `${btnSecondaryBase} w-full py-2`,
+  /** Add to a button: full-width 44px tap target on phones, normal size from sm up. */
+  tapFull: "min-h-11 w-full sm:min-h-0 sm:w-auto",
   btnOutline: `${btnBase} border-2 border-brand-700 px-6 py-2 text-brand-700 hover:bg-brand-700 hover:text-white`,
   btnGhost: `${btnBase} px-3 py-1.5 font-semibold text-ink-600 hover:bg-ink-100`,
   btnDangerGhost:
@@ -49,21 +51,23 @@ export const ui = {
   sectionCard: "rounded-3xl border border-ink-200 bg-white p-6 shadow-card",
   sectionHeader: "font-heading text-lg font-semibold text-ink-900",
   sectionSubtitle: "mt-0.5 text-sm text-ink-500",
-  metricGrid: "grid gap-3 sm:grid-cols-2 lg:grid-cols-4",
-  metricGrid2: "grid gap-3 sm:grid-cols-2",
+  metricGrid: "grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4",
+  metricGrid2: "grid grid-cols-1 gap-3 sm:grid-cols-2",
   factStrip: "mt-5 flex flex-wrap gap-x-8 gap-y-3",
   actionBar: "flex flex-wrap justify-end gap-2 border-t border-ink-100 pt-4",
-  sidebarNav: "flex gap-1 overflow-x-auto pb-1 md:flex-col md:overflow-visible md:pb-0",
+  sidebarNav: "hidden flex-col gap-1 md:flex",
   sidebarNavItem:
     "flex w-full items-center justify-between gap-2 whitespace-nowrap rounded-full px-4 py-2 text-left text-sm transition-colors",
   sidebarNavItemActive: "bg-brand-700 font-bold text-white",
   sidebarNavItemIdle: "font-semibold text-ink-600 hover:bg-ink-100",
   sidebarNavItemDisabled: "cursor-not-allowed font-semibold text-ink-300",
-  segmentedTrack: "inline-flex flex-wrap gap-1 rounded-full bg-ink-100 p-1",
+  // Segmented control: equal grid cells on phones (column class comes from the component),
+  // an inline pill group from sm up.
+  segmentedTrack: "grid w-full gap-1 rounded-2xl bg-ink-100 p-1 sm:inline-flex sm:w-auto sm:rounded-full",
   segmentedOption:
-    "rounded-full px-4 py-1.5 text-sm font-bold text-ink-500 transition-all hover:text-ink-700",
+    "flex min-h-11 items-center justify-center rounded-xl px-3 py-1.5 text-center text-sm font-bold leading-tight text-ink-500 transition-all hover:text-ink-700 sm:min-h-0 sm:rounded-full sm:px-4",
   segmentedOptionActive:
-    "rounded-full px-4 py-1.5 text-sm font-bold bg-white text-brand-700 shadow-sm transition-all",
+    "flex min-h-11 items-center justify-center rounded-xl bg-white px-3 py-1.5 text-center text-sm font-bold leading-tight text-brand-700 shadow-sm transition-all sm:min-h-0 sm:rounded-full sm:px-4",
   toggleTrack: "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors",
   toggleTrackOn: "bg-brand-600",
   toggleTrackOff: "bg-ink-300",

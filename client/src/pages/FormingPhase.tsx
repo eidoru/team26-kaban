@@ -1,5 +1,5 @@
 import { type DragEvent, type FormEvent, useEffect, useMemo, useState } from "react";
-import { Check, GripVertical, Link2, UserPlus } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, GripVertical, Link2, UserPlus } from "lucide-react";
 import { Avatar } from "../components/Avatar";
 import { formatFrequency } from "../lib/frequency";
 import { formatDueDate } from "../lib/dates";
@@ -56,44 +56,86 @@ function SetupChecklist({
   ];
   const currentIndex = items.findIndex((item) => !item.done);
 
+  const circle = (item: (typeof items)[number], index: number, current: boolean) => (
+    <span
+      className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+        item.done
+          ? "bg-brand-600 text-white"
+          : current
+            ? "bg-sun-300 text-ink-900"
+            : "border-2 border-ink-200 bg-white text-ink-500"
+      }`}
+    >
+      {item.done ? <Check className="h-3.5 w-3.5" strokeWidth={3} aria-hidden /> : index + 1}
+    </span>
+  );
+
   return (
-    <ol className="flex flex-wrap items-center gap-x-2 gap-y-2">
-      {items.map((item, index) => {
-        const current = index === currentIndex;
-        return (
-          <li key={item.label} className="flex items-center gap-2" aria-current={current ? "step" : undefined}>
-            <span
-              className={`inline-flex items-center gap-2 rounded-full py-1 pl-1 pr-3 text-sm font-bold ${
-                item.done
-                  ? "bg-brand-100 text-brand-800"
-                  : current
-                    ? "bg-sun-100 text-ink-900"
-                    : "bg-ink-100 text-ink-500"
-              }`}
+    <>
+      {/* Phones: a vertical checklist (the phase rail above is already a dot stepper). */}
+      <ol className="space-y-1 sm:hidden">
+        {items.map((item, index) => {
+          const current = index === currentIndex;
+          return (
+            <li
+              key={item.label}
+              aria-current={current ? "step" : undefined}
+              className={`relative flex items-center gap-3 rounded-2xl px-2 py-1.5 ${current ? "bg-sun-50" : ""}`}
             >
+              {circle(item, index, current)}
               <span
-                className={`flex h-6 w-6 items-center justify-center rounded-full text-xs ${
-                  item.done
-                    ? "bg-brand-600 text-white"
-                    : current
-                      ? "bg-sun-300 text-ink-900"
-                      : "border-2 border-ink-200 bg-white text-ink-500"
+                className={`min-w-0 flex-1 text-sm ${
+                  item.done ? "font-semibold text-ink-600" : current ? "font-bold text-ink-900" : "font-semibold text-ink-500"
                 }`}
               >
-                {item.done ? <Check className="h-3.5 w-3.5" strokeWidth={3} aria-hidden /> : index + 1}
+                {item.label}
               </span>
-              {item.label}
-            </span>
-            {index < items.length - 1 && (
+              {item.done ? (
+                <span className="text-xs font-bold text-brand-700">Done</span>
+              ) : current ? (
+                <span className="text-xs font-bold text-sun-800">Next</span>
+              ) : null}
+              {index < items.length - 1 && (
+                <span
+                  aria-hidden
+                  className={`absolute left-[19px] top-[30px] h-4 w-0.5 rounded-full ${
+                    item.done ? "bg-brand-300" : "bg-ink-200"
+                  }`}
+                />
+              )}
+            </li>
+          );
+        })}
+      </ol>
+
+      <ol className="hidden flex-wrap items-center gap-x-2 gap-y-2 sm:flex">
+        {items.map((item, index) => {
+          const current = index === currentIndex;
+          return (
+            <li key={item.label} className="flex items-center gap-2" aria-current={current ? "step" : undefined}>
               <span
-                aria-hidden
-                className={`hidden h-0.5 w-4 rounded-full sm:block ${item.done ? "bg-brand-300" : "bg-ink-200"}`}
-              />
-            )}
-          </li>
-        );
-      })}
-    </ol>
+                className={`inline-flex items-center gap-2 rounded-full py-1 pl-1 pr-3 text-sm font-bold ${
+                  item.done
+                    ? "bg-brand-100 text-brand-800"
+                    : current
+                      ? "bg-sun-100 text-ink-900"
+                      : "bg-ink-100 text-ink-500"
+                }`}
+              >
+                {circle(item, index, current)}
+                {item.label}
+              </span>
+              {index < items.length - 1 && (
+                <span
+                  aria-hidden
+                  className={`h-0.5 w-4 rounded-full ${item.done ? "bg-brand-300" : "bg-ink-200"}`}
+                />
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    </>
   );
 }
 
@@ -152,8 +194,9 @@ function MemberTableRow({
           </p>
         )}
       </div>
+      {/* Phones: actions drop to their own line under the name (indent = turn chip + avatar + gaps). */}
       {managerView && member.isPlaceholder && (
-        <div className="flex shrink-0 flex-wrap justify-end gap-1">
+        <div className="flex w-full flex-wrap gap-1 pl-[5.5rem] sm:w-auto sm:shrink-0 sm:justify-end sm:pl-0">
           <button type="button" onClick={onClaimInvite} disabled={claimPending} className={ui.btnSecondarySm}>
             Claim link
           </button>
@@ -165,7 +208,7 @@ function MemberTableRow({
         </div>
       )}
       {managerView && claimUrl && (
-        <div className="w-full sm:pl-[5.25rem]">
+        <div className="w-full sm:pl-[5.5rem]">
           <CopyableLink url={claimUrl} label="Claim link" compact />
         </div>
       )}
@@ -198,6 +241,10 @@ function OrderRow({
   onDragEnd,
   onDragOver,
   onDrop,
+  onMoveUp,
+  onMoveDown,
+  isFirst = false,
+  isLast = false,
 }: {
   member: GroupMember;
   position: number;
@@ -208,7 +255,13 @@ function OrderRow({
   onDragEnd: () => void;
   onDragOver: (e: DragEvent) => void;
   onDrop: (e: DragEvent) => void;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
+  isFirst?: boolean;
+  isLast?: boolean;
 }) {
+  const moveButton =
+    "flex h-9 w-9 items-center justify-center rounded-full text-ink-600 transition-colors hover:bg-ink-100 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent";
   return (
     <li
       draggable={draggable}
@@ -225,13 +278,40 @@ function OrderRow({
         draggable ? "cursor-grab bg-white hover:bg-ink-50 active:cursor-grabbing" : ""
       } ${isDragging ? "opacity-40" : ""} ${isDragOver ? "bg-brand-50 ring-2 ring-inset ring-brand-300" : ""}`}
     >
-      {draggable && <GripVertical className="h-5 w-5 shrink-0 text-ink-400" aria-hidden />}
+      {/* Touch can't drag, so the grip only shows where a mouse is likely; arrows cover phones. */}
+      {draggable && <GripVertical className="hidden h-5 w-5 shrink-0 text-ink-400 sm:block" aria-hidden />}
       <TurnChip turn={position} />
       <Avatar name={member.displayName} placeholder={member.isPlaceholder} />
       <span className="min-w-0 flex-1 truncate font-bold text-ink-900">{member.displayName}</span>
       {position === 1 && (
-        <span className="shrink-0 rounded-full bg-sun-100 px-2.5 py-0.5 text-xs font-bold text-sun-800">
+        <span
+          className={`shrink-0 rounded-full bg-sun-100 px-2.5 py-0.5 text-xs font-bold text-sun-800 ${
+            draggable ? "hidden sm:inline-flex" : ""
+          }`}
+        >
           First payout
+        </span>
+      )}
+      {draggable && (onMoveUp || onMoveDown) && (
+        <span className="flex shrink-0 items-center">
+          <button
+            type="button"
+            onClick={onMoveUp}
+            disabled={isFirst}
+            aria-label={`Move ${member.displayName} up`}
+            className={moveButton}
+          >
+            <ChevronUp className="h-5 w-5" aria-hidden />
+          </button>
+          <button
+            type="button"
+            onClick={onMoveDown}
+            disabled={isLast}
+            aria-label={`Move ${member.displayName} down`}
+            className={moveButton}
+          >
+            <ChevronDown className="h-5 w-5" aria-hidden />
+          </button>
         </span>
       )}
     </li>
@@ -349,6 +429,16 @@ export function FormingManagerPanel({
 
   const canDragOrder = tab === "order" && rosterDone && !orderLocked;
 
+  // Same path as a drop: rebuild the order and hand it to onReorderMembers (draft until Lock in).
+  function handleMove(memberId: string, delta: -1 | 1) {
+    const ids = orderedMembers.map((m) => m.id);
+    const from = ids.indexOf(memberId);
+    const to = from + delta;
+    if (from < 0 || to < 0 || to >= ids.length) return;
+    [ids[from], ids[to]] = [ids[to], ids[from]];
+    onReorderMembers(ids);
+  }
+
   function handleDropOnMember(targetId: string) {
     if (!dragId || dragId === targetId) return;
     const ids = orderedMembers.map((m) => m.id);
@@ -435,34 +525,52 @@ export function FormingManagerPanel({
             >
               <div className="-mx-2 min-h-0 overflow-hidden">
                 <div className="px-2 pb-2">
-                  <div className="grid gap-6 border-t border-ink-100 pt-6 md:grid-cols-2">
+                  <div className="grid grid-cols-1 gap-4 border-t border-ink-100 pt-6 md:grid-cols-2 md:gap-6">
                     <form onSubmit={onAddMember} className="space-y-3">
                       <p className="flex items-center gap-2 text-sm font-bold text-ink-900">
                         <UserPlus className="h-4 w-4 text-brand-700" aria-hidden />
-                        Add placeholder
+                        Add a placeholder
                       </p>
                       <input
                         required
                         value={addName}
                         onChange={(e) => onAddNameChange(e.target.value)}
                         placeholder="Name"
+                        aria-label="Placeholder name"
                         className={ui.input}
                       />
                       <input
                         value={addContact}
                         onChange={(e) => onAddContactChange(e.target.value)}
                         placeholder="Contact (optional)"
+                        aria-label="Placeholder contact (optional)"
                         className={ui.input}
                       />
-                      <button type="submit" disabled={addMemberPending} className={ui.btnPrimarySm}>
-                        {addMemberPending ? "Adding…" : "Add"}
+                      {/* Full-width 44px target on phones, matching the inputs above. */}
+                      <button
+                        type="submit"
+                        disabled={addMemberPending}
+                        className={`${ui.btnPrimary} ${ui.tapFull}`}
+                      >
+                        <UserPlus className="h-4 w-4" aria-hidden />
+                        {addMemberPending ? "Adding…" : "Add placeholder"}
                       </button>
                     </form>
-                    <div>
-                      <p className="mb-3 flex items-center gap-2 text-sm font-bold text-ink-900">
-                        <Link2 className="h-4 w-4 text-brand-700" aria-hidden />
-                        Invite link
-                      </p>
+
+                    <div className="flex items-center gap-3 md:hidden" aria-hidden>
+                      <span className="h-px flex-1 bg-ink-200" />
+                      <span className="text-xs font-bold uppercase tracking-wide text-ink-500">or share a link</span>
+                      <span className="h-px flex-1 bg-ink-200" />
+                    </div>
+
+                    <div className="space-y-3 rounded-3xl bg-brand-50 p-4">
+                      <div>
+                        <p className="flex items-center gap-2 text-sm font-bold text-ink-900">
+                          <Link2 className="h-4 w-4 text-brand-700" aria-hidden />
+                          Invite link
+                        </p>
+                        <p className="mt-1 text-xs text-ink-600">Anyone with this link can take an open seat.</p>
+                      </div>
                       {inviteUrl ? (
                         <CopyableLink url={inviteUrl} label="Group invite" compact />
                       ) : (
@@ -470,9 +578,10 @@ export function FormingManagerPanel({
                           type="button"
                           onClick={onGroupInvite}
                           disabled={groupInvitePending}
-                          className={ui.btnSecondary}
+                          className={`${ui.btnSecondary} ${ui.tapFull}`}
                         >
-                          {groupInvitePending ? "Generating…" : "Generate invite link"}
+                          <Link2 className="h-4 w-4" aria-hidden />
+                          {groupInvitePending ? "Creating…" : "Create invite link"}
                         </button>
                       )}
                     </div>
@@ -483,7 +592,7 @@ export function FormingManagerPanel({
 
             {rosterDone && (
               <div className={ui.actionBar}>
-                <button type="button" onClick={() => setTab("order")} className={ui.btnPrimary}>
+                <button type="button" onClick={() => setTab("order")} className={`${ui.btnPrimary} ${ui.tapFull}`}>
                   Continue to payout order
                 </button>
               </div>
@@ -496,7 +605,9 @@ export function FormingManagerPanel({
             <div>
               <h2 className={ui.sectionHeader}>Payout order</h2>
               <p className={ui.sectionSubtitle}>
-                Turn 1 gets the pot first. Drag rows to reorder, or randomize. Lock in when ready.
+                Turn 1 gets the pot first. <span className="sm:hidden">Use the arrows to reorder</span>
+                <span className="hidden sm:inline">Drag rows or use the arrows to reorder</span>, or randomize. Lock in when
+                ready.
               </p>
             </div>
 
@@ -529,23 +640,32 @@ export function FormingManagerPanel({
                     e.preventDefault();
                     handleDropOnMember(member.id);
                   }}
+                  onMoveUp={() => handleMove(member.id, -1)}
+                  onMoveDown={() => handleMove(member.id, 1)}
+                  isFirst={index === 0}
+                  isLast={index === orderedMembers.length - 1}
                 />
               ))}
             </ol>
 
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
               {!orderLocked && (
-                <button type="button" onClick={onRandomize} className={ui.btnOutline}>
+                <button type="button" onClick={onRandomize} className={`${ui.btnOutline} ${ui.tapFull}`}>
                   Randomize
                 </button>
               )}
               {!orderLocked && (
-                <button type="button" onClick={onLockIn} disabled={lockingInPayout} className={ui.btnPrimary}>
+                <button
+                  type="button"
+                  onClick={onLockIn}
+                  disabled={lockingInPayout}
+                  className={`${ui.btnPrimary} ${ui.tapFull}`}
+                >
                   {lockingInPayout ? "Locking in…" : "Lock in order"}
                 </button>
               )}
               {orderLocked && (
-                <button type="button" onClick={() => onBeginDraft()} className={ui.btnSecondary}>
+                <button type="button" onClick={() => onBeginDraft()} className={`${ui.btnSecondary} ${ui.tapFull}`}>
                   Edit order
                 </button>
               )}
@@ -555,7 +675,7 @@ export function FormingManagerPanel({
                 cache before anything is saved, so only a locked-in order may move on. */}
             {orderLocked && (
               <div className={ui.actionBar}>
-                <button type="button" onClick={() => setTab("start")} className={ui.btnPrimary}>
+                <button type="button" onClick={() => setTab("start")} className={`${ui.btnPrimary} ${ui.tapFull}`}>
                   Continue to launch
                 </button>
               </div>
@@ -570,7 +690,7 @@ export function FormingManagerPanel({
               <p className={ui.sectionSubtitle}>Review the terms and open Round 1.</p>
             </div>
 
-            <dl className="grid gap-2 sm:grid-cols-2">
+            <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <TermTile label="Contribution" value={`₱${Number(group.contributionAmount).toLocaleString()}`} />
               <TermTile label="Schedule" value={formatFrequency(group.frequency, group.frequencyDays)} />
               <TermTile label="Round pot" value={pot} />
@@ -602,7 +722,7 @@ export function FormingManagerPanel({
                   type="button"
                   onClick={onSaveStartDate}
                   disabled={saveStartDatePending || !displayStartDate}
-                  className={ui.btnSecondary}
+                  className={`${ui.btnSecondary} ${ui.tapFull}`}
                 >
                   {saveStartDatePending ? "Saving…" : "Save date"}
                 </button>
@@ -628,7 +748,7 @@ export function FormingManagerPanel({
                 type="button"
                 onClick={onActivate}
                 disabled={!readyToActivate || activatePending}
-                className={ui.btnPrimary}
+                className={`${ui.btnPrimary} ${ui.tapFull}`}
               >
                 {activatePending ? "Starting…" : "Start paluwagan"}
               </button>

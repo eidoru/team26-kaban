@@ -1,13 +1,13 @@
 ﻿import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CloudOff } from "lucide-react";
+import { BookOpen, CalendarDays, ClipboardCheck, CloudOff, Coins, ScrollText, TriangleAlert } from "lucide-react";
 import { ApiError, api, type GroupDetail, type GroupMember } from "../api/client";
 import { useDialog } from "../context/DialogContext";
 import { formatFrequency } from "../lib/frequency";
 import { dueHint, formatDueDate } from "../lib/dates";
 import { useDemoToolsSetting } from "../lib/devTools";
-import { clearGroupQueries, deferContributionSideEffects, deferStructureSideEffects, groupQueryKey, groupSupplementalQueryOptions, invalidateGroupIssues, invalidateGroupShell, isGroupNotFoundError, mergeCurrentRoundIntoGroupCache, OPTIMISTIC_MEMBER_ID, patchConfirmedContribution, patchGroupCurrentRoundContribution, patchMemberAdded, patchMemberRemoved, patchPayoutOrder, patchRecordedContribution, patchReportedContribution, patchStartDate, applyManualTurnOrder, refreshGroupView, shuffleMemberTurnOrder, shouldRetryGroupQuery } from "../lib/groupQueries";
+import { clearGroupQueries, deferContributionSideEffects, deferStructureSideEffects, groupQueryKey, groupSupplementalQueryOptions, invalidateGroupIssues, invalidateGroupShell, isGroupNotFoundError, mergeCurrentRoundIntoGroupCache, OPTIMISTIC_MEMBER_ID, patchConfirmedContribution, patchGroupCurrentRoundContribution, patchMemberAdded, patchMemberRemoved, patchPayoutOrder, patchRecordedContribution, patchReportedContribution, patchStartDate, refreshGroupView, shuffleMemberTurnOrder, shouldRetryGroupQuery } from "../lib/groupQueries";
 import { isSupabaseRealtimeConfigured } from "../lib/supabaseClient";
 import { isRealtimeFallbackNeeded, useGroupRealtime, type GroupRealtimeScope } from "../lib/useGroupRealtime";
 import { ui } from "../lib/ui";
@@ -19,6 +19,7 @@ import {
   GroupSectionLayout,
   type GroupFact,
   type GroupPhase,
+  type SectionNavItem,
 } from "../components/GroupChrome";
 import { FormingManagerPanel, FormingMemberPanel, formatGroupDate } from "./FormingPhase";
 
@@ -703,9 +704,10 @@ export function GroupLobbyPage() {
       membershipId,
       turnNumber: index + 1,
     }));
-    const nextManualOrder = Object.fromEntries(order.map((entry) => [entry.membershipId, entry.turnNumber]));
-    setManualOrder(nextManualOrder);
-    patchPayoutOrder(queryClient, id, applyManualTurnOrder(data.members, order));
+    // Drafts live only in component state (manualOrder). Writing them into the shared group cache
+    // made an unsaved order look locked after any remount (HMR, or leaving and returning), which
+    // jumped the panel to Launch and enabled "Start paluwagan". The cache changes on Lock in.
+    setManualOrder(Object.fromEntries(order.map((entry) => [entry.membershipId, entry.turnNumber])));
     setPayoutDraftActive(true);
   }
 
@@ -730,9 +732,8 @@ export function GroupLobbyPage() {
     const current = queryClient.getQueryData<GroupDetail>(groupQueryKey(id));
     if (!current?.members.length) return;
 
-    const shuffled = shuffleMemberTurnOrder(current.members);
-    patchPayoutOrder(queryClient, id, shuffled);
-    syncManualOrderFromMembers(shuffled);
+    // Draft only; see handleReorderMembers.
+    syncManualOrderFromMembers(shuffleMemberTurnOrder(current.members));
     setPayoutDraftActive(true);
   }
 
@@ -858,12 +859,14 @@ export function GroupLobbyPage() {
   const unsettledObligationCount = data?.issueCounts?.unsettledObligations ?? 0;
   const issuesCount = openDisputeCount + unsettledObligationCount;
 
-  const cycleTabs: { id: CycleTab; label: string; badge?: number }[] = [
-    { id: "overview", label: isActive ? "This round" : "Summary" },
-    { id: "schedule", label: "Schedule" },
-    { id: "ledger", label: "Ledger" },
-    { id: "issues", label: "Issues", badge: issuesCount },
-    ...(isManager ? [{ id: "audit" as const, label: "Audit log" }] : []),
+  const cycleTabs: (SectionNavItem & { id: CycleTab })[] = [
+    isActive
+      ? { id: "overview", label: "This round", shortLabel: "Round", icon: Coins }
+      : { id: "overview", label: "Summary", shortLabel: "Summary", icon: ClipboardCheck },
+    { id: "schedule", label: "Schedule", icon: CalendarDays },
+    { id: "ledger", label: "Ledger", icon: BookOpen },
+    { id: "issues", label: "Issues", badge: issuesCount, icon: TriangleAlert },
+    ...(isManager ? [{ id: "audit" as const, label: "Audit log", shortLabel: "Audit", icon: ScrollText }] : []),
   ];
 
   const phase: GroupPhase = isForming ? "forming" : isActive ? "active" : "completed";
@@ -892,16 +895,9 @@ export function GroupLobbyPage() {
     headerFacts.push({ label: "Starts", value: formatGroupDate(displayStartDate) });
   }
 
-  const headerAction =
-    isManager && !isForming && issuesCount > 0 ? (
-      <button type="button" onClick={() => setCycleTab("issues")} className={ui.btnSecondary}>
-        {issuesCount} issue{issuesCount === 1 ? "" : "s"}
-      </button>
-    ) : undefined;
-
   return (
     <div className="min-w-0">
-      <GroupHeader title={group.name} phase={phase} facts={headerFacts} action={headerAction} />
+      <GroupHeader title={group.name} phase={phase} facts={headerFacts} />
 
       {isForming && (
         <div className="space-y-6">
