@@ -71,6 +71,21 @@ npm run dev
 
 This starts the client on <http://localhost:5173> and the API on <http://localhost:3001>. Vite proxies `/api` to the API, so open the client URL.
 
+### Optional: a local database instead of the cloud one
+
+You can run the whole Supabase stack (Postgres, Realtime, Studio) locally in Docker. Local development then never touches the shared cloud database, and live updates work offline.
+
+```bash
+npm run db:local:start   # start Supabase, write .env.localdb, apply migrations
+npm run dev:local        # run the app against the local stack
+```
+
+- Browse data in Studio at <http://127.0.0.1:54323>.
+- `npm run db:local:reset` wipes the local database and re-applies migrations.
+- `npm run db:local:stop` shuts the stack down.
+- `.env.localdb` is generated (and git-ignored). Its values override `.env`, so cloud credentials are never used by the `*:local` commands.
+- It needs Docker running. The first start downloads the Supabase images, which takes a few minutes.
+
 ## Environment variables
 
 **Server**
