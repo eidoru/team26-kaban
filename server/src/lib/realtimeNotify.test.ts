@@ -39,13 +39,13 @@ describe("notifyGroupChange", () => {
 });
 
 describe("notifyGroupChangeSafe", () => {
-  it("never throws, even when the broadcast fails", async () => {
+  it("returns immediately and logs (never throws) when the broadcast fails", async () => {
     vi.stubEnv("SUPABASE_URL", "https://example.supabase.co");
     vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "service-key");
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("nope", { status: 500 })));
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    await expect(notifyGroupChangeSafe("g1", "memberships")).resolves.toBeUndefined();
-    expect(errorSpy).toHaveBeenCalledOnce();
+    expect(() => notifyGroupChangeSafe("g1", "memberships")).not.toThrow();
+    await vi.waitFor(() => expect(errorSpy).toHaveBeenCalledOnce());
   });
 });
