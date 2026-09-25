@@ -230,6 +230,7 @@ function InviteActions({
   registerLabel,
   error,
   reason,
+  alreadyMemberGroupId,
 }: {
   canJoin: boolean;
   user: { displayName: string } | null;
@@ -240,7 +241,20 @@ function InviteActions({
   registerLabel: string;
   error: string;
   reason?: string;
+  /** Set when the signed-in viewer already has a seat: show a way in instead of Join. */
+  alreadyMemberGroupId?: string;
 }) {
+  if (alreadyMemberGroupId) {
+    return (
+      <div className="mt-6 space-y-3">
+        <p className={ui.success}>You&apos;re already in this paluwagan.</p>
+        <Link to={`/groups/${alreadyMemberGroupId}`} className={ui.btnPrimaryFull}>
+          Open paluwagan
+        </Link>
+      </div>
+    );
+  }
+
   return (
     <div className="mt-6">
       {!canJoin && reason && <p className={ui.warning}>{reason}</p>}
@@ -334,8 +348,11 @@ export function InviteLandingPage() {
   }
 
   useEffect(() => {
-    if (token) sessionStorage.setItem(PENDING_INVITE_KEY, token);
-  }, [token]);
+    if (!token) return;
+    // Already a member: nothing to resume after login, so don't leave a pending invite behind.
+    if (data?.invite.alreadyMember) sessionStorage.removeItem(PENDING_INVITE_KEY);
+    else sessionStorage.setItem(PENDING_INVITE_KEY, token);
+  }, [token, data?.invite.alreadyMember]);
 
   if (isLoading || authLoading) {
     return <InviteLoading label="Loading invitation…" />;
@@ -369,6 +386,7 @@ export function InviteLandingPage() {
         registerLabel="Create account & join"
         error={error}
         reason={data.invite.reason}
+        alreadyMemberGroupId={data.invite.alreadyMember ? data.group.id : undefined}
       />
     </InviteShell>
   );
@@ -404,8 +422,11 @@ export function ClaimLandingPage() {
   }
 
   useEffect(() => {
-    if (token) sessionStorage.setItem(PENDING_INVITE_KEY, token);
-  }, [token]);
+    if (!token) return;
+    // Already a member: nothing to resume after login, so don't leave a pending invite behind.
+    if (data?.invite.alreadyMember) sessionStorage.removeItem(PENDING_INVITE_KEY);
+    else sessionStorage.setItem(PENDING_INVITE_KEY, token);
+  }, [token, data?.invite.alreadyMember]);
 
   if (isLoading || authLoading) {
     return <InviteLoading label="Loading claim link…" />;
@@ -440,6 +461,7 @@ export function ClaimLandingPage() {
         registerLabel="Register & claim"
         error={error}
         reason={data.invite.reason}
+        alreadyMemberGroupId={data.invite.alreadyMember ? data.group.id : undefined}
       />
     </InviteShell>
   );
