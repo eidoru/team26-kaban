@@ -99,8 +99,8 @@ npm run dev:local        # run the app against the local stack
 | `CLIENT_ORIGIN` | Production | Allowed CORS origin for the deployed client |
 | `CRON_SECRET` | Production | Bearer secret Vercel Cron sends to `/api/v1/cron/*` |
 | `SUPABASE_URL` | For realtime | Supabase project URL |
-| `SUPABASE_SERVICE_ROLE_KEY` | For realtime | Used to send broadcasts to group channels |
-| `SUPABASE_JWT_SECRET` | For realtime | Signs the short-lived token browsers use to subscribe |
+| `SUPABASE_SECRET_KEY` | For realtime | Secret API key (`sb_secret_…`), used to send broadcasts to group channels |
+| `SUPABASE_JWT_SIGNING_KEY` | For realtime | Private JWK (ES256) imported into the project's JWT signing keys; signs the short-lived tokens browsers use to subscribe |
 | `ALLOW_DEMO_TOOLS` | No | `true` allows the demo "Advance round" on Vercel production |
 | `PORT` | No | API port locally (default `3001`) |
 
@@ -108,7 +108,7 @@ npm run dev:local        # run the app against the local stack
 
 | Variable | Required | Purpose |
 |---|---|---|
-| `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` | For realtime | Supabase project URL and anon key |
+| `VITE_SUPABASE_URL` / `VITE_SUPABASE_PUBLISHABLE_KEY` | For realtime | Supabase project URL and publishable key (`sb_publishable_…`) |
 | `VITE_DEMO_TOOLS` | No | `true` builds in the demo tools (still off until enabled per browser) |
 | `VITE_API_URL` | No | API base URL; defaults to `/api/v1` on the same origin |
 
@@ -159,7 +159,8 @@ It logs in with that account and compares client round-trip time with server tim
 
 - The build runs `prisma generate`, **`prisma migrate deploy`** and the client build, so migrations apply on every deploy.
 - `api/index.ts` serves the Express app as one function under `/api/*`. Every other path serves the client.
-- The function runs in **`hnd1` (Tokyo)**, the same region as the Supabase database (`ap-northeast-1`). Keep the two in the same region: every query crosses the gap between them, so a mismatch adds about 150 ms per query.
+- The function runs in **`sin1` (Singapore)**, the same region as the Supabase database (`ap-southeast-1`). Keep the two in the same region: every query crosses the gap between them, and a mismatch adds tens to hundreds of milliseconds per query.
+- The **public** client values (`VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, `VITE_DEMO_TOOLS`) are committed in `.env.production` rather than set in Vercel. They're visible in the browser anyway, and Vercel won't store `VITE_` variables as sensitive. Don't add them to Vercel's Production or Preview variables: values set there override the file.
 - Cron jobs close due rounds, open the next ones, and send reminders daily.
 
 Set the environment variables separately for **Preview** and **Production**. Use a separate database for Preview if you don't want preview deploys running migrations against production data.
