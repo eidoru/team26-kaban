@@ -46,11 +46,34 @@ export function getRefreshTokenExpiry(): Date {
   return new Date(Date.now() + value * multipliers[unit]);
 }
 
-const supabaseJwtSecret = process.env.SUPABASE_JWT_SECRET;
+type SupabaseSigningKey = { key: crypto.KeyObject; kid: string; algorithm: "ES256" | "RS256" };
+
+/**
+ * SUPABASE_JWT_SIGNING_KEY holds the private JWK (ES256 or RS256) imported into the Supabase
+ * project's JWT signing keys; Supabase verifies our tokens with the matching public key. Accepts a
+ * single JWK or the array format of `supabase gen signing-key` / signing_keys.json.
+ */
+function loadSupabaseSigningKey(): SupabaseSigningKey | null {
+  const raw = process.env.SUPABASE_JWT_SIGNING_KEY;
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    const jwk = Array.isArray(parsed) ? parsed.find((k) => k?.d) : parsed;
+    if (!jwk?.d || !jwk.kid) throw new Error("expected a private JWK with a kid");
+    const algorithm = jwk.alg ?? (jwk.kty === "EC" ? "ES256" : "RS256");
+    if (algorithm !== "ES256" && algorithm !== "RS256") throw new Error(`unsupported alg ${algorithm}`);
+    return { key: crypto.createPrivateKey({ key: jwk, format: "jwk" }), kid: jwk.kid, algorithm };
+  } catch (err) {
+    console.error("SUPABASE_JWT_SIGNING_KEY is not a usable private JWK; realtime is disabled", err);
+    return null;
+  }
+}
+
+const supabaseSigningKey = loadSupabaseSigningKey();
 
 /** Short-lived JWT so the client can subscribe to Supabase Realtime with RLS. */
 export function signSupabaseAccessToken(userId: string): string | null {
-  if (!supabaseJwtSecret) return null;
+  if (!supabaseSigningKey) return null;
   return jwt.sign(
     {
       sub: userId,
@@ -58,11 +81,11 @@ export function signSupabaseAccessToken(userId: string): string | null {
       aud: "authenticated",
       iss: "supabase",
     },
-    supabaseJwtSecret,
-    { expiresIn: "1h" },
+    supabaseSigningKey.key,
+    { algorithm: supabaseSigningKey.algorithm, keyid: supabaseSigningKey.kid, expiresIn: "1h" },
   );
 }
 
 export function isSupabaseRealtimeConfigured(): boolean {
-  return Boolean(supabaseJwtSecret && process.env.SUPABASE_URL);
+  return Boolean(supabaseSigningKey && process.env.SUPABASE_URL);
 }
