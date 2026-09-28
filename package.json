@@ -17,7 +17,7 @@
     "test": "npm run test -w server",
     "typecheck": "npm run build -w server && npm run build -w client",
     "dev:local": "dotenv -e .env.localdb -- npm run dev",
-    "db:local:start": "supabase start && node scripts/local-env.mjs && npm run db:local:migrate",
+    "db:local:start": "node scripts/local-signing-key.mjs && supabase start && node scripts/local-env.mjs && npm run db:local:migrate",
     "db:local:stop": "supabase stop",
     "db:local:migrate": "dotenv -e .env.localdb -- prisma migrate deploy",
     "db:local:reset": "supabase db reset && npm run db:local:migrate",

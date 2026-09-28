@@ -10,7 +10,7 @@ afterEach(() => {
 describe("notifyGroupChange", () => {
   it("posts one HTTP broadcast to the group topic", async () => {
     vi.stubEnv("SUPABASE_URL", "https://example.supabase.co/");
-    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "service-key");
+    vi.stubEnv("SUPABASE_SECRET_KEY", "sb_secret_test");
     const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 202 }));
     vi.stubGlobal("fetch", fetchMock);
 
@@ -20,7 +20,8 @@ describe("notifyGroupChange", () => {
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe("https://example.supabase.co/realtime/v1/api/broadcast");
     expect(init.method).toBe("POST");
-    expect(init.headers.apikey).toBe("service-key");
+    expect(init.headers.apikey).toBe("sb_secret_test");
+    expect(init.headers.Authorization).toBeUndefined();
     expect(JSON.parse(init.body)).toEqual({
       messages: [{ topic: "group:g1", event: "group_update", payload: { scope: "contributions" } }],
     });
@@ -28,7 +29,7 @@ describe("notifyGroupChange", () => {
 
   it("does nothing when realtime isn't configured", async () => {
     vi.stubEnv("SUPABASE_URL", "");
-    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "");
+    vi.stubEnv("SUPABASE_SECRET_KEY", "");
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
 
@@ -41,7 +42,7 @@ describe("notifyGroupChange", () => {
 describe("notifyGroupChangeSafe", () => {
   it("returns immediately and logs (never throws) when the broadcast fails", async () => {
     vi.stubEnv("SUPABASE_URL", "https://example.supabase.co");
-    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "service-key");
+    vi.stubEnv("SUPABASE_SECRET_KEY", "sb_secret_test");
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("nope", { status: 500 })));
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 

@@ -11,15 +11,15 @@ const BROADCAST_TIMEOUT_MS = 1500;
  */
 export async function notifyGroupChange(groupId: string, scope: GroupChangeScope): Promise<void> {
   const url = process.env.SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !serviceKey) return;
+  const secretKey = process.env.SUPABASE_SECRET_KEY;
+  if (!url || !secretKey) return;
 
   const res = await fetch(`${url.replace(/\/$/, "")}/realtime/v1/api/broadcast`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      apikey: serviceKey,
-      Authorization: `Bearer ${serviceKey}`,
+      // New-style secret keys (sb_secret_…) aren't JWTs: they go only in the apikey header.
+      apikey: secretKey,
     },
     body: JSON.stringify({
       messages: [{ topic: `group:${groupId}`, event: "group_update", payload: { scope } }],
@@ -40,5 +40,5 @@ export function notifyGroupChangeSafe(groupId: string, scope: GroupChangeScope):
 }
 
 export function isGroupBroadcastConfigured(): boolean {
-  return Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
+  return Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SECRET_KEY);
 }

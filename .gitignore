@@ -8,3 +8,5 @@ dist/
 coverage/
 .prisma/
 .env*
+# Public client config for production builds (no secrets).
+!.env.production
