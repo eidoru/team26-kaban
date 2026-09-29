@@ -351,8 +351,7 @@ export function CreateGroupPage() {
         <aside className="hidden space-y-4 lg:order-last lg:block lg:w-72 lg:shrink-0 lg:self-start lg:sticky lg:top-24">
           <div className="overflow-hidden rounded-3xl border border-ink-200 bg-white shadow-card">
             <div className="bg-gradient-to-br from-brand-700 to-brand-800 px-6 py-6 text-white">
-              <p className="text-xs font-bold uppercase tracking-wide text-brand-100">Preview</p>
-              <p className="font-heading mt-1 truncate text-lg font-bold">{name.trim() || "New paluwagan"}</p>
+              <p className="font-heading truncate text-lg font-bold">{name.trim() || "New paluwagan"}</p>
               <p className="mt-4 text-xs font-bold uppercase tracking-wide text-brand-100">Each round&apos;s pot</p>
               <p className="font-heading mt-1 text-3xl font-bold tracking-tight tabular-nums">{summary.total}</p>
               <p className="mt-1 text-sm text-brand-50">
@@ -373,9 +372,6 @@ export function CreateGroupPage() {
               <SummaryRow label="Shortfall interest" value={summary.shortfallInterest} />
             </dl>
           </div>
-          <p className="text-sm text-ink-500">
-            Next: fill the roster, set the payout order, then launch to open Round 1.
-          </p>
         </aside>
 
         <form onSubmit={handleSubmit} className="min-w-0 flex-1 space-y-6">
