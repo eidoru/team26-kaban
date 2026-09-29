@@ -159,11 +159,14 @@ export interface MemberSummary {
     totalRounds: number;
     /** Contributions left this cycle (current round's balance plus upcoming rounds). */
     stillToPay: string;
+    roundsLeftToPay: number;
     paymentsMade: number;
     paymentsOnTime: number;
   };
   /** Shortfall interest paid (members) or collected (organizers). */
   interestSettled: string;
+  /** The group's shortfall interest rate; "0" when the group charges none. */
+  interestRatePercent: string;
   /** Open disputes about the viewer's payments. */
   openDisputes: number;
   debt: { remaining: string; interest: string; obligationCount: number };

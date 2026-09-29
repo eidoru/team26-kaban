@@ -83,6 +83,8 @@ export function buildMemberSummary(input: {
   /** Shortfall interest paid (members) or collected (organizers) so far. */
   interestSettled?: Prisma.Decimal;
   openDisputes?: number;
+  /** The group's shortfall interest rate; 0 means interest never applies, so the UI can skip it. */
+  interestRatePercent?: Prisma.Decimal;
 }) {
   const { membershipId, contributionAmount, contributions, debts, receivables } = input;
   const rounds = [...input.rounds].sort((a, b) => a.number - b.number);
@@ -114,6 +116,7 @@ export function buildMemberSummary(input: {
     .reduce((sum, c) => sum.plus(c.amount), new Prisma.Decimal(0));
 
   let stillToPay = ZERO;
+  let roundsLeftToPay = 0;
   let currentRemaining = ZERO;
   let paymentsMade = 0;
   let paymentsOnTime = 0;
@@ -123,6 +126,7 @@ export function buildMemberSummary(input: {
     if (round.status !== RoundStatus.closed) {
       const remaining = remainingFor(status, contribution?.amount ?? ZERO, contributionAmount);
       stillToPay = stillToPay.plus(remaining);
+      if (remaining.gt(0)) roundsLeftToPay += 1;
       if (round.status === RoundStatus.current) currentRemaining = remaining;
     }
     if (contribution && contribution.status !== ContributionStatus.pending && contribution.paidAt) {
@@ -158,10 +162,12 @@ export function buildMemberSummary(input: {
       roundsStarted: started.length,
       totalRounds: rounds.length,
       stillToPay: stillToPay.toString(),
+      roundsLeftToPay,
       paymentsMade,
       paymentsOnTime,
     },
     interestSettled: (input.interestSettled ?? ZERO).toString(),
+    interestRatePercent: (input.interestRatePercent ?? ZERO).toString(),
     openDisputes: input.openDisputes ?? 0,
     debt: {
       remaining: debtRemaining.toString(),
@@ -245,5 +251,6 @@ export async function getMemberSummary(group: Group, membership: Membership): Pr
     receivables: membership.isManager ? debts : null,
     interestSettled,
     openDisputes,
+    interestRatePercent: group.shortfallInterestRatePercent,
   });
 }

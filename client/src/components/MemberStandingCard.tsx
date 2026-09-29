@@ -1,6 +1,6 @@
 import { Coins } from "lucide-react";
 import type { MemberRoundStatus, MemberSummary } from "../api/client";
-import { dueHint, formatDueDate, formatLocalDate } from "../lib/dates";
+import { formatDueDate, formatLocalDate } from "../lib/dates";
 import { ui } from "../lib/ui";
 
 const peso = (value: string | number) => `₱${Number(value).toLocaleString()}`;
@@ -90,30 +90,6 @@ function Tile({ label, value, hint, tone }: { label: string; value: string; hint
   );
 }
 
-/** The current round from the viewer's side: what's left to pay, or that it's handled. */
-function currentRoundTile(summary: MemberSummary) {
-  const { currentRound } = summary;
-  if (!currentRound) return null;
-  const record = summary.rounds.find((r) => r.number === currentRound.number);
-  const remaining = Number(currentRound.remaining);
-  if (record?.status === "awaiting") {
-    return { value: "Reported", hint: "Waiting for the organizer to confirm", tone: "neutral" as const };
-  }
-  if (remaining <= 0) {
-    return {
-      value: "Paid",
-      hint: `You're paid up for Round ${currentRound.number}`,
-      tone: "success" as const,
-    };
-  }
-  const due = dueHint(currentRound.dueDate);
-  return {
-    value: peso(remaining),
-    hint: `Due ${formatDueDate(currentRound.dueDate)}${due ? ` · ${due.label}` : ""}`,
-    tone: due?.overdue ? ("danger" as const) : ("warning" as const),
-  };
-}
-
 /** The viewer's own standing in a started paluwagan: payout turn, payments, debt and round record. */
 export function MemberStandingCard({
   summary,
@@ -129,11 +105,9 @@ export function MemberStandingCard({
   const expected = Number(isCompleted ? payments.expectedTotal : payments.expectedSoFar);
   const owed = Number(debt.remaining);
   const interest = Number(debt.interest);
-  const payoutInfo = payoutTile(payout);
-  const thisRound = currentRoundTile(summary);
+  const chargesInterest = Number(summary.interestRatePercent) > 0;
   const stillToPay = Number(payments.stillToPay);
-  const roundsLeft = rounds.filter((r) => r.status === "upcoming").length + (summary.currentRound ? 1 : 0);
-  const interestSettled = Number(summary.interestSettled);
+  const payoutInfo = payoutTile(payout);
 
   const statusesPresent = (Object.keys(ROUND_STYLES) as MemberRoundStatus[]).filter((status) =>
     rounds.some((r) => r.status === status),
@@ -146,14 +120,22 @@ export function MemberStandingCard({
       </h3>
       <p className={ui.sectionSubtitle}>Your payout, payments and balance. Only you see this.</p>
 
-      <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3">
+      {/* Four answers only: when do I get paid, how much have I put in, what do I owe (or am owed),
+          and am I paying on time. The current round's status lives on the This round tab. */}
+      <div className="mt-4 grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
         <Tile label="Your payout" value={payoutInfo.value} hint={payoutInfo.hint} tone={payoutInfo.tone} />
         <Tile
           label={isCompleted ? "You paid in" : "Paid so far"}
           value={peso(paid)}
-          hint={`of ${peso(expected)} ${isCompleted ? "total" : "due so far"} · ${payments.roundsPaidInFull} of ${
-            payments.roundsStarted
-          } rounds in full`}
+          hint={
+            isCompleted
+              ? `of ${peso(expected)} total`
+              : stillToPay > 0
+                ? `of ${peso(expected)} due so far · ${peso(stillToPay)} still to pay over ${payments.roundsLeftToPay} round${
+                    payments.roundsLeftToPay === 1 ? "" : "s"
+                  }`
+                : `of ${peso(expected)} due so far · nothing left to pay`
+          }
           tone={paid >= expected ? "success" : "warning"}
         />
         {receivable ? (
@@ -162,7 +144,9 @@ export function MemberStandingCard({
             value={peso(receivable.remaining)}
             hint={
               receivable.obligationCount > 0
-                ? `From ${receivable.obligationCount} unsettled debt${receivable.obligationCount === 1 ? "" : "s"}, interest included`
+                ? `From ${receivable.obligationCount} unsettled debt${receivable.obligationCount === 1 ? "" : "s"}${
+                    chargesInterest ? ", interest included" : ""
+                  }`
                 : "Everyone is settled up"
             }
             tone={receivable.obligationCount > 0 ? "warning" : "success"}
@@ -173,7 +157,7 @@ export function MemberStandingCard({
             value={peso(owed)}
             hint={
               owed > 0
-                ? interest > 0
+                ? chargesInterest && interest > 0
                   ? `Includes ${peso(interest)} interest`
                   : `From ${debt.obligationCount} missed or partial round${debt.obligationCount === 1 ? "" : "s"}`
                 : "Nothing owed"
@@ -181,48 +165,15 @@ export function MemberStandingCard({
             tone={owed > 0 ? "danger" : "success"}
           />
         )}
-      </div>
-
-      <div
-        className={`mt-2 grid grid-cols-2 gap-2 sm:gap-3 ${isCompleted ? "lg:grid-cols-3" : "lg:grid-cols-4"}`}
-      >
-        {thisRound ? (
-          <Tile label={`Round ${summary.currentRound!.number}`} {...thisRound} />
-        ) : (
-          <Tile
-            label="Rounds in full"
-            value={`${payments.roundsPaidInFull} of ${payments.totalRounds}`}
-            hint={`Paid the full ${peso(summary.contributionAmount)}`}
-            tone={payments.roundsPaidInFull === payments.totalRounds ? "success" : "neutral"}
-          />
-        )}
-        {!isCompleted && (
-          <Tile
-            label="Still to pay"
-            value={peso(stillToPay)}
-            hint={
-              stillToPay > 0
-                ? `Across the ${roundsLeft} round${roundsLeft === 1 ? "" : "s"} left`
-                : "Nothing left this cycle"
-            }
-            tone="neutral"
-          />
-        )}
         <Tile
-          label="On-time payments"
+          label="On time"
           value={payments.paymentsMade > 0 ? `${payments.paymentsOnTime} of ${payments.paymentsMade}` : "—"}
-          hint={payments.paymentsMade > 0 ? "Paid on or before the due date" : "No payments yet"}
+          hint={payments.paymentsMade > 0 ? "payments made by the due date" : "No payments yet"}
           tone={
             payments.paymentsMade > 0 && payments.paymentsOnTime === payments.paymentsMade
               ? "success"
               : "neutral"
           }
-        />
-        <Tile
-          label={receivable ? "Interest earned" : "Interest paid"}
-          value={peso(interestSettled)}
-          hint={receivable ? "Collected on members' shortfalls" : "On late or short payments"}
-          tone="neutral"
         />
       </div>
 

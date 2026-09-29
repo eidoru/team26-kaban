@@ -57,6 +57,7 @@ describe("buildMemberSummary", () => {
       roundsStarted: 3,
       totalRounds: 4,
       stillToPay: "1000",
+      roundsLeftToPay: 1,
       paymentsMade: 3,
       paymentsOnTime: 2,
     });
