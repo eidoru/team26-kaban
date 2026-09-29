@@ -1362,13 +1362,26 @@ function LedgerList({ entries, contributionAmount }: { entries: LedgerEntry[]; c
 function ViewerRoundStatus({
   contribution,
   contributionAmount,
+  managerName,
+  action,
 }: {
   contribution: RoundContribution;
   contributionAmount: string;
+  managerName?: string;
+  action?: { label: string; onClick: () => void };
 }) {
   const expected = Number(contribution.expectedAmount ?? contributionAmount);
   const remaining = Math.max(0, expected - Number(contribution.amount));
 
+  if (contribution.status === "confirmed" && remaining > 0) {
+    return (
+      <p className="flex items-center gap-2 rounded-2xl bg-white/80 px-4 py-2.5 text-sm font-bold text-ink-800">
+        <TriangleAlert className="h-4 w-4 shrink-0 text-sun-700" aria-hidden />
+        You paid ₱{Number(contribution.amount).toLocaleString()}. The ₱{remaining.toLocaleString()} left becomes a
+        debt when the round closes.
+      </p>
+    );
+  }
   if (contribution.status === "confirmed") {
     return (
       <p className="flex items-center gap-2 rounded-2xl bg-white/80 px-4 py-2.5 text-sm font-bold text-brand-800">
@@ -1381,15 +1394,63 @@ function ViewerRoundStatus({
     return (
       <p className="flex items-center gap-2 rounded-2xl bg-white/80 px-4 py-2.5 text-sm font-bold text-ink-800">
         <Clock className="h-4 w-4 shrink-0 text-sun-700" aria-hidden />
-        Your payment is waiting for the organizer to confirm.
+        Your payment is waiting for {managerName ?? "the organizer"} to confirm.
       </p>
     );
   }
   return (
-    <p className="flex items-center gap-2 rounded-2xl bg-danger-50 px-4 py-2.5 text-sm font-bold text-danger-700">
-      <TriangleAlert className="h-4 w-4 shrink-0" aria-hidden />
-      You still owe ₱{(remaining > 0 ? remaining : expected).toLocaleString()} this round.
-    </p>
+    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-2xl bg-danger-50 px-4 py-2.5">
+      <p className="flex items-center gap-2 text-sm font-bold text-danger-700">
+        <TriangleAlert className="h-4 w-4 shrink-0" aria-hidden />
+        You still owe ₱{(remaining > 0 ? remaining : expected).toLocaleString()} this round.
+      </p>
+      {action && (
+        <button type="button" onClick={action.onClick} className={ui.btnPrimarySm}>
+          {action.label}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * What needs the organizer, in one line: only the non-zero parts, and nothing at all when everything
+ * is handled. Replaces a grid of stat tiles that repeated the progress bar, the list and Issues.
+ */
+function OrganizerAttention({
+  toConfirm,
+  openDisputes,
+  owed,
+  onOpenIssues,
+}: {
+  toConfirm: number;
+  openDisputes: number;
+  owed: number;
+  onOpenIssues?: () => void;
+}) {
+  if (toConfirm === 0 && openDisputes === 0 && owed <= 0) return null;
+  const chip = "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-bold transition-colors";
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-3xl border border-ink-200 bg-white px-4 py-3">
+      <p className="mr-1 text-xs font-bold uppercase tracking-wide text-ink-500">Needs you</p>
+      {toConfirm > 0 && (
+        <a href="#round-contributions" className={`${chip} bg-sun-100 text-sun-900 hover:bg-sun-200`}>
+          <Clock className="h-4 w-4" aria-hidden />
+          {toConfirm} payment{toConfirm === 1 ? "" : "s"} to confirm
+        </a>
+      )}
+      {openDisputes > 0 && (
+        <button type="button" onClick={onOpenIssues} className={`${chip} bg-danger-50 text-danger-700 hover:bg-danger-100`}>
+          <TriangleAlert className="h-4 w-4" aria-hidden />
+          {openDisputes} open dispute{openDisputes === 1 ? "" : "s"}
+        </button>
+      )}
+      {owed > 0 && (
+        <button type="button" onClick={onOpenIssues} className={`${chip} bg-ink-100 text-ink-800 hover:bg-ink-200`}>
+          ₱{owed.toLocaleString()} owed to you
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -1405,6 +1466,8 @@ function RoundHero({
   viewerContribution,
   contributionAmount,
   totalRounds,
+  managerName,
+  viewerAction,
 }: {
   round: RoundSummary;
   potAmount: number;
@@ -1416,6 +1479,8 @@ function RoundHero({
   viewerContribution?: RoundContribution;
   contributionAmount: string;
   totalRounds: number;
+  managerName?: string;
+  viewerAction?: { label: string; onClick: () => void };
 }) {
   const sunny = isViewerRecipient;
   return (
@@ -1475,7 +1540,12 @@ function RoundHero({
 
       {viewerContribution && (
         <div className="mt-4">
-          <ViewerRoundStatus contribution={viewerContribution} contributionAmount={contributionAmount} />
+          <ViewerRoundStatus
+            contribution={viewerContribution}
+            contributionAmount={contributionAmount}
+            managerName={managerName}
+            action={viewerAction}
+          />
         </div>
       )}
     </div>
@@ -1598,6 +1668,15 @@ export function GroupCycleTabPanels(props: GroupCycleTabsProps) {
     const nextRound = getNextPayoutRound(schedule, currentRound);
     const nextPotAmount = nextRound ? Number(group.contributionAmount) * totalCount : 0;
     const finalRound = isFinalRound(schedule, currentRound);
+    const viewerContribution = contributions.find((c) => c.membershipId === viewerMembershipId);
+    const viewerExpected = viewerContribution?.expectedAmount ?? group.contributionAmount;
+    // The viewer's next step for this round, surfaced in the hero instead of only in the list below.
+    const viewerPaymentAction =
+      viewerContribution?.status === "pending" && viewerContribution.canReport
+        ? { label: "Report payment", onClick: () => onReportPayment(viewerContribution.id, viewerExpected) }
+        : viewerContribution?.status === "pending" && viewerContribution.canRecord
+          ? { label: "Mark paid", onClick: () => onRecordPayment(viewerContribution.id, viewerExpected) }
+          : undefined;
 
     return (
       <div className="space-y-6">
@@ -1621,6 +1700,15 @@ export function GroupCycleTabPanels(props: GroupCycleTabsProps) {
 
         {currentRound ? (
           <>
+            {isManager && isActive && dashboard && (
+              <OrganizerAttention
+                toConfirm={dashboard.pendingConfirmations}
+                openDisputes={dashboard.openDisputes}
+                owed={Number(dashboard.totalOutstanding)}
+                onOpenIssues={onOpenIssues}
+              />
+            )}
+
             <RoundHero
               round={currentRound}
               potAmount={potAmount}
@@ -1629,9 +1717,11 @@ export function GroupCycleTabPanels(props: GroupCycleTabsProps) {
               progressPercent={progressPercent}
               isOverdue={!!dashboard?.currentRound?.isOverdue}
               isViewerRecipient={!!viewerMembershipId && currentRound.recipientMembershipId === viewerMembershipId}
-              viewerContribution={contributions.find((c) => c.membershipId === viewerMembershipId)}
+              viewerContribution={viewerContribution}
               contributionAmount={group.contributionAmount}
               totalRounds={schedule.length}
+              managerName={sortedMembers.find((m) => m.isManager)?.displayName}
+              viewerAction={viewerPaymentAction}
             />
 
             {isActive && nextRound && (
@@ -1665,49 +1755,7 @@ export function GroupCycleTabPanels(props: GroupCycleTabsProps) {
               </div>
             )}
 
-            {isManager && isActive && dashboard && (
-              <div className={ui.metricGrid2}>
-                <StatCard
-                  label="Pending confirmations"
-                  value={String(dashboard.pendingConfirmations)}
-                  hint={dashboard.pendingConfirmations > 0 ? "Awaiting your review" : "All caught up"}
-                  tone={dashboard.pendingConfirmations > 0 ? "warning" : "success"}
-                  icon="clock"
-                />
-                <StatCard
-                  label="Open disputes"
-                  value={String(dashboard.openDisputes)}
-                  hint={dashboard.openDisputes > 0 ? "Needs resolution" : "None open"}
-                  tone={dashboard.openDisputes > 0 ? "danger" : "neutral"}
-                  icon="alert"
-                />
-                <StatCard
-                  label="Outstanding debt"
-                  value={`₱${Number(dashboard.totalOutstanding).toLocaleString()}`}
-                  hint={
-                    Number(dashboard.totalOutstanding) > 0
-                      ? `${dashboard.outstandingObligations} obligation${dashboard.outstandingObligations === 1 ? "" : "s"} across all rounds`
-                      : "Fully settled"
-                  }
-                  tone={Number(dashboard.totalOutstanding) > 0 ? "danger" : "success"}
-                  icon="wallet"
-                />
-                <StatCard
-                  label="This round"
-                  value={`${dashboard.currentRound?.confirmedContributions ?? confirmedCount}/${dashboard.memberCount}`}
-                  hint="members confirmed"
-                  tone={
-                    (dashboard.currentRound?.confirmedContributions ?? confirmedCount) >=
-                    dashboard.memberCount
-                      ? "success"
-                      : "neutral"
-                  }
-                  icon="users"
-                />
-              </div>
-            )}
-
-            <section>
+            <section id="round-contributions" className="scroll-mt-24">
               <h3 className={`mb-3 ${ui.sectionHeader}`}>Contributions</h3>
               {contributions.length > 0 ? (
                 <ContributionsList
