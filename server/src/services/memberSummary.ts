@@ -10,6 +10,7 @@ import {
 } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { GroupError } from "./groups.js";
+import { disputesAboutMember } from "./disputes.js";
 import {
   getGroupInterestRoundContext,
   getObligationTotalRemaining,
@@ -218,9 +219,7 @@ export async function getMemberSummary(group: Group, membership: Membership): Pr
         sourceRound: { select: { number: true } },
       },
     }),
-    prisma.dispute.count({
-      where: { status: DisputeStatus.open, contribution: { membershipId: membership.id } },
-    }),
+    prisma.dispute.count({ where: { status: DisputeStatus.open, ...disputesAboutMember(membership.id) } }),
     getGroupInterestRoundContext(prisma, group.id),
   ]);
 

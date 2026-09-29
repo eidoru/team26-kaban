@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canRaiseContributionDispute } from "./disputes.js";
+import { canDisputeSettlementClaim, canRaiseContributionDispute } from "./disputes.js";
 
 const base = {
   groupStarted: true,
@@ -43,5 +43,27 @@ describe("canRaiseContributionDispute", () => {
     expect(canRaiseContributionDispute({ ...base, contributionStatus: "pending" })).toBe(
       false,
     );
+  });
+});
+
+describe("canDisputeSettlementClaim", () => {
+  const base = {
+    isManager: false,
+    viewerMembershipId: "m1",
+    claimMembershipId: "m1",
+    claimStatus: "rejected",
+    hasOpenDispute: false,
+  };
+
+  it("lets a member dispute their own rejected claim", () => {
+    expect(canDisputeSettlementClaim(base)).toBe(true);
+  });
+
+  it("refuses organizers, other members' claims, non-rejected claims and duplicates", () => {
+    expect(canDisputeSettlementClaim({ ...base, isManager: true })).toBe(false);
+    expect(canDisputeSettlementClaim({ ...base, claimMembershipId: "m2" })).toBe(false);
+    expect(canDisputeSettlementClaim({ ...base, claimStatus: "pending" })).toBe(false);
+    expect(canDisputeSettlementClaim({ ...base, claimStatus: "confirmed" })).toBe(false);
+    expect(canDisputeSettlementClaim({ ...base, hasOpenDispute: true })).toBe(false);
   });
 });

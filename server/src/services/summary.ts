@@ -1,6 +1,7 @@
 import { ContributionStatus, GroupStatus, ObligationStatus, Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { GroupError } from "./groups.js";
+import { disputesInGroup } from "./disputes.js";
 import { getGroupInterestRoundContext, getObligationTotalRemaining, toShortfallInterestTerms } from "./shortfallInterest.js";
 
 export class SummaryError extends GroupError {}
@@ -50,7 +51,7 @@ export async function getMemberReliabilitySummaries(groupId: string) {
     }),
   ]);
 
-  return buildMemberReliabilitySummaries(members, contributions, disputes, group.contributionAmount);
+  return buildMemberReliabilitySummaries(members, contributions, paymentDisputes(disputes), group.contributionAmount);
 }
 
 type ReliabilityMember = {
@@ -68,6 +69,11 @@ type ReliabilityContribution = {
 type ReliabilityDispute = {
   contribution: { membershipId: string };
 };
+
+/** Keeps disputes about round payments (not rejected settlement claims), for reliability counts. */
+function paymentDisputes(disputes: { contribution: { membershipId: string } | null }[]): ReliabilityDispute[] {
+  return disputes.flatMap((d) => (d.contribution ? [{ contribution: d.contribution }] : []));
+}
 
 export function buildMemberReliabilitySummaries(
   members: ReliabilityMember[],
@@ -137,8 +143,9 @@ export async function getCompletionSummary(groupId: string) {
         sourceRound: { select: { number: true } },
       },
     }),
+    // Every dispute counts toward the summary's totals; reliability only looks at payment disputes.
     prisma.dispute.findMany({
-      where: { contribution: { round: { groupId } } },
+      where: disputesInGroup(groupId),
       include: { contribution: { select: { membershipId: true } } },
     }),
     prisma.membership.findMany({ where: { groupId } }),
@@ -171,7 +178,7 @@ export async function getCompletionSummary(groupId: string) {
     }
   }
 
-  const openDisputesForReliability = disputes.filter((d) => d.status === "open");
+  const openDisputesForReliability = paymentDisputes(disputes.filter((d) => d.status === "open"));
   const reliability = buildMemberReliabilitySummaries(
     members,
     contributions,

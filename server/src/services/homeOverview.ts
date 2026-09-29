@@ -172,8 +172,17 @@ async function getOrganizerQueue(managerUserId: string): Promise<{ claims: Group
       select: { debtorMembership: { select: { group: { select: { id: true, name: true } } } } },
     }),
     prisma.dispute.findMany({
-      where: { status: "open", contribution: { round: { group: { managerId: managerUserId } } } },
-      select: { contribution: { select: { round: { select: { group: { select: { id: true, name: true } } } } } } },
+      where: {
+        status: "open",
+        OR: [
+          { contribution: { round: { group: { managerId: managerUserId } } } },
+          { settlementClaim: { debtorMembership: { group: { managerId: managerUserId } } } },
+        ],
+      },
+      select: {
+        contribution: { select: { round: { select: { group: { select: { id: true, name: true } } } } } },
+        settlementClaim: { select: { debtorMembership: { select: { group: { select: { id: true, name: true } } } } } },
+      },
     }),
   ]);
   const tally = (groups: { id: string; name: string }[]) => {
@@ -187,7 +196,12 @@ async function getOrganizerQueue(managerUserId: string): Promise<{ claims: Group
   };
   return {
     claims: tally(claims.map((c) => c.debtorMembership.group)),
-    disputes: tally(disputes.map((d) => d.contribution.round.group)),
+    disputes: tally(
+      disputes.flatMap((d) => {
+        const group = d.contribution?.round.group ?? d.settlementClaim?.debtorMembership.group;
+        return group ? [group] : [];
+      }),
+    ),
   };
 }
 

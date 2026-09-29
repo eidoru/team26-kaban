@@ -392,17 +392,21 @@ function formatAction(
     case "dispute.raised": {
       const name = metaString(metadata, "memberDisplayName") ?? memberName(ctx, metaString(metadata, "membershipId"));
       const roundNumber = metaNumber(metadata, "roundNumber");
+      const claimAmount = metaString(metadata, "claimAmount");
       const note = metaString(metadata, "note");
       if (name) details.push(`Member: ${name}`);
       if (roundNumber != null) details.push(`Round ${roundNumber}`);
+      if (claimAmount) details.push(`Rejected claim: ₱${Number(claimAmount).toLocaleString()}`);
       if (note) details.push(`Reason: ${note}`);
       return {
         category: "dispute",
-        title: "Dispute raised",
+        title: "Problem reported",
         summary:
           name && roundNumber != null
-            ? `Payment dispute opened for ${name} (round ${roundNumber})`
-            : "A payment dispute was opened",
+            ? `${name} reported a problem with their round ${roundNumber} payment`
+            : name && claimAmount
+              ? `${name} disagrees with their rejected ₱${Number(claimAmount).toLocaleString()} payment claim`
+              : "A member reported a problem with a payment",
         details,
       };
     }
@@ -415,11 +419,13 @@ function formatAction(
       if (resolution) details.push(`Resolution: ${resolution}`);
       return {
         category: "dispute",
-        title: "Dispute resolved",
+        title: "Problem resolved",
         summary:
           name && roundNumber != null
-            ? `Manager resolved dispute for ${name} (round ${roundNumber})`
-            : "A payment dispute was resolved",
+            ? `Organizer resolved ${name}'s problem with their round ${roundNumber} payment`
+            : name
+              ? `Organizer resolved ${name}'s problem with a payment claim`
+              : "A reported problem was resolved",
         details,
       };
     }

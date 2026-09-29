@@ -1,6 +1,7 @@
 import { Group, Membership, ObligationStatus, SettlementClaimStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { isPastStartDate } from "../lib/validation.js";
+import { disputesAboutMember, disputesInGroup } from "./disputes.js";
 import { serializeContributionForViewer } from "./contributions.js";
 import { canRaiseContributionDispute } from "./disputes.js";
 import { serializeGroup, serializeMember } from "./groups.js";
@@ -18,7 +19,7 @@ async function countActionableIssues(groupId: string, membership: Membership): P
       prisma.settlementClaim.count({
         where: { status: SettlementClaimStatus.pending, debtorMembership: { groupId } },
       }),
-      prisma.dispute.count({ where: { status: "open", contribution: { round: { groupId } } } }),
+      prisma.dispute.count({ where: { status: "open", ...disputesInGroup(groupId) } }),
     ]);
     return claims + disputes;
   }
@@ -29,7 +30,7 @@ async function countActionableIssues(groupId: string, membership: Membership): P
         status: { in: [ObligationStatus.unsettled, ObligationStatus.partially_settled] },
       },
     }),
-    prisma.dispute.count({ where: { status: "open", contribution: { membershipId: membership.id } } }),
+    prisma.dispute.count({ where: { status: "open", ...disputesAboutMember(membership.id) } }),
   ]);
   return debts + disputes;
 }
@@ -55,12 +56,7 @@ export async function loadGroupDetailPayload(
         }),
     group.status === "forming"
       ? Promise.resolve(0)
-      : prisma.dispute.count({
-          where: {
-            status: "open",
-            contribution: { round: { groupId: group.id } },
-          },
-        }),
+      : prisma.dispute.count({ where: { status: "open", ...disputesInGroup(group.id) } }),
     group.status === "forming"
       ? Promise.resolve(0)
       : prisma.obligation.count({

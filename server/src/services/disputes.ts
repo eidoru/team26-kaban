@@ -1,9 +1,39 @@
-import { ContributionStatus, DisputeStatus, GroupStatus } from "@prisma/client";
+import { ContributionStatus, DisputeStatus, GroupStatus, Prisma, SettlementClaimStatus } from "@prisma/client";
 import { createNotification, writeAuditLog } from "../lib/audit.js";
 import { prisma } from "../lib/prisma.js";
 import { GroupError } from "./groups.js";
 
 export class DisputeError extends GroupError {}
+
+/** Disputes in a group, whether about a round payment or a rejected settlement claim. */
+export function disputesInGroup(groupId: string): Prisma.DisputeWhereInput {
+  return {
+    OR: [{ contribution: { round: { groupId } } }, { settlementClaim: { debtorMembership: { groupId } } }],
+  };
+}
+
+/** Disputes about one member's payments or settlement claims. */
+export function disputesAboutMember(membershipId: string): Prisma.DisputeWhereInput {
+  return {
+    OR: [{ contribution: { membershipId } }, { settlementClaim: { debtorMembershipId: membershipId } }],
+  };
+}
+
+/** A member may dispute their own rejected settlement claim once, while no dispute on it is open. */
+export function canDisputeSettlementClaim(opts: {
+  isManager: boolean;
+  viewerMembershipId: string;
+  claimMembershipId: string;
+  claimStatus: string;
+  hasOpenDispute: boolean;
+}): boolean {
+  return (
+    !opts.isManager &&
+    opts.viewerMembershipId === opts.claimMembershipId &&
+    opts.claimStatus === SettlementClaimStatus.rejected &&
+    !opts.hasOpenDispute
+  );
+}
 
 export function canRaiseContributionDispute(opts: {
   groupStarted: boolean;
@@ -28,7 +58,8 @@ export function canRaiseContributionDispute(opts: {
 
 export function serializeDispute(d: {
   id: string;
-  contributionId: string;
+  contributionId: string | null;
+  settlementClaimId?: string | null;
   raisedById: string;
   status: DisputeStatus;
   note: string | null;
@@ -40,6 +71,7 @@ export function serializeDispute(d: {
   return {
     id: d.id,
     contributionId: d.contributionId,
+    settlementClaimId: d.settlementClaimId ?? null,
     raisedById: d.raisedById,
     status: d.status,
     note: d.note,
@@ -52,7 +84,7 @@ export function serializeDispute(d: {
 
 export async function getGroupDisputes(groupId: string) {
   const disputes = await prisma.dispute.findMany({
-    where: { contribution: { round: { groupId } } },
+    where: disputesInGroup(groupId),
     include: {
       contribution: {
         include: {
@@ -60,20 +92,30 @@ export async function getGroupDisputes(groupId: string) {
           round: { select: { number: true, id: true } },
         },
       },
+      settlementClaim: {
+        include: { debtorMembership: { select: { displayName: true } } },
+      },
       raisedBy: { select: { displayName: true } },
     },
     orderBy: [{ status: "asc" }, { createdAt: "desc" }],
   });
 
-  return disputes.map((d) => ({
-    ...serializeDispute(d),
-    raisedByName: d.raisedBy.displayName,
-    memberDisplayName: d.contribution.membership.displayName,
-    memberMembershipId: d.contribution.membershipId,
-    roundNumber: d.contribution.round.number,
-    contributionStatus: d.contribution.status,
-    contributionAmount: d.contribution.amount.toString(),
-  }));
+  return disputes.map((d) => {
+    const claim = d.settlementClaim;
+    const contribution = d.contribution;
+    return {
+      ...serializeDispute(d),
+      subject: contribution ? ("payment" as const) : ("settlement_claim" as const),
+      raisedByName: d.raisedBy.displayName,
+      memberDisplayName: contribution?.membership.displayName ?? claim?.debtorMembership.displayName ?? "",
+      memberMembershipId: contribution?.membershipId ?? claim?.debtorMembershipId ?? "",
+      roundNumber: contribution?.round.number ?? null,
+      contributionStatus: contribution?.status ?? null,
+      /** The disputed amount: the round payment, or the rejected claim. */
+      contributionAmount: (contribution?.amount ?? claim?.amount ?? 0).toString(),
+      claimReviewNote: claim?.reviewNote ?? null,
+    };
+  });
 }
 
 export async function raiseDispute(
@@ -166,6 +208,75 @@ export async function raiseDispute(
   return dispute;
 }
 
+export async function raiseSettlementClaimDispute(
+  groupId: string,
+  claimId: string,
+  raiserMembershipId: string,
+  actorUserId: string,
+  input: { note?: string; proofUrl?: string },
+) {
+  const claim = await prisma.settlementClaim.findUnique({
+    where: { id: claimId },
+    include: {
+      debtorMembership: { include: { group: true } },
+      disputes: { where: { status: DisputeStatus.open } },
+    },
+  });
+  if (!claim || claim.debtorMembership.groupId !== groupId) {
+    throw new DisputeError(404, "Settlement claim not found");
+  }
+  if (claim.debtorMembershipId !== raiserMembershipId || claim.debtorMembership.isManager) {
+    throw new DisputeError(403, "You can only report a problem with your own payment claim");
+  }
+  if (claim.status !== SettlementClaimStatus.rejected) {
+    throw new DisputeError(409, "Only a rejected payment claim can be disputed");
+  }
+  if (claim.disputes.length > 0) {
+    throw new DisputeError(409, "A problem is already open for this payment claim");
+  }
+
+  const dispute = await prisma.dispute.create({
+    data: {
+      settlementClaimId: claimId,
+      raisedById: raiserMembershipId,
+      note: input.note ?? null,
+      proofUrl: input.proofUrl ?? null,
+    },
+  });
+
+  const memberName = claim.debtorMembership.displayName;
+  await writeAuditLog({
+    groupId,
+    actorId: actorUserId,
+    action: "dispute.raised",
+    entityType: "dispute",
+    entityId: dispute.id,
+    metadata: {
+      settlementClaimId: claimId,
+      membershipId: claim.debtorMembershipId,
+      memberDisplayName: memberName,
+      claimAmount: claim.amount.toString(),
+      note: input.note,
+    },
+  });
+
+  const managerMembership = await prisma.membership.findFirst({
+    where: { groupId, isManager: true, userId: { not: null } },
+  });
+  if (managerMembership?.userId && managerMembership.userId !== actorUserId) {
+    await createNotification({
+      userId: managerMembership.userId,
+      groupId,
+      type: "dispute_raised",
+      title: `${claim.debtorMembership.group.name}: problem reported`,
+      body: `${memberName} disagrees with the rejected ₱${Number(claim.amount).toLocaleString()} payment claim.`,
+      link: `/groups/${groupId}?tab=issues`,
+    });
+  }
+
+  return dispute;
+}
+
 export async function resolveDispute(
   groupId: string,
   disputeId: string,
@@ -181,11 +292,16 @@ export async function resolveDispute(
           round: { include: { group: true } },
         },
       },
+      settlementClaim: {
+        include: { debtorMembership: { include: { group: true } } },
+      },
       raisedBy: { select: { userId: true, displayName: true } },
     },
   });
 
-  if (!dispute || dispute.contribution.round.groupId !== groupId) {
+  const member = dispute?.contribution?.membership ?? dispute?.settlementClaim?.debtorMembership ?? null;
+  const group = dispute?.contribution?.round.group ?? dispute?.settlementClaim?.debtorMembership.group ?? null;
+  if (!dispute || !member || !group || group.id !== groupId) {
     throw new DisputeError(404, "Dispute not found");
   }
 
@@ -203,6 +319,7 @@ export async function resolveDispute(
     },
   });
 
+  const roundNumber = dispute.contribution?.round.number;
   await writeAuditLog({
     groupId,
     actorId: actorUserId,
@@ -211,29 +328,30 @@ export async function resolveDispute(
     entityId: dispute.id,
     metadata: {
       contributionId: dispute.contributionId,
-      membershipId: dispute.contribution.membershipId,
-      memberDisplayName: dispute.contribution.membership.displayName,
-      roundNumber: dispute.contribution.round.number,
+      settlementClaimId: dispute.settlementClaimId,
+      membershipId: member.id,
+      memberDisplayName: member.displayName,
+      roundNumber,
       resolution,
     },
   });
 
   const notifyUserIds = new Set<string>();
   if (dispute.raisedBy.userId) notifyUserIds.add(dispute.raisedBy.userId);
-  if (dispute.contribution.membership.userId) {
-    notifyUserIds.add(dispute.contribution.membership.userId);
-  }
+  if (member.userId) notifyUserIds.add(member.userId);
   notifyUserIds.delete(actorUserId);
 
-  const groupName = dispute.contribution.round.group.name;
   for (const userId of notifyUserIds) {
     await createNotification({
       userId,
       groupId,
       type: "dispute_resolved",
-      title: `${groupName}: dispute resolved`,
-      body: `The dispute for round ${dispute.contribution.round.number} was resolved by the manager.`,
-      link: `/groups/${groupId}`,
+      title: `${group.name}: problem resolved`,
+      body:
+        roundNumber != null
+          ? `The problem you reported with your round ${roundNumber} payment was resolved by the organizer.`
+          : "The problem you reported with your rejected payment claim was resolved by the organizer.",
+      link: `/groups/${groupId}?tab=issues`,
     });
   }
 

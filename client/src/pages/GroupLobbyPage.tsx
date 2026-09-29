@@ -603,6 +603,29 @@ export function GroupLobbyPage() {
     }
   }
 
+  async function handleReportClaimProblem(claimId: string) {
+    setFormError("");
+    const note = await dialog.prompt({
+      title: "Report a problem",
+      description: "Tell the organizer why you think this payment claim shouldn't have been rejected.",
+      label: "What's wrong?",
+      required: true,
+      multiline: true,
+      maxLength: LIMITS.disputeReason,
+      submitLabel: "Send to organizer",
+    });
+    if (note == null || !note.trim()) return;
+    setActionPending(`claim-dispute-${claimId}`);
+    try {
+      await api.raiseSettlementClaimDispute(id!, claimId, { note: note.trim() });
+      invalidateIssues();
+    } catch (err) {
+      setFormError(err instanceof ApiError ? err.message : "Failed to report the problem");
+    } finally {
+      setActionPending(null);
+    }
+  }
+
   async function handleResolveDispute(disputeId: string) {
     setFormError("");
     const resolution = await dialog.prompt({
@@ -1035,6 +1058,7 @@ export function GroupLobbyPage() {
             onSettleMemberDebts={(memberId, name) => void handleSettleMemberDebts(memberId, name)}
             onCoverObligationExternally={(oid, name) => void handleCoverObligationExternally(oid, name)}
             onResolveDispute={(disputeId) => void handleResolveDispute(disputeId)}
+            onReportClaimProblem={(claimId) => void handleReportClaimProblem(claimId)}
             onSubmitSettlementClaim={() => void handleSubmitSettlementClaim()}
             onReviewSettlementClaim={(claimId, decision) =>
               void handleReviewSettlementClaim(claimId, decision)

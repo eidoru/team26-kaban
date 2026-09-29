@@ -271,14 +271,18 @@ model SettlementClaim {
   updatedAt          DateTime               @updatedAt @map("updated_at")
 
   debtorMembership Membership @relation("SettlementClaimDebtor", fields: [debtorMembershipId], references: [id], onDelete: Cascade)
+  disputes         Dispute[]
 
   @@index([debtorMembershipId, status])
   @@map("settlement_claims")
 }
 
+/// A member's objection to how the organizer handled either a round payment (contributionId) or a
+/// debt-payment claim that was rejected (settlementClaimId). Exactly one of the two is set.
 model Dispute {
-  id             String        @id @default(uuid())
-  contributionId String        @map("contribution_id")
+  id                String        @id @default(uuid())
+  contributionId    String?       @map("contribution_id")
+  settlementClaimId String?       @map("settlement_claim_id")
   raisedById     String        @map("raised_by_id")
   status         DisputeStatus @default(open)
   note           String?
@@ -287,9 +291,11 @@ model Dispute {
   resolvedAt     DateTime?     @map("resolved_at")
   createdAt      DateTime      @default(now()) @map("created_at")
 
-  contribution Contribution @relation(fields: [contributionId], references: [id], onDelete: Cascade)
-  raisedBy     Membership   @relation(fields: [raisedById], references: [id])
+  contribution    Contribution?    @relation(fields: [contributionId], references: [id], onDelete: Cascade)
+  settlementClaim SettlementClaim? @relation(fields: [settlementClaimId], references: [id], onDelete: Cascade)
+  raisedBy        Membership       @relation(fields: [raisedById], references: [id])
 
+  @@index([settlementClaimId])
   @@map("disputes")
 }
 

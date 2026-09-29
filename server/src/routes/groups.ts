@@ -67,6 +67,7 @@ import {
   DisputeError,
   getGroupDisputes,
   raiseDispute,
+  raiseSettlementClaimDispute,
   resolveDispute,
 } from "../services/disputes.js";
 import {
@@ -1048,6 +1049,32 @@ router.post(
       const dispute = await raiseDispute(
         req.group!.id,
         String(req.params.cid),
+        req.membership!.id,
+        req.user!.id,
+        req.body,
+      );
+      notifyGroupChangeSafe(req.group!.id, "rounds");
+      res.status(201).json({ dispute: { id: dispute.id, status: dispute.status } });
+    } catch (err) {
+      if (err instanceof DisputeError) {
+        res.status(err.status).json({ error: err.message });
+        return;
+      }
+      next(err);
+    }
+  },
+);
+
+router.post(
+  "/:id/settlement-claims/:claimId/disputes",
+  loadGroup,
+  requireGroupMember,
+  validateBody(raiseDisputeSchema),
+  async (req, res, next) => {
+    try {
+      const dispute = await raiseSettlementClaimDispute(
+        req.group!.id,
+        String(req.params.claimId),
         req.membership!.id,
         req.user!.id,
         req.body,

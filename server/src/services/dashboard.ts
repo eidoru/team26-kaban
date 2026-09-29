@@ -1,5 +1,6 @@
 import { ContributionStatus, GroupStatus, ObligationStatus, Prisma, RoundStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
+import { disputesInGroup } from "./disputes.js";
 import { GroupError } from "./groups.js";
 import { startOfUtcDay } from "./schedule.js";
 import { getGroupInterestRoundContext, getGroupInterestRoundContexts, getObligationTotalRemaining, toShortfallInterestTerms } from "./shortfallInterest.js";
@@ -30,12 +31,7 @@ export async function getGroupDashboard(groupId: string) {
           status: ContributionStatus.reported,
         },
       }),
-      prisma.dispute.count({
-        where: {
-          status: "open",
-          contribution: { round: { groupId } },
-        },
-      }),
+      prisma.dispute.count({ where: { status: "open", ...disputesInGroup(groupId) } }),
       prisma.obligation.findMany({
         where: {
           sourceRound: { groupId },

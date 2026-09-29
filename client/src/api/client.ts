@@ -107,7 +107,10 @@ export interface MemberReliability {
 
 export interface DisputeEntry {
   id: string;
-  contributionId: string;
+  /** What the dispute is about: a round payment, or a settlement claim the organizer rejected. */
+  subject: "payment" | "settlement_claim";
+  contributionId: string | null;
+  settlementClaimId: string | null;
   raisedById: string;
   status: "open" | "resolved";
   note: string | null;
@@ -119,9 +122,13 @@ export interface DisputeEntry {
   memberDisplayName: string;
   /** Whose payment the dispute is about. */
   memberMembershipId: string;
-  roundNumber: number;
-  contributionStatus: string;
+  /** Null for settlement-claim disputes. */
+  roundNumber: number | null;
+  contributionStatus: string | null;
+  /** The disputed amount: the round payment or the rejected claim. */
   contributionAmount: string;
+  /** Settlement-claim disputes: the organizer's reason for rejecting the claim. */
+  claimReviewNote: string | null;
 }
 
 export interface GroupDashboard {
@@ -874,6 +881,12 @@ export const api = {
   getMemberSummary: (groupId: string) => request<{ summary: MemberSummary }>(`/groups/${groupId}/me`),
 
   getDisputes: (groupId: string) => request<{ disputes: DisputeEntry[] }>(`/groups/${groupId}/disputes`),
+
+  raiseSettlementClaimDispute: (groupId: string, claimId: string, body: { note: string }) =>
+    request<{ dispute: { id: string; status: string } }>(`/groups/${groupId}/settlement-claims/${claimId}/disputes`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
 
   raiseDispute: (groupId: string, contributionId: string, body: { note: string; proofUrl?: string }) =>
     request<{ dispute: { id: string; status: string } }>(

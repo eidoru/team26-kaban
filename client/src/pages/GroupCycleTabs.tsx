@@ -247,11 +247,15 @@ function DisputeCard({
                 <span className="font-bold text-ink-900">{dispute.memberDisplayName}</span>&apos;s
               </>
             )}{" "}
-            Round {dispute.roundNumber} payment ·{" "}
+            {dispute.subject === "settlement_claim" ? "rejected payment claim" : `Round ${dispute.roundNumber} payment`}{" "}
+            ·{" "}
             <span className="font-bold tabular-nums text-ink-900">
               ₱{Number(dispute.contributionAmount).toLocaleString()}
             </span>
           </p>
+          {dispute.subject === "settlement_claim" && dispute.claimReviewNote && (
+            <p className="mt-1 text-xs text-ink-500">Rejected because: {dispute.claimReviewNote}</p>
+          )}
           {dispute.note && <p className="mt-1 text-sm italic text-ink-600">&ldquo;{dispute.note}&rdquo;</p>}
         </div>
       </div>
@@ -398,6 +402,7 @@ function IssuesPanel({
   onResolveDispute,
   onSubmitSettlementClaim,
   onReviewSettlementClaim,
+  onReportClaimProblem,
 }: {
   obligations: ObligationEntry[];
   settlementClaims: SettlementClaimEntry[];
@@ -410,6 +415,7 @@ function IssuesPanel({
   onResolveDispute: (disputeId: string) => void;
   onSubmitSettlementClaim: () => void;
   onReviewSettlementClaim: (claimId: string, decision: "confirm" | "reject") => void;
+  onReportClaimProblem?: (claimId: string) => void;
 }) {
   const [historyOpen, setHistoryOpen] = useState(false);
 
@@ -482,7 +488,7 @@ function IssuesPanel({
       `₱${totalOutstanding.toLocaleString()} owed by ${debtors.length} member${debtors.length === 1 ? "" : "s"}`,
     pendingClaims.length > 0 &&
       `${pendingClaims.length} settlement claim${pendingClaims.length === 1 ? "" : "s"} to review`,
-    openDisputes.length > 0 && `${openDisputes.length} open dispute${openDisputes.length === 1 ? "" : "s"}`,
+    openDisputes.length > 0 && `${openDisputes.length} problem${openDisputes.length === 1 ? "" : "s"} reported`,
   ].filter(Boolean) as string[];
 
   return (
@@ -540,6 +546,17 @@ function IssuesPanel({
                     {myLatestRejection.reviewNote && (
                       <p className="mt-1 italic text-ink-600">&ldquo;{myLatestRejection.reviewNote}&rdquo;</p>
                     )}
+                    {onReportClaimProblem &&
+                      !disputes.some((d) => d.settlementClaimId === myLatestRejection.id && d.status === "open") && (
+                        <button
+                          type="button"
+                          onClick={() => onReportClaimProblem(myLatestRejection.id)}
+                          disabled={actionPending === `claim-dispute-${myLatestRejection.id}`}
+                          className={`mt-2 ${ui.link}`}
+                        >
+                          Report a problem
+                        </button>
+                      )}
                   </li>
                 )}
               </ul>
@@ -611,8 +628,9 @@ function IssuesPanel({
               {resolvedDisputes.map((dispute) => (
                 <HistoryRow key={dispute.id} icon={<CircleCheck className="h-4 w-4 text-brand-600" aria-hidden />}>
                   <p>
-                    Problem with <span className="font-bold text-ink-800">{dispute.memberDisplayName}</span>&apos;s
-                    Round {dispute.roundNumber} payment · resolved
+                    Problem with <span className="font-bold text-ink-800">{dispute.memberDisplayName}</span>&apos;s{" "}
+                    {dispute.subject === "settlement_claim" ? "rejected payment claim" : `Round ${dispute.roundNumber} payment`}{" "}
+                    · resolved
                   </p>
                   {dispute.resolution && <p className="mt-0.5 text-xs text-ink-500">{dispute.resolution}</p>}
                 </HistoryRow>
@@ -1487,7 +1505,7 @@ function OrganizerAttention({
       {openDisputes > 0 && (
         <button type="button" onClick={onOpenIssues} className={`${chip} bg-danger-50 text-danger-700 hover:bg-danger-100`}>
           <TriangleAlert className="h-4 w-4" aria-hidden />
-          {openDisputes} open dispute{openDisputes === 1 ? "" : "s"}
+          {openDisputes} problem{openDisputes === 1 ? "" : "s"} reported
         </button>
       )}
       {owed > 0 && (
@@ -1648,6 +1666,7 @@ export interface GroupCycleTabsProps {
   onResolveDispute: (disputeId: string) => void;
   onSubmitSettlementClaim: () => void;
   onReviewSettlementClaim: (claimId: string, decision: "confirm" | "reject") => void;
+  onReportClaimProblem?: (claimId: string) => void;
   onAdvanceRound?: () => void;
   advanceRoundPending?: boolean;
   showDemoTools?: boolean;
@@ -1694,6 +1713,7 @@ export function GroupCycleTabPanels(props: GroupCycleTabsProps) {
     onResolveDispute,
     onSubmitSettlementClaim,
     onReviewSettlementClaim,
+    onReportClaimProblem,
     onAdvanceRound,
     advanceRoundPending = false,
     showDemoTools = false,
@@ -1941,6 +1961,7 @@ export function GroupCycleTabPanels(props: GroupCycleTabsProps) {
         onResolveDispute={onResolveDispute}
         onSubmitSettlementClaim={onSubmitSettlementClaim}
         onReviewSettlementClaim={onReviewSettlementClaim}
+        onReportClaimProblem={onReportClaimProblem}
       />
     );
   }
