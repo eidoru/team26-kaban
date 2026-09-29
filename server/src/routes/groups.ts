@@ -34,6 +34,7 @@ import {
   serializeMember,
 } from "../services/groups.js";
 import { loadGroupDetailPayload } from "../services/groupDetail.js";
+import { MemberSummaryError, getMemberSummary } from "../services/memberSummary.js";
 import {
   activateGroup,
   forceAdvanceGroupRound,
@@ -993,6 +994,19 @@ router.get("/:id/completion-summary", loadGroup, requireGroupMember, async (req,
     res.json({ summary });
   } catch (err) {
     if (err instanceof SummaryError) {
+      res.status(err.status).json({ error: err.message });
+      return;
+    }
+    next(err);
+  }
+});
+
+router.get("/:id/me", loadGroup, requireGroupMember, async (req, res, next) => {
+  try {
+    const summary = await getMemberSummary(req.group!, req.membership!);
+    res.json({ summary });
+  } catch (err) {
+    if (err instanceof MemberSummaryError) {
       res.status(err.status).json({ error: err.message });
       return;
     }

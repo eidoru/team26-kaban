@@ -135,6 +135,49 @@ export interface GroupDashboard {
   contributionAmount: string;
 }
 
+export type MemberRoundStatus = "paid" | "partial" | "awaiting" | "unpaid" | "missed" | "upcoming";
+
+/** The viewer's own standing in a started group (GET /groups/:id/me). */
+export interface MemberSummary {
+  contributionAmount: string;
+  /** Null once the cycle is complete. `remaining` is what the viewer still owes for it. */
+  currentRound: { number: number; dueDate: string; remaining: string } | null;
+  payout: {
+    roundNumber: number;
+    dueDate: string;
+    potAmount: string;
+    status: "upcoming" | "current" | "received";
+    roundsAway: number | null;
+    receivedAt: string | null;
+  } | null;
+  payments: {
+    paid: string;
+    expectedSoFar: string;
+    expectedTotal: string;
+    roundsPaidInFull: number;
+    roundsStarted: number;
+    totalRounds: number;
+    /** Contributions left this cycle (current round's balance plus upcoming rounds). */
+    stillToPay: string;
+    paymentsMade: number;
+    paymentsOnTime: number;
+  };
+  /** Shortfall interest paid (members) or collected (organizers). */
+  interestSettled: string;
+  /** Open disputes about the viewer's payments. */
+  openDisputes: number;
+  debt: { remaining: string; interest: string; obligationCount: number };
+  /** Organizers only: what members still owe them, interest included. */
+  receivable: { remaining: string; obligationCount: number } | null;
+  rounds: {
+    number: number;
+    dueDate: string;
+    status: MemberRoundStatus;
+    amount: string;
+    isPayout: boolean;
+  }[];
+}
+
 export interface CompletionSummary {
   groupName: string;
   completedAt: string | null;
@@ -800,6 +843,8 @@ export const api = {
 
   getCompletionSummary: (groupId: string) =>
     request<{ summary: CompletionSummary }>(`/groups/${groupId}/completion-summary`),
+
+  getMemberSummary: (groupId: string) => request<{ summary: MemberSummary }>(`/groups/${groupId}/me`),
 
   getDisputes: (groupId: string) => request<{ disputes: DisputeEntry[] }>(`/groups/${groupId}/disputes`),
 

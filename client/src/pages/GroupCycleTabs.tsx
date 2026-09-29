@@ -5,6 +5,7 @@ import type {
   DisputeEntry,
   GroupMember,
   LedgerEntry,
+  MemberSummary,
   ObligationEntry,
   RoundContribution,
   RoundSummary,
@@ -19,8 +20,9 @@ import { CopyableLink } from "../components/CopyableLink";
 import { StatCard } from "../components/StatCard";
 import { Celebration } from "../components/Celebration";
 import { CycleNetChart } from "../components/CycleNetChart";
+import { MemberStandingCard } from "../components/MemberStandingCard";
 
-export type CycleTab = "overview" | "schedule" | "ledger" | "issues" | "audit";
+export type CycleTab = "overview" | "you" | "schedule" | "ledger" | "issues" | "audit";
 
 function CompletionSummaryPanel({ summary }: { summary: CompletionSummary }) {
   const amount = Number(summary.contributionAmount);
@@ -1402,6 +1404,7 @@ function RoundHero({
   isViewerRecipient,
   viewerContribution,
   contributionAmount,
+  totalRounds,
 }: {
   round: RoundSummary;
   potAmount: number;
@@ -1412,6 +1415,7 @@ function RoundHero({
   isViewerRecipient: boolean;
   viewerContribution?: RoundContribution;
   contributionAmount: string;
+  totalRounds: number;
 }) {
   const sunny = isViewerRecipient;
   return (
@@ -1420,12 +1424,21 @@ function RoundHero({
         sunny ? "border-2 border-sun-200 bg-sun-100 text-ink-900" : "bg-brand-700 text-white"
       }`}
     >
-      {/* Round number and due date live in the header's fact strip; only urgency is repeated here. */}
-      {isOverdue && (
-        <div className="mb-4">
-          <span className={ui.badgeDanger}>Overdue</span>
-        </div>
-      )}
+      {/* Repeats the header's round/due facts so the tab says which round it is at a glance,
+          even on phones where the header has scrolled away. */}
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <span
+          className={`rounded-full px-3 py-1 text-sm font-bold tabular-nums ${
+            sunny ? "bg-white/80 text-ink-900" : "bg-white/15 text-white"
+          }`}
+        >
+          Round {round.number} of {totalRounds}
+        </span>
+        <span className={`text-sm font-semibold ${sunny ? "text-ink-700" : "text-brand-50"}`}>
+          Due {formatDueDate(round.dueDate)}
+        </span>
+        {isOverdue && <span className={ui.badgeDanger}>Overdue</span>}
+      </div>
 
       {sunny ? (
         <>
@@ -1497,6 +1510,10 @@ export interface GroupCycleTabsProps {
   completionSummary?: CompletionSummary;
   completionSummaryLoading?: boolean;
   completionSummaryError?: boolean;
+  memberSummary?: MemberSummary;
+  memberSummaryLoading?: boolean;
+  memberSummaryError?: boolean;
+  onOpenIssues?: () => void;
   obligations: ObligationEntry[];
   settlementClaims: SettlementClaimEntry[];
   disputes: DisputeEntry[];
@@ -1539,6 +1556,10 @@ export function GroupCycleTabPanels(props: GroupCycleTabsProps) {
     completionSummary,
     completionSummaryLoading,
     completionSummaryError,
+    memberSummary,
+    memberSummaryLoading,
+    memberSummaryError,
+    onOpenIssues,
     obligations,
     settlementClaims,
     disputes,
@@ -1610,6 +1631,7 @@ export function GroupCycleTabPanels(props: GroupCycleTabsProps) {
               isViewerRecipient={!!viewerMembershipId && currentRound.recipientMembershipId === viewerMembershipId}
               viewerContribution={contributions.find((c) => c.membershipId === viewerMembershipId)}
               contributionAmount={group.contributionAmount}
+              totalRounds={schedule.length}
             />
 
             {isActive && nextRound && (
@@ -1747,19 +1769,44 @@ export function GroupCycleTabPanels(props: GroupCycleTabsProps) {
     );
   }
 
+  if (cycleTab === "you") {
+    if (memberSummary) {
+      return (
+        <div className="space-y-6">
+          <MemberStandingCard summary={memberSummary} isCompleted={isCompleted} onOpenIssues={onOpenIssues} />
+          <CycleNetChart
+            schedule={schedule}
+            viewerMembershipId={viewerMembershipId}
+            contributionAmount={group.contributionAmount}
+            actualPaid={Object.fromEntries(
+              memberSummary.rounds.map((r) => [
+                r.number,
+                r.status === "paid" || r.status === "partial" ? Number(r.amount) : 0,
+              ]),
+            )}
+          />
+        </div>
+      );
+    }
+    if (memberSummaryError) {
+      return (
+        <EmptyTabState title="Could not load your summary" description="Refresh the page to try again." />
+      );
+    }
+    return memberSummaryLoading ? (
+      <div className="space-y-3" role="status" aria-label="Loading your summary">
+        <div className={`${ui.skeleton} h-16`} />
+        <div className={`${ui.skeleton} h-48`} />
+      </div>
+    ) : null;
+  }
+
   if (cycleTab === "schedule") {
     if (sortedMembers.length === 0) {
       return <EmptyTabState title="No schedule yet" description="The rotation appears after activation." />;
     }
     return (
       <>
-        <div className="mb-6">
-          <CycleNetChart
-            schedule={schedule}
-            viewerMembershipId={viewerMembershipId}
-            contributionAmount={group.contributionAmount}
-          />
-        </div>
         {isManager && !isCompleted && unclaimedSeats > 0 && (
           <p className="mb-3 text-sm text-ink-600">
             Tap an unclaimed seat to create a claim link so someone can take it over during the cycle.

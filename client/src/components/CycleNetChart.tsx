@@ -40,17 +40,21 @@ function useWidth() {
 }
 
 /**
- * The viewer's cumulative position across the cycle: pot received minus contributions paid,
- * assuming everyone pays in full. Closed rounds are solid; upcoming rounds are a dotted projection.
+ * The viewer's cumulative position across the cycle: pot received minus contributions paid.
+ * Closed rounds are solid and use `actualPaid` (confirmed amounts) when given; upcoming rounds are a
+ * dotted projection assuming full payment.
  */
 export function CycleNetChart({
   schedule,
   viewerMembershipId,
   contributionAmount,
+  actualPaid,
 }: {
   schedule: RoundSummary[];
   viewerMembershipId?: string;
   contributionAmount: string;
+  /** Confirmed amount the viewer paid per closed round, keyed by round number. */
+  actualPaid?: Record<number, number>;
 }) {
   const [wrapRef, width] = useWidth();
   const [hover, setHover] = useState<number | null>(null);
@@ -64,9 +68,10 @@ export function CycleNetChart({
   if (!myRound || n < 2 || !(contribution > 0)) return null;
 
   const points: Point[] = [{ k: 0, paid: 0, received: 0, net: 0 }];
+  let paid = 0;
   rounds.forEach((round, i) => {
     const k = i + 1;
-    const paid = contribution * k;
+    paid += round.status === "closed" && actualPaid ? (actualPaid[round.number] ?? 0) : contribution;
     const received = round.number >= myRound ? pot : 0;
     points.push({ k, paid, received, net: received - paid, round });
   });
@@ -161,7 +166,7 @@ export function CycleNetChart({
               ))}
             </tbody>
           </table>
-          <p className="mt-2 text-xs text-ink-500">Gray rows are upcoming rounds, assuming everyone pays in full.</p>
+          <p className="mt-2 text-xs text-ink-500">Gray rows are upcoming rounds, assuming you pay in full.</p>
         </div>
       ) : (
         <div

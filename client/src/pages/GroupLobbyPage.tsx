@@ -1,7 +1,16 @@
 ﻿import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookOpen, CalendarDays, ClipboardCheck, CloudOff, Coins, ScrollText, TriangleAlert } from "lucide-react";
+import {
+  BookOpen,
+  CalendarDays,
+  ClipboardCheck,
+  CloudOff,
+  Coins,
+  ScrollText,
+  TriangleAlert,
+  UserRound,
+} from "lucide-react";
 import { ApiError, api, type GroupDetail, type GroupMember } from "../api/client";
 import { useDialog } from "../context/DialogContext";
 import { formatFrequency } from "../lib/frequency";
@@ -24,7 +33,7 @@ import {
 import { FormingManagerPanel, FormingMemberPanel, formatGroupDate } from "./FormingPhase";
 import { LIMITS, isPastDateInput, parseAmountInput, pesoAmountError } from "../lib/validation";
 
-const CYCLE_TABS: CycleTab[] = ["overview", "schedule", "ledger", "issues", "audit"];
+const CYCLE_TABS: CycleTab[] = ["overview", "you", "schedule", "ledger", "issues", "audit"];
 
 export function GroupLobbyPage() {
   const { id } = useParams<{ id: string }>();
@@ -193,6 +202,19 @@ export function GroupLobbyPage() {
     queryKey: ["completion-summary", id],
     queryFn: () => api.getCompletionSummary(id!),
     enabled: !!id && groupLoaded && isCompleted && cycleTab === "overview",
+    retry: shouldRetryGroupQuery,
+    ...groupSupplementalQueryOptions,
+  });
+
+  // Keyed under the group so every group invalidation (including realtime) refreshes it too.
+  const {
+    data: memberSummaryData,
+    isLoading: memberSummaryLoading,
+    isError: memberSummaryError,
+  } = useQuery({
+    queryKey: [...groupQueryKey(id ?? ""), "me"],
+    queryFn: () => api.getMemberSummary(id!),
+    enabled: !!id && cycleStarted && cycleTab === "you",
     retry: shouldRetryGroupQuery,
     ...groupSupplementalQueryOptions,
   });
@@ -881,8 +903,9 @@ export function GroupLobbyPage() {
   const cycleTabs: (SectionNavItem & { id: CycleTab })[] = [
     isActive
       ? { id: "overview", label: "This round", shortLabel: "Round", icon: Coins }
-      : { id: "overview", label: "Summary", shortLabel: "Summary", icon: ClipboardCheck },
-    { id: "schedule", label: "Schedule", icon: CalendarDays },
+      : { id: "overview", label: "Summary", shortLabel: "Recap", icon: ClipboardCheck },
+    { id: "you", label: "You", icon: UserRound },
+    { id: "schedule", label: "Schedule", shortLabel: "Dates", icon: CalendarDays },
     { id: "ledger", label: "Ledger", icon: BookOpen },
     { id: "issues", label: "Issues", badge: issuesCount, icon: TriangleAlert },
     ...(isManager ? [{ id: "audit" as const, label: "Audit log", shortLabel: "Audit", icon: ScrollText }] : []),
@@ -1004,6 +1027,10 @@ export function GroupLobbyPage() {
             completionSummary={completionData?.summary}
             completionSummaryLoading={completionSummaryLoading}
             completionSummaryError={completionSummaryError}
+            memberSummary={memberSummaryData?.summary}
+            memberSummaryLoading={memberSummaryLoading}
+            memberSummaryError={memberSummaryError}
+            onOpenIssues={() => setCycleTab("issues")}
             obligations={obligationsData?.obligations ?? []}
             settlementClaims={settlementClaimsData?.claims ?? []}
             disputes={disputesData?.disputes ?? []}

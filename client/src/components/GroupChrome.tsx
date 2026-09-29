@@ -175,6 +175,7 @@ const PHONE_TAB_COLUMNS: Record<number, string> = {
   3: "grid-cols-3",
   4: "grid-cols-4",
   5: "grid-cols-5",
+  6: "grid-cols-6",
 };
 
 function TabBadge({ count, active }: { count: number; active: boolean }) {
