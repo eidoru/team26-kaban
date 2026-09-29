@@ -7,7 +7,7 @@ import { StatCard } from "../components/StatCard";
 import { ToggleSwitch } from "../components/ToggleSwitch";
 import { demoToolsAvailable, useDemoToolsSetting } from "../lib/devTools";
 import { ui } from "../lib/ui";
-import { LIMITS } from "../lib/validation";
+import { LIMITS, isValidEmail } from "../lib/validation";
 
 function formatPeso(amount: string | number): string {
   return `₱${Number(amount).toLocaleString()}`;
@@ -182,6 +182,10 @@ export function ProfilePage() {
     const trimmed = newEmail.trim();
     if (!trimmed) {
       setEmailError("Enter a new email address.");
+      return;
+    }
+    if (!isValidEmail(trimmed)) {
+      setEmailError("Enter a valid email address.");
       return;
     }
     if (trimmed.toLowerCase() === user?.email.toLowerCase()) {
