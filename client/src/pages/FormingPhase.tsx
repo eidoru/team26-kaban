@@ -833,10 +833,8 @@ export function FormingMemberPanel({
   return (
     <div className="space-y-6">
       <div className={`${ui.sectionCard} space-y-4`}>
-        <div>
-          <span className={ui.badgeForming}>Forming</span>
-          <p className="font-heading mt-2 text-lg font-bold text-ink-900">{memberStatusMessage(pending)}</p>
-        </div>
+        {/* The header already carries the Forming badge; this card only says what's being waited on. */}
+        <p className="font-heading text-lg font-bold text-ink-900">{memberStatusMessage(pending)}</p>
         <div>
           <SetupChecklist
             rosterDone={rosterDone}

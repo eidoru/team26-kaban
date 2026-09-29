@@ -50,9 +50,9 @@ function InviteShell({
   );
 }
 
-function DetailRow({ label, value }: { label: string; value: ReactNode }) {
+function DetailRow({ label, value, className = "" }: { label: string; value: ReactNode; className?: string }) {
   return (
-    <div className="rounded-2xl bg-ink-50 px-4 py-3">
+    <div className={`rounded-2xl bg-ink-50 px-4 py-3 ${className}`}>
       <dt className="text-xs font-bold uppercase tracking-wide text-ink-500">{label}</dt>
       <dd className="mt-0.5 text-sm font-bold text-ink-900 tabular-nums">{value}</dd>
     </div>
@@ -67,7 +67,6 @@ function GroupInviteDetails({ data }: { data: InvitePreview }) {
   const startLabel = group.startDate ? formatDueDate(group.startDate) : null;
   const filled = group.filledCount ?? 0;
   const openSlots = group.openSlots ?? Math.max(0, group.slotCount - filled);
-  const stack = members.slice(0, 5);
 
   return (
     <div className="overflow-hidden rounded-3xl border border-ink-200 bg-white shadow-card">
@@ -91,8 +90,7 @@ function GroupInviteDetails({ data }: { data: InvitePreview }) {
       </div>
 
       <dl className="grid grid-cols-2 gap-2 p-5">
-        <DetailRow label="Contribution" value={amount} />
-        <DetailRow label="Schedule" value={freq} />
+        {/* Contribution and schedule are already in the pot card above. */}
         {startLabel && <DetailRow label="Starts" value={startLabel} />}
         <DetailRow
           label="Shortfall interest"
@@ -102,27 +100,16 @@ function GroupInviteDetails({ data }: { data: InvitePreview }) {
             group.frequencyDays,
           )}
         />
+        {group.status === "forming" && (
+          <DetailRow label="Your payout turn" value="Set by the organizer before Round 1" className="col-span-2" />
+        )}
       </dl>
 
       <div className="border-t border-ink-100 px-5 py-4">
         <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            {stack.length > 0 && (
-              <div className="flex">
-                {stack.map((member, index) => (
-                  <Avatar
-                    key={index}
-                    name={member.displayName}
-                    placeholder={member.isPlaceholder}
-                    className={`ring-2 ring-white ${index > 0 ? "-ml-2" : ""}`}
-                  />
-                ))}
-              </div>
-            )}
-            <p className="text-sm font-bold text-ink-900">
-              {filled} of {group.slotCount} joined
-            </p>
-          </div>
+          <p className="text-sm font-bold text-ink-900">
+            {filled} of {group.slotCount} joined
+          </p>
           {group.status === "forming" && (
             <span className="text-xs font-semibold text-ink-500">
               {openSlots > 0 ? `${openSlots} seat${openSlots === 1 ? "" : "s"} open` : "Roster full"}
@@ -155,20 +142,10 @@ function GroupInviteDetails({ data }: { data: InvitePreview }) {
                       Turn {member.turnNumber}
                     </span>
                   )}
-                  {member.isManager && <span className={ui.badgeActive}>Manager</span>}
+                  {member.isManager && <span className={ui.badgeActive}>Organizer</span>}
                 </div>
               </li>
             ))}
-            {group.status === "forming" &&
-              openSlots > 0 &&
-              Array.from({ length: Math.min(openSlots, 3) }).map((_, index) => (
-                <li key={`open-${index}`} className="flex items-center gap-3 text-sm font-semibold text-ink-500">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-dashed border-ink-300 text-xs">
-                    ?
-                  </span>
-                  Open seat
-                </li>
-              ))}
           </ul>
         </div>
       )}

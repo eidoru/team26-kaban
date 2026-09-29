@@ -36,7 +36,8 @@ export const ui = {
   error: "rounded-2xl bg-danger-50 px-4 py-3 text-sm font-semibold text-danger-700",
   success: "rounded-2xl bg-brand-50 px-4 py-3 text-sm font-semibold text-brand-800",
   warning: "rounded-2xl bg-warn-50 px-4 py-3 text-sm font-semibold text-warn-700",
-  badgeForming: `${badgeBase} bg-warn-50 text-warn-700`,
+  // Sun-yellow rather than warn-50, which is the same cream as the page background.
+  badgeForming: `${badgeBase} bg-sun-100 text-sun-800`,
   badgeActive: `${badgeBase} bg-brand-100 text-brand-700`,
   badgeCompleted: `${badgeBase} bg-ink-100 text-ink-600`,
   badgeTurn: `${badgeBase} bg-sun-100 text-sun-800`,
