@@ -166,7 +166,7 @@ function ClaimSeatCallout({ data }: { data: InvitePreview }) {
         <div className="mt-2 space-y-1 text-sm text-ink-700">
           {placeholder.turnNumber != null && (
             <p>
-              Payout turn <span className="font-bold text-ink-900">#{placeholder.turnNumber}</span>
+              Payout turn <span className="font-bold text-ink-900">{placeholder.turnNumber}</span>
             </p>
           )}
           {placeholder.contact && (

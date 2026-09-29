@@ -148,7 +148,7 @@ function TurnChip({ turn }: { turn: number | null }) {
       }`}
       title={turn != null ? `Payout turn ${turn}` : "Turn not set"}
     >
-      {turn != null ? `#${turn}` : "—"}
+      {turn != null ? turn : "—"}
     </span>
   );
 }
@@ -854,7 +854,7 @@ export function FormingMemberPanel({
             <p className="font-heading truncate text-lg font-bold text-ink-900">{myMembership.displayName}</p>
             {myMembership.turnNumber != null ? (
               <p className="text-sm text-ink-700">
-                Payout turn <span className="font-bold text-ink-900">#{myMembership.turnNumber}</span> of{" "}
+                Payout turn <span className="font-bold text-ink-900">{myMembership.turnNumber}</span> of{" "}
                 {group.slotCount}
               </p>
             ) : (

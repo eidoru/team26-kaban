@@ -6,7 +6,7 @@ import { useAuth } from "../context/AuthContext";
 import { invalidateHomeLists } from "../lib/homeQueries";
 import { groupQueryKey } from "../lib/groupQueries";
 import { formatFrequency, type GroupFrequencyValue } from "../lib/frequency";
-import { formatDueDate } from "../lib/dates";
+import { formatDueDate, parseDateOnly } from "../lib/dates";
 import {
   formatShortfallInterestHint,
   formatShortfallInterestRate,
@@ -45,9 +45,24 @@ function formatPeso(amount: number): string {
   return `₱${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+/** Due date of the last round (YYYY-MM-DD in, display text out); mirrors the server's addFrequencyInterval. */
+function lastPayoutDate(startDate: string, frequency: GroupFrequencyValue, customDays: number, rounds: number): string {
+  const start = parseDateOnly(startDate);
+  if (!start || isPastDateInput(startDate) || !Number.isInteger(rounds) || rounds < 2) return "—";
+  const steps = rounds - 1;
+  const end = new Date(start);
+  if (frequency === "weekly") end.setDate(end.getDate() + 7 * steps);
+  else if (frequency === "biweekly") end.setDate(end.getDate() + 14 * steps);
+  else if (frequency === "monthly") end.setMonth(end.getMonth() + steps);
+  else if (Number.isInteger(customDays) && customDays >= 1) end.setDate(end.getDate() + customDays * steps);
+  else return "—";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return formatDueDate(`${end.getFullYear()}-${pad(end.getMonth() + 1)}-${pad(end.getDate())}`);
+}
+
 function SummaryRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-baseline justify-between gap-4 border-b border-ink-100 py-2.5 last:border-0">
+    <div className="flex items-baseline justify-between gap-4 border-b border-ink-100 py-3 last:border-0">
       <dt className="text-sm text-ink-500">{label}</dt>
       <dd className="text-right text-sm font-bold text-ink-900">{value}</dd>
     </div>
@@ -98,7 +113,7 @@ function RosterDots({ totalSlots }: { totalSlots: number }) {
       {Array.from({ length: dotCount }, (_, i) => (
         <span
           key={i}
-          className={`h-3 w-3 rounded-full ${i === 0 ? "bg-sun-300" : "bg-white/25"}`}
+          className={`h-3.5 w-3.5 rounded-full ${i === 0 ? "bg-sun-300" : "bg-white/25"}`}
         />
       ))}
     </div>
@@ -197,7 +212,8 @@ export function CreateGroupPage() {
         frequency === "custom" && !Number.isNaN(customDays) ? customDays : null,
       ),
       roster: !Number.isNaN(slots) && slots >= 2 ? `1 / ${slots}` : "—",
-      startDate: startDate ? formatDueDate(startDate) : "—",
+      startDate: startDate && !isPastDateInput(startDate) ? formatDueDate(startDate) : "—",
+      lastPayout: lastPayoutDate(startDate, frequency, customDays, slotsValid ? slotsValue : NaN),
       shortfallInterest: formatShortfallInterestRate(
         shortfallInterestRatePercent,
         frequency,
@@ -210,6 +226,8 @@ export function CreateGroupPage() {
     customDays,
     frequency,
     slots,
+    slotsValid,
+    slotsValue,
     startDate,
     shortfallInterestRatePercent,
   ]);
@@ -328,31 +346,35 @@ export function CreateGroupPage() {
       />
 
       <div className="flex flex-col gap-6 lg:flex-row lg:gap-10">
-        <aside className="hidden space-y-4 lg:order-last lg:block lg:w-72 lg:shrink-0 lg:self-start lg:sticky lg:top-24">
+        {/* Live preview: the group as members will see it. Desktop only — phones get the facts under
+            the title and the pot in the sticky submit bar. */}
+        <aside className="hidden space-y-4 lg:order-last lg:block lg:w-[25rem] lg:shrink-0 lg:self-start lg:sticky lg:top-24">
           <div className="overflow-hidden rounded-3xl border border-ink-200 bg-white shadow-card">
-            <div className="bg-gradient-to-br from-brand-700 to-brand-800 px-6 py-6 text-white">
-              <p className="truncate text-xs font-bold uppercase tracking-wide text-brand-100">
-                {name.trim() || "New paluwagan"}
+            <div className="bg-gradient-to-br from-brand-700 to-brand-800 px-7 py-7 text-white">
+              <p className="text-xs font-bold uppercase tracking-wide text-brand-100">Preview</p>
+              <p className="font-heading mt-1 truncate text-2xl font-bold">{name.trim() || "New paluwagan"}</p>
+              <p className="mt-6 text-xs font-bold uppercase tracking-wide text-brand-100">Each round&apos;s pot</p>
+              <p className="font-heading mt-1 text-5xl font-bold tracking-tight tabular-nums">{summary.total}</p>
+              <p className="mt-2 text-base text-brand-50">
+                <span className="font-bold text-white">{summary.contribution}</span> per member,{" "}
+                {summary.frequency.toLowerCase()}
               </p>
-              <p className="font-heading mt-3 text-3xl font-bold tracking-tight tabular-nums">{summary.total}</p>
-              <p className="mt-1 text-sm text-brand-50">
-                total pot · {summary.contribution} per member
-              </p>
-              <div className="mt-5">
+              <div className="mt-6">
                 <RosterDots totalSlots={slots} />
-                <p className="mt-2 text-xs font-semibold text-brand-100">
-                  {summary.roster} seats filled · yours is the first
+                <p className="mt-2 text-sm font-semibold text-brand-100">
+                  {slotsValid ? `${slotsValue} members · your seat is the first` : "Set 2–30 members"}
                 </p>
               </div>
             </div>
-            <dl className="px-6 py-2">
-              <SummaryRow label="Schedule" value={summary.frequency} />
-              <SummaryRow label="Starts" value={summary.startDate} />
+            <dl className="px-7 py-3">
+              <SummaryRow label="Rounds" value={slotsValid ? `${slotsValue} (one payout each)` : "—"} />
+              <SummaryRow label="First round due" value={summary.startDate} />
+              <SummaryRow label="Last payout" value={summary.lastPayout} />
               <SummaryRow label="Shortfall interest" value={summary.shortfallInterest} />
             </dl>
           </div>
-          <p className="text-sm text-ink-500">
-            After creating, fill the roster, set payout order, then activate to open Round 1.
+          <p className="px-1 text-sm text-ink-500">
+            Next: fill the roster, set the payout order, then launch to open Round 1.
           </p>
         </aside>
 
@@ -474,8 +496,12 @@ export function CreateGroupPage() {
               </div>
             </div>
 
+            {/* On large screens the preview already shows the per-member amount; keep the note there
+                only when it has to explain rounding. */}
             {amountMode === "total" && summary.contribution !== "—" && (
-              <p className="rounded-2xl bg-brand-50 px-4 py-3 text-sm text-brand-900">
+              <p
+                className={`rounded-2xl bg-brand-50 px-4 py-3 text-sm text-brand-900 ${totalRoundedUp ? "" : "lg:hidden"}`}
+              >
                 That&apos;s <span className="font-bold">{summary.contribution}</span> per member, per
                 round.
                 {totalRoundedUp && (

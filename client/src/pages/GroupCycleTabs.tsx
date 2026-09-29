@@ -904,7 +904,7 @@ function ScheduleTimeline({
                   </p>
                 </>
               ) : (
-                <p className="pt-1 text-xs font-bold text-ink-500">#{round?.number ?? member.turnNumber ?? index + 1}</p>
+                <p className="pt-1 text-xs font-bold text-ink-500">{round?.number ?? member.turnNumber ?? index + 1}</p>
               )}
             </div>
 
