@@ -262,6 +262,17 @@ export interface HomeOverview {
   attention: HomeAttentionItem[];
 }
 
+/** What the viewer owes in one group (GET /groups/me/debts). */
+export interface GroupDebt {
+  groupId: string;
+  groupName: string;
+  groupStatus: string;
+  remaining: string;
+  interest: string;
+  obligationCount: number;
+  hasPendingClaim: boolean;
+}
+
 export interface ManagerObligationsOverview {
   totalOutstanding: string;
   groups: {
@@ -875,6 +886,8 @@ export const api = {
       `/groups/${groupId}/disputes/${disputeId}/resolve`,
       { method: "PATCH", body: JSON.stringify({ resolution }) },
     ),
+
+  getMyDebts: () => request<{ debts: GroupDebt[] }>("/groups/me/debts"),
 
   getManagerObligations: () =>
     request<ManagerObligationsOverview>("/groups/manager/obligations"),

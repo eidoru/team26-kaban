@@ -35,6 +35,7 @@ import {
 } from "../services/groups.js";
 import { loadGroupDetailPayload } from "../services/groupDetail.js";
 import { MemberSummaryError, getMemberSummary } from "../services/memberSummary.js";
+import { getUserDebts } from "../services/myDebts.js";
 import {
   activateGroup,
   forceAdvanceGroupRound,
@@ -118,6 +119,15 @@ router.get("/", async (req, res, next) => {
   try {
     const groups = await listUserGroups(req.user!.id);
     res.json({ groups });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Defined before the "/:id" routes so "me" isn't read as a group id.
+router.get("/me/debts", async (req, res, next) => {
+  try {
+    res.json({ debts: await getUserDebts(req.user!.id) });
   } catch (err) {
     next(err);
   }

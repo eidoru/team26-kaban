@@ -89,6 +89,7 @@ export function invalidateGroupIssues(queryClient: QueryClient, groupId: string)
   void queryClient.invalidateQueries({ queryKey: ["dashboard", groupId] });
   void queryClient.invalidateQueries({ queryKey: groupQueryKey(groupId) });
   void queryClient.invalidateQueries({ queryKey: ["manager-obligations"] });
+  void queryClient.invalidateQueries({ queryKey: ["my-debts"] });
 }
 
 export function invalidateGroupCycle(queryClient: QueryClient, groupId: string) {
@@ -100,6 +101,7 @@ export function invalidateGroupCycle(queryClient: QueryClient, groupId: string) 
   void queryClient.invalidateQueries({ queryKey: ["obligations", groupId] });
   void queryClient.invalidateQueries({ queryKey: ["disputes", groupId] });
   void queryClient.invalidateQueries({ queryKey: ["manager-obligations"] });
+  void queryClient.invalidateQueries({ queryKey: ["my-debts"] });
 }
 
 export function mergeCurrentRoundIntoGroupCache(

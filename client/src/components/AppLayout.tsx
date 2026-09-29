@@ -130,7 +130,7 @@ export function AppLayout() {
   const navItems: NavItem[] = [
     { to: "/home", label: "Home", shortLabel: "Home", icon: House },
     { to: "/notifications", label: "Notifications", shortLabel: "Alerts", icon: Bell, badge: unreadCount },
-    { to: "/manager/obligations", label: "Owed to you", shortLabel: "Owed", icon: Wallet },
+    { to: "/money", label: "Money", shortLabel: "Money", icon: Wallet },
     { to: "/profile", label: "Profile", shortLabel: "Profile", icon: UserRound },
   ];
 

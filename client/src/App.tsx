@@ -19,8 +19,8 @@ const GroupLobbyPage = lazy(() =>
 const NotificationsPage = lazy(() =>
   import("./pages/NotificationsPage").then((m) => ({ default: m.NotificationsPage })),
 );
-const ManagerObligationsPage = lazy(() =>
-  import("./pages/ManagerObligationsPage").then((m) => ({ default: m.ManagerObligationsPage })),
+const MoneyPage = lazy(() =>
+  import("./pages/MoneyPage").then((m) => ({ default: m.MoneyPage })),
 );
 const InviteLandingPage = lazy(() =>
   import("./pages/InvitePages").then((m) => ({ default: m.InviteLandingPage })),
@@ -49,7 +49,9 @@ export function App() {
               <Route path="/groups/new" element={<CreateGroupPage />} />
               <Route path="/groups/:id" element={<GroupLobbyPage />} />
               <Route path="/notifications" element={<NotificationsPage />} />
-              <Route path="/manager/obligations" element={<ManagerObligationsPage />} />
+              <Route path="/money" element={<MoneyPage />} />
+              {/* Old "Owed to you" address, kept for bookmarks and older notifications. */}
+              <Route path="/manager/obligations" element={<Navigate to="/money" replace />} />
             </Route>
           </Route>
 
