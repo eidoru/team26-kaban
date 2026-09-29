@@ -1,5 +1,6 @@
 import { Group, Membership, ObligationStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
+import { isPastStartDate } from "../lib/validation.js";
 import { serializeContributionForViewer } from "./contributions.js";
 import { canRaiseContributionDispute } from "./disputes.js";
 import { serializeGroup, serializeMember } from "./groups.js";
@@ -45,6 +46,8 @@ export async function loadGroupDetailPayload(
 
   const filledCount = members.length;
   const needsPayoutOrder = members.some((m) => m.turnNumber === null);
+  const hasUsableStartDate =
+    !!group.startDate && (group.status !== "forming" || !isPastStartDate(group.startDate));
   const unclaimedSeats = members.filter((m) => m.userId === null).length;
   const openSlots = Math.max(0, group.slotCount - filledCount);
   const memberById = new Map(members.map((m) => [m.id, m]));
@@ -106,7 +109,8 @@ export async function loadGroupDetailPayload(
     members: members.map(serializeMember),
     pending: {
       payoutOrder: needsPayoutOrder,
-      startDateMissing: !group.startDate,
+      // A lapsed date counts as missing so the lobby asks for a new one before activation.
+      startDateMissing: !hasUsableStartDate,
       openSlots,
       unclaimedSeats,
       cycleStarted: group.status !== "forming",
@@ -114,7 +118,7 @@ export async function loadGroupDetailPayload(
         group.status === "forming" &&
         openSlots === 0 &&
         !needsPayoutOrder &&
-        !!group.startDate,
+        hasUsableStartDate,
     },
     currentRound,
     schedule,

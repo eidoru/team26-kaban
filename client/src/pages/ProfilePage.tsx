@@ -7,6 +7,7 @@ import { StatCard } from "../components/StatCard";
 import { ToggleSwitch } from "../components/ToggleSwitch";
 import { demoToolsAvailable, useDemoToolsSetting } from "../lib/devTools";
 import { ui } from "../lib/ui";
+import { LIMITS } from "../lib/validation";
 
 function formatPeso(amount: string | number): string {
   return `₱${Number(amount).toLocaleString()}`;
@@ -154,6 +155,10 @@ export function ProfilePage() {
     e.preventDefault();
     setProfileMessage("");
     setProfileError("");
+    if (!displayName.trim()) {
+      setProfileError("Enter a display name.");
+      return;
+    }
     setProfileSubmitting(true);
     try {
       await api.updateProfile({
@@ -270,7 +275,7 @@ export function ProfilePage() {
                   id="displayName"
                   type="text"
                   required
-                  maxLength={100}
+                  maxLength={LIMITS.name}
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
                   className={ui.input}
@@ -283,7 +288,7 @@ export function ProfilePage() {
                 <input
                   id="contact"
                   type="text"
-                  maxLength={200}
+                  maxLength={LIMITS.contact}
                   value={contact}
                   onChange={(e) => setContact(e.target.value)}
                   placeholder="Phone or messenger handle"

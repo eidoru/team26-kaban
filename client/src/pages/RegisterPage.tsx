@@ -6,6 +6,18 @@ import { prefetchHomeData } from "../lib/homeQueries";
 import { ui } from "../lib/ui";
 import { AuthShell } from "../components/AuthShell";
 import { resolvePendingInvite } from "../lib/pendingInvite";
+import { LIMITS, isValidEmail } from "../lib/validation";
+
+type FieldErrors = Partial<Record<"displayName" | "email" | "password", string>>;
+
+function FieldError({ id, message }: { id: string; message?: string }) {
+  if (!message) return null;
+  return (
+    <p id={id} className="mt-2 text-xs font-normal text-danger-600">
+      {message}
+    </p>
+  );
+}
 
 export function RegisterPage() {
   const { register } = useAuth();
@@ -16,11 +28,23 @@ export function RegisterPage() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [submitting, setSubmitting] = useState(false);
+
+  function clearFieldError(field: keyof FieldErrors) {
+    setFieldErrors((current) => (current[field] ? { ...current, [field]: undefined } : current));
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
+
+    const nextErrors: FieldErrors = {};
+    if (!displayName.trim()) nextErrors.displayName = "Enter your name.";
+    if (!isValidEmail(email)) nextErrors.email = "Enter a valid email address.";
+    if (password.length < 8) nextErrors.password = "Use at least 8 characters.";
+    setFieldErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) return;
 
     if (password !== confirmPassword) {
       setError("Passwords do not match.");
@@ -76,12 +100,20 @@ export function RegisterPage() {
               type="text"
               required
               autoComplete="name"
-              maxLength={100}
+              maxLength={LIMITS.name}
               value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
+              onChange={(e) => {
+                setDisplayName(e.target.value);
+                clearFieldError("displayName");
+              }}
               className={ui.input}
+              aria-invalid={!!fieldErrors.displayName}
+              aria-describedby={fieldErrors.displayName ? "displayName-error" : undefined}
             />
-            <p className={ui.helperText}>Shown to members in your paluwagan groups.</p>
+            <FieldError id="displayName-error" message={fieldErrors.displayName} />
+            {!fieldErrors.displayName && (
+              <p className={ui.helperText}>Shown to members in your paluwagan groups.</p>
+            )}
           </div>
 
           <div>
@@ -94,9 +126,15 @@ export function RegisterPage() {
               required
               autoComplete="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                clearFieldError("email");
+              }}
               className={ui.input}
+              aria-invalid={!!fieldErrors.email}
+              aria-describedby={fieldErrors.email ? "email-error" : undefined}
             />
+            <FieldError id="email-error" message={fieldErrors.email} />
           </div>
 
           <div>
@@ -107,7 +145,7 @@ export function RegisterPage() {
               id="contact"
               type="tel"
               autoComplete="tel"
-              maxLength={200}
+              maxLength={LIMITS.contact}
               value={contact}
               onChange={(e) => setContact(e.target.value)}
               placeholder="Phone or messenger handle"
@@ -127,10 +165,16 @@ export function RegisterPage() {
               minLength={8}
               autoComplete="new-password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                clearFieldError("password");
+              }}
               className={ui.input}
+              aria-invalid={!!fieldErrors.password}
+              aria-describedby={fieldErrors.password ? "password-error" : undefined}
             />
-            <p className={ui.helperText}>At least 8 characters.</p>
+            <FieldError id="password-error" message={fieldErrors.password} />
+            {!fieldErrors.password && <p className={ui.helperText}>At least 8 characters.</p>}
           </div>
 
           <div>

@@ -3,6 +3,7 @@ import { prisma, prismaTransactionOptions } from "../lib/prisma.js";
 import { writeAuditLog } from "../lib/audit.js";
 import { notifyGroupChangeSafe } from "../lib/realtimeNotify.js";
 import { runAfterResponse } from "../lib/background.js";
+import { isPastStartDate } from "../lib/validation.js";
 import { GroupError } from "./groups.js";
 import { processRoundShortfall, notifyRoundShortfalls, type RoundShortfallNotifications } from "./obligations.js";
 
@@ -188,6 +189,10 @@ export async function activateGroup(
   }
   if (!startDate) {
     throw new GroupError(409, "Start date is required before activation");
+  }
+  // A date saved while forming can lapse before activation; starting then would open Round 1 overdue.
+  if (isPastStartDate(startDate)) {
+    throw new GroupError(409, "The start date has passed. Pick a new one before activating.");
   }
 
   await prisma.$transaction(async (tx) => {

@@ -22,6 +22,7 @@ import {
   type SectionNavItem,
 } from "../components/GroupChrome";
 import { FormingManagerPanel, FormingMemberPanel, formatGroupDate } from "./FormingPhase";
+import { LIMITS, isPastDateInput, parseAmountInput, pesoAmountError } from "../lib/validation";
 
 const CYCLE_TABS: CycleTab[] = ["overview", "schedule", "ledger", "issues", "audit"];
 
@@ -357,19 +358,21 @@ export function GroupLobbyPage() {
       description: `Leave blank for the full ₱${Number(expected).toLocaleString()}.`,
       label: "Amount (₱)",
       placeholder: "Full amount",
+      inputMode: "decimal",
       submitLabel: "Continue",
       validate: (value) => {
-        const trimmed = value.trim();
-        if (!trimmed) return null;
-        const amount = Number(trimmed);
-        if (Number.isNaN(amount) || amount <= 0) return "Enter a valid positive amount.";
-        return null;
+        if (!value.trim()) return null;
+        const amount = parseAmountInput(value);
+        const expectedAmount = Number(expected);
+        if (amount > expectedAmount) {
+          return `Amount can't be more than the ₱${expectedAmount.toLocaleString()} due.`;
+        }
+        return pesoAmountError(amount, expectedAmount);
       },
     });
     if (input == null) return null;
-    const trimmed = input.trim();
-    if (!trimmed) return undefined;
-    return Number(trimmed);
+    if (!input.trim()) return undefined;
+    return parseAmountInput(input);
   }
 
   async function handleReportPayment(contributionId: string, expectedAmount: string) {
@@ -488,6 +491,7 @@ export function GroupLobbyPage() {
       label: "Note",
       required: true,
       multiline: true,
+      maxLength: LIMITS.note,
       submitLabel: "Record coverage",
     });
     if (note == null || !note.trim()) return;
@@ -531,6 +535,7 @@ export function GroupLobbyPage() {
         label: "Reason",
         required: true,
         multiline: true,
+        maxLength: LIMITS.note,
         submitLabel: "Reject claim",
       });
       if (note == null || !note.trim()) return;
@@ -564,6 +569,7 @@ export function GroupLobbyPage() {
       label: "Reason",
       required: true,
       multiline: true,
+      maxLength: LIMITS.disputeReason,
       submitLabel: "Submit dispute",
     });
     if (note == null || !note.trim()) return;
@@ -586,6 +592,7 @@ export function GroupLobbyPage() {
       placeholder: "Describe how this was resolved",
       required: true,
       multiline: true,
+      maxLength: LIMITS.resolution,
       submitLabel: "Resolve",
     });
     if (resolution == null || !resolution.trim()) return;
@@ -605,7 +612,10 @@ export function GroupLobbyPage() {
     setFormError("");
     const displayName = addName.trim();
     const contact = addContact.trim();
-    if (!displayName) return;
+    if (!displayName) {
+      setFormError("Enter a name for the placeholder.");
+      return;
+    }
     setAddName("");
     setAddContact("");
     try {
@@ -784,6 +794,10 @@ export function GroupLobbyPage() {
       setFormError("Choose a start date");
       return;
     }
+    if (isPastDateInput(displayStartDate)) {
+      setFormError("The first round can't be due in the past. Pick today or a later date.");
+      return;
+    }
     const previous = queryClient.getQueryData<GroupDetail>(groupQueryKey(id));
     patchStartDate(queryClient, id, displayStartDate);
     try {
@@ -799,7 +813,11 @@ export function GroupLobbyPage() {
   // anything is persisted, so `pending.payoutOrder` alone can look satisfied too early.
   // Only a locked-in order (draft cleared by handleLockInPayoutOrder) counts.
   const readyToActivate =
-    pending.openSlots === 0 && !pending.payoutOrder && !payoutDraftActive && !!displayStartDate;
+    pending.openSlots === 0 &&
+    !pending.payoutOrder &&
+    !payoutDraftActive &&
+    !!displayStartDate &&
+    !isPastDateInput(displayStartDate);
 
   const rosterFilled = group.filledCount ?? members.length;
   const rosterFillPercent =

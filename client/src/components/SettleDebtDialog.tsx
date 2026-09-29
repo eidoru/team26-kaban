@@ -1,5 +1,6 @@
 import { type FormEvent, useEffect, useState } from "react";
 import { ui } from "../lib/ui";
+import { LIMITS, MAX_PAYMENT, parseAmountInput, pesoAmountError } from "../lib/validation";
 import { Modal } from "./Modal";
 
 export function SettleDebtDialog({
@@ -33,9 +34,10 @@ export function SettleDebtDialog({
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    const parsed = Number(amount.trim());
-    if (Number.isNaN(parsed) || parsed <= 0) {
-      setError("Enter a valid positive amount.");
+    const parsed = parseAmountInput(amount);
+    const amountError = pesoAmountError(parsed, MAX_PAYMENT);
+    if (amountError) {
+      setError(amountError);
       return;
     }
     onSubmit({
@@ -79,6 +81,7 @@ export function SettleDebtDialog({
           <input
             id="settle-note"
             type="text"
+            maxLength={LIMITS.note}
             value={note}
             onChange={(e) => setNote(e.target.value)}
             placeholder="Optional note"

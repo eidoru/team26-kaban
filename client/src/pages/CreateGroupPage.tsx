@@ -12,6 +12,13 @@ import {
   formatShortfallInterestRate,
 } from "../lib/shortfallInterest";
 import { ui } from "../lib/ui";
+import {
+  LIMITS,
+  MAX_CONTRIBUTION,
+  isPastDateInput,
+  pesoAmountError,
+  todayDateInput,
+} from "../lib/validation";
 import { GroupHeader } from "../components/GroupChrome";
 import { SegmentedControl } from "../components/SegmentedControl";
 import { ToggleSwitch } from "../components/ToggleSwitch";
@@ -186,21 +193,32 @@ export function CreateGroupPage() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
+    if (!name.trim()) {
+      setError("Enter a group name.");
+      return;
+    }
     if (Number.isNaN(slots) || slots < 2 || slots > 30) {
       setError("Slots must be between 2 and 30.");
       return;
     }
     if (amountMode === "total") {
-      if (Number.isNaN(requestedTotal) || requestedTotal <= 0) {
-        setError("Enter a total pot amount.");
+      const totalError = pesoAmountError(requestedTotal, MAX_CONTRIBUTION * slots);
+      if (totalError) {
+        setError(`Total pot: ${totalError}`);
         return;
       }
-    } else if (Number.isNaN(effectiveContribution) || effectiveContribution <= 0) {
-      setError("Enter a contribution amount.");
+    }
+    const contributionError = pesoAmountError(effectiveContribution, MAX_CONTRIBUTION);
+    if (contributionError) {
+      setError(`Contribution: ${contributionError}`);
       return;
     }
     if (!startDate) {
       setError("Start date is required.");
+      return;
+    }
+    if (isPastDateInput(startDate)) {
+      setError("The first round can't be due in the past. Pick today or a later date.");
       return;
     }
     if (frequency === "custom") {
@@ -306,6 +324,7 @@ export function CreateGroupPage() {
               <input
                 id="name"
                 required
+                maxLength={LIMITS.name}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g. Office savings"
@@ -358,6 +377,7 @@ export function CreateGroupPage() {
                     type="number"
                     required
                     min="1"
+                    max={MAX_CONTRIBUTION}
                     step="0.01"
                     value={contributionAmount}
                     onChange={(e) => setContributionAmount(e.target.value)}
@@ -446,6 +466,7 @@ export function CreateGroupPage() {
                   id="startDate"
                   type="date"
                   required
+                  min={todayDateInput()}
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
                   className={ui.input}

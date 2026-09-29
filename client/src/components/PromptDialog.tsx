@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useState } from "react";
+import { type ChangeEvent, type FormEvent, useEffect, useState } from "react";
 import { ui } from "../lib/ui";
 import { Modal } from "./Modal";
 
@@ -13,6 +13,8 @@ export function PromptDialog({
   multiline = false,
   submitLabel = "Submit",
   cancelLabel = "Cancel",
+  maxLength,
+  inputMode,
   validate,
   onSubmit,
   onCancel,
@@ -27,6 +29,8 @@ export function PromptDialog({
   multiline?: boolean;
   submitLabel?: string;
   cancelLabel?: string;
+  maxLength?: number;
+  inputMode?: "text" | "decimal";
   validate?: (value: string) => string | null;
   onSubmit: (value: string) => void;
   onCancel: () => void;
@@ -58,70 +62,54 @@ export function PromptDialog({
     onSubmit(value);
   }
 
+  function handleChange(e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) {
+    setValue(e.target.value);
+    setError(null);
+  }
+
   const submitDisabled = required && !value.trim();
+
+  const field = multiline ? (
+    <textarea
+      id="prompt-dialog-input"
+      value={value}
+      onChange={handleChange}
+      placeholder={placeholder}
+      maxLength={maxLength}
+      rows={4}
+      className={`${ui.input} resize-y min-h-[6rem]`}
+      aria-label={label ? undefined : title}
+    />
+  ) : (
+    <input
+      id="prompt-dialog-input"
+      type="text"
+      inputMode={inputMode}
+      value={value}
+      onChange={handleChange}
+      placeholder={placeholder}
+      maxLength={maxLength}
+      className={ui.input}
+      aria-label={label ? undefined : title}
+    />
+  );
 
   return (
     <Modal open={open} title={title} description={description} onClose={onCancel}>
       <form onSubmit={handleSubmit} className="space-y-4">
-        {label && (
-          <div>
+        <div>
+          {label && (
             <label htmlFor="prompt-dialog-input" className={ui.label}>
               {label}
             </label>
-            {multiline ? (
-              <textarea
-                id="prompt-dialog-input"
-                value={value}
-                onChange={(e) => {
-                  setValue(e.target.value);
-                  setError(null);
-                }}
-                placeholder={placeholder}
-                rows={4}
-                className={`${ui.input} resize-y min-h-[6rem]`}
-              />
-            ) : (
-              <input
-                id="prompt-dialog-input"
-                type="text"
-                value={value}
-                onChange={(e) => {
-                  setValue(e.target.value);
-                  setError(null);
-                }}
-                placeholder={placeholder}
-                className={ui.input}
-              />
-            )}
-          </div>
-        )}
-        {!label && (
-          multiline ? (
-            <textarea
-              id="prompt-dialog-input"
-              value={value}
-              onChange={(e) => {
-                setValue(e.target.value);
-                setError(null);
-              }}
-              placeholder={placeholder}
-              rows={4}
-              className={`${ui.input} resize-y min-h-[6rem]`}
-            />
-          ) : (
-            <input
-              id="prompt-dialog-input"
-              type="text"
-              value={value}
-              onChange={(e) => {
-                setValue(e.target.value);
-                setError(null);
-              }}
-              placeholder={placeholder}
-              className={ui.input}
-            />
-          )
-        )}
+          )}
+          {field}
+          {multiline && maxLength ? (
+            <p className="mt-1.5 text-right text-xs tabular-nums text-ink-500">
+              {value.length}/{maxLength}
+            </p>
+          ) : null}
+        </div>
         {error && <p className="text-sm text-danger-600">{error}</p>}
         <div className="flex flex-wrap justify-end gap-3">
           <button type="button" onClick={onCancel} className={ui.btnSecondary}>

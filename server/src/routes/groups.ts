@@ -7,6 +7,14 @@ import { resolveAppOrigin } from "../lib/origin.js";
 import { requireAuth, requireDemoTools } from "../middleware/auth.js";
 import { validateBody } from "../middleware/validate.js";
 import {
+  MAX_CONTRIBUTION,
+  MAX_PAYMENT,
+  optionalText,
+  pesoAmount,
+  requiredText,
+  startDateField,
+} from "../lib/validation.js";
+import {
   loadGroup,
   requireGroupManager,
   requireGroupMember,
@@ -125,12 +133,12 @@ router.get("/manager/obligations", async (req, res, next) => {
 
 const createGroupSchema = z
   .object({
-    name: z.string().min(1).max(100),
-    contributionAmount: z.number().positive(),
+    name: requiredText("Group name", 100),
+    contributionAmount: pesoAmount(MAX_CONTRIBUTION),
     frequency: z.enum(["weekly", "biweekly", "monthly", "custom"]),
     frequencyDays: z.number().int().min(1).max(365).optional(),
     slotCount: z.number().int().min(2).max(30),
-    startDate: z.string().date(),
+    startDate: startDateField,
     shortfallInterestRatePercent: z.number().min(0).max(100).optional(),
   })
   .superRefine((data, ctx) => {
@@ -251,8 +259,8 @@ router.get("/:id/member-reliability", loadGroup, requireGroupMember, async (req,
 });
 
 const addMemberSchema = z.object({
-  displayName: z.string().min(1).max(100),
-  contact: z.string().max(200).optional(),
+  displayName: requiredText("Name", 100),
+  contact: optionalText("Contact", 200).optional(),
 });
 
 router.post(
@@ -305,8 +313,8 @@ router.post(
 );
 
 const updateMemberSchema = z.object({
-  displayName: z.string().min(1).max(100).optional(),
-  contact: z.string().max(200).nullable().optional(),
+  displayName: requiredText("Name", 100).optional(),
+  contact: optionalText("Contact", 200).nullable().optional(),
 });
 
 router.patch(
@@ -534,7 +542,7 @@ router.post(
 );
 
 const startDateSchema = z.object({
-  startDate: z.string().date(),
+  startDate: startDateField,
 });
 
 router.patch(
@@ -577,7 +585,7 @@ router.patch(
 );
 
 const activateSchema = z.object({
-  startDate: z.string().date().optional(),
+  startDate: startDateField.optional(),
 });
 
 router.post(
@@ -701,9 +709,9 @@ router.get("/:id/rounds", loadGroup, requireGroupMember, async (req, res, next) 
 });
 
 const reportContributionSchema = z.object({
-  note: z.string().max(500).optional(),
+  note: optionalText("Note", 500).optional(),
   proofUrl: z.string().url().max(500).optional(),
-  amount: z.number().positive().optional(),
+  amount: pesoAmount(MAX_PAYMENT).optional(),
 });
 
 router.post(
@@ -753,8 +761,8 @@ router.post(
 );
 
 const recordContributionSchema = z.object({
-  note: z.string().max(500).optional(),
-  amount: z.number().positive().optional(),
+  note: optionalText("Note", 500).optional(),
+  amount: pesoAmount(MAX_PAYMENT).optional(),
 });
 
 router.post(
@@ -819,8 +827,8 @@ router.get("/:id/obligations", loadGroup, requireGroupMember, async (req, res, n
 });
 
 const settleDebtsSchema = z.object({
-  amount: z.number().positive(),
-  note: z.string().max(500).optional(),
+  amount: pesoAmount(MAX_PAYMENT),
+  note: optionalText("Note", 500).optional(),
 });
 
 router.post(
@@ -861,7 +869,7 @@ router.post(
 
 
 const coverExternallySchema = z.object({
-  note: z.string().min(1).max(500),
+  note: requiredText("Note", 500),
 });
 
 router.post(
@@ -903,8 +911,8 @@ router.get("/:id/settlement-claims", loadGroup, requireGroupMember, async (req, 
 });
 
 const submitSettlementClaimSchema = z.object({
-  amount: z.number().positive(),
-  note: z.string().max(500).optional(),
+  amount: pesoAmount(MAX_PAYMENT),
+  note: optionalText("Note", 500).optional(),
   proofUrl: z.string().url().max(500).optional(),
 });
 
@@ -936,7 +944,7 @@ router.post(
 
 const reviewSettlementClaimSchema = z.object({
   decision: z.enum(["confirm", "reject"]),
-  reviewNote: z.string().max(500).optional(),
+  reviewNote: optionalText("Reason", 500).optional(),
 });
 
 router.patch(
@@ -1002,7 +1010,7 @@ router.get("/:id/disputes", loadGroup, requireGroupMember, async (req, res, next
 });
 
 const raiseDisputeSchema = z.object({
-  note: z.string().min(1).max(1000),
+  note: requiredText("Reason", 1000),
   proofUrl: z.string().url().max(500).optional(),
 });
 
@@ -1033,7 +1041,7 @@ router.post(
 );
 
 const resolveDisputeSchema = z.object({
-  resolution: z.string().min(1).max(2000),
+  resolution: requiredText("Resolution note", 2000),
 });
 
 router.patch(

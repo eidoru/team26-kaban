@@ -5,6 +5,7 @@ import { formatFrequency } from "../lib/frequency";
 import { formatDueDate } from "../lib/dates";
 import { formatShortfallInterestRate } from "../lib/shortfallInterest";
 import { ui } from "../lib/ui";
+import { LIMITS, isPastDateInput, todayDateInput } from "../lib/validation";
 import { useAuth } from "../context/AuthContext";
 import { CopyableLink } from "../components/CopyableLink";
 import { GroupSectionLayout, type SectionNavItem } from "../components/GroupChrome";
@@ -395,6 +396,7 @@ export function FormingManagerPanel({
   const rosterDone = pending.openSlots === 0;
   const orderDone = !pending.payoutOrder;
   const startDone = !pending.startDateMissing;
+  const startDatePassed = !!displayStartDate && isPastDateInput(displayStartDate);
   const orderLocked = orderDone && !payoutDraftActive;
 
   // Picks the sensible starting tab (e.g. landing on "order" if the roster was already
@@ -533,6 +535,7 @@ export function FormingManagerPanel({
                       </p>
                       <input
                         required
+                        maxLength={LIMITS.name}
                         value={addName}
                         onChange={(e) => onAddNameChange(e.target.value)}
                         placeholder="Name"
@@ -540,6 +543,7 @@ export function FormingManagerPanel({
                         className={ui.input}
                       />
                       <input
+                        maxLength={LIMITS.contact}
                         value={addContact}
                         onChange={(e) => onAddContactChange(e.target.value)}
                         placeholder="Contact (optional)"
@@ -713,10 +717,18 @@ export function FormingManagerPanel({
                   <input
                     id="formingStartDate"
                     type="date"
+                    min={todayDateInput()}
                     value={displayStartDate}
                     onChange={(e) => onStartDateChange(e.target.value)}
                     className={ui.input}
+                    aria-invalid={startDatePassed}
+                    aria-describedby={startDatePassed ? "formingStartDate-hint" : undefined}
                   />
+                  {startDatePassed && (
+                    <p id="formingStartDate-hint" className="mt-2 text-xs font-normal text-danger-600">
+                      This date has passed. Pick today or a later date.
+                    </p>
+                  )}
                 </div>
                 <button
                   type="button"

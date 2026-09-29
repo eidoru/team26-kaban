@@ -27,6 +27,9 @@ export interface PromptOptions {
   defaultValue?: string;
   required?: boolean;
   multiline?: boolean;
+  /** Character cap; multi-line prompts also show a counter. */
+  maxLength?: number;
+  inputMode?: "text" | "decimal";
   submitLabel?: string;
   cancelLabel?: string;
   validate?: (value: string) => string | null;
@@ -157,6 +160,8 @@ export function DialogProvider({ children }: { children: ReactNode }) {
           defaultValue={active.opts.defaultValue}
           required={active.opts.required}
           multiline={active.opts.multiline}
+          maxLength={active.opts.maxLength}
+          inputMode={active.opts.inputMode}
           submitLabel={active.opts.submitLabel}
           cancelLabel={active.opts.cancelLabel}
           validate={active.opts.validate}
