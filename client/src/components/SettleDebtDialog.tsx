@@ -66,9 +66,11 @@ export function SettleDebtDialog({
               inputMode="decimal"
               value={amount}
               onChange={(e) => {
-                setAmount(e.target.value);
-                setError(null);
+                const next = e.target.value;
+                setAmount(next);
+                setError(next.trim() ? pesoAmountError(parseAmountInput(next), MAX_PAYMENT) : null);
               }}
+              aria-invalid={!!error}
               placeholder="0.00"
               className={`${ui.input.replace("px-4", "pl-9 pr-4")} tabular-nums`}
             />
@@ -97,7 +99,7 @@ export function SettleDebtDialog({
           <button type="button" onClick={onCancel} className={ui.btnSecondary}>
             {cancelLabel}
           </button>
-          <button type="submit" disabled={!amount.trim()} className={ui.btnPrimary}>
+          <button type="submit" disabled={!amount.trim() || !!error} className={ui.btnPrimary}>
             {submitLabel}
           </button>
         </div>

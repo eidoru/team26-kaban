@@ -63,11 +63,13 @@ export function PromptDialog({
   }
 
   function handleChange(e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) {
-    setValue(e.target.value);
-    setError(null);
+    const next = e.target.value;
+    setValue(next);
+    // Check as the user types (e.g. an amount above what's due), not only on submit.
+    setError(validate && next.trim() ? validate(next) : null);
   }
 
-  const submitDisabled = required && !value.trim();
+  const submitDisabled = (required && !value.trim()) || !!error;
 
   const field = multiline ? (
     <textarea
@@ -110,7 +112,11 @@ export function PromptDialog({
             </p>
           ) : null}
         </div>
-        {error && <p className="text-sm text-danger-600">{error}</p>}
+        {error && (
+          <p className="text-sm text-danger-600" role="alert">
+            {error}
+          </p>
+        )}
         <div className="flex flex-wrap justify-end gap-3">
           <button type="button" onClick={onCancel} className={ui.btnSecondary}>
             {cancelLabel}

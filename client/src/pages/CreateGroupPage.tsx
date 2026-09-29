@@ -12,6 +12,7 @@ import {
   formatShortfallInterestRate,
 } from "../lib/shortfallInterest";
 import { ui } from "../lib/ui";
+import { FieldError } from "../components/FieldError";
 import {
   LIMITS,
   MAX_CONTRIBUTION,
@@ -129,10 +130,46 @@ export function CreateGroupPage() {
     if (!next) setShortfallInterestRatePercent("0");
   }
 
+  // Checked as the organizer types, so an out-of-range value is flagged at the field right away
+  // instead of only on submit. Empty fields are left to the required-field checks on submit.
+  const slotsValue = Number(slotCount);
+  const slotsValid = Number.isInteger(slotsValue) && slotsValue >= 2 && slotsValue <= 30;
+  const maxTotal = MAX_CONTRIBUTION * (slotsValid ? slotsValue : 30);
+  const daysValue = Number(frequencyDays);
+  const rateValue = Number(shortfallInterestRatePercent);
+  const fieldErrors = {
+    totalAmount:
+      amountMode === "total" && totalAmount !== ""
+        ? Number(totalAmount) > maxTotal
+          ? `Total pot can't be more than ${formatPeso(maxTotal)} for ${slotsValid ? slotsValue : 30} members (${formatPeso(
+              MAX_CONTRIBUTION,
+            )} each).`
+          : pesoAmountError(Number(totalAmount), maxTotal)
+        : null,
+    contributionAmount:
+      amountMode === "perMember" && contributionAmount !== ""
+        ? pesoAmountError(Number(contributionAmount), MAX_CONTRIBUTION)
+        : null,
+    slots: slotCount !== "" && !slotsValid ? "Use a whole number from 2 to 30." : null,
+    frequencyDays:
+      frequency === "custom" && frequencyDays !== "" && !(Number.isInteger(daysValue) && daysValue >= 1 && daysValue <= 365)
+        ? "Use a whole number of days from 1 to 365."
+        : null,
+    interest:
+      interestEnabled &&
+      shortfallInterestRatePercent !== "" &&
+      !(rateValue >= 0 && rateValue <= 100 && Math.abs(rateValue * 100 - Math.round(rateValue * 100)) < 1e-6)
+        ? "Use a rate from 0 to 100%, with at most 2 decimals."
+        : null,
+    startDate: startDate && isPastDateInput(startDate) ? "Pick today or a later date." : null,
+  };
+  const amountInvalid = !!(fieldErrors.totalAmount || fieldErrors.contributionAmount);
+
   // The stored amount is always a single shared per-member contribution — "total pot" mode
   // just computes it from the amount the organizer actually has in mind for the round.
-  const effectiveContribution =
-    amountMode === "total"
+  const effectiveContribution = amountInvalid
+    ? NaN
+    : amountMode === "total"
       ? computeContributionFromTotal(parseFloat(totalAmount), slots)
       : parseFloat(contributionAmount);
 
@@ -193,6 +230,10 @@ export function CreateGroupPage() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
+    if (Object.values(fieldErrors).some(Boolean)) {
+      setError("Fix the fields marked in red first.");
+      return;
+    }
     if (!name.trim()) {
       setError("Enter a group name.");
       return;
@@ -365,12 +406,16 @@ export function CreateGroupPage() {
                     type="number"
                     required
                     min="1"
+                    max={maxTotal}
                     step="0.01"
                     value={totalAmount}
                     onChange={(e) => setTotalAmount(e.target.value)}
                     placeholder="50000"
                     className={ui.input}
+                    aria-invalid={!!fieldErrors.totalAmount}
+                    aria-describedby={fieldErrors.totalAmount ? "totalAmount-error" : undefined}
                   />
+                  <FieldError id="totalAmount-error" message={fieldErrors.totalAmount} />
                   <p className={ui.helperText}>Split evenly across every slot, manager included.</p>
                 </div>
               ) : (
@@ -389,7 +434,10 @@ export function CreateGroupPage() {
                     onChange={(e) => setContributionAmount(e.target.value)}
                     placeholder="1000"
                     className={ui.input}
+                    aria-invalid={!!fieldErrors.contributionAmount}
+                    aria-describedby={fieldErrors.contributionAmount ? "amount-error" : undefined}
                   />
+                  <FieldError id="amount-error" message={fieldErrors.contributionAmount} />
                   <p className={ui.helperText}>Each member pays this amount every round.</p>
                 </div>
               )}
@@ -415,8 +463,14 @@ export function CreateGroupPage() {
                     setSlotCount(!Number.isNaN(parsed) && parsed > 30 ? "30" : raw);
                   }}
                   className={ui.input}
+                  aria-invalid={!!fieldErrors.slots}
+                  aria-describedby={fieldErrors.slots ? "slots-error" : undefined}
                 />
-                <p className={ui.helperText}>2–30 members</p>
+                {fieldErrors.slots ? (
+                  <FieldError id="slots-error" message={fieldErrors.slots} />
+                ) : (
+                  <p className={ui.helperText}>2–30 members</p>
+                )}
               </div>
             </div>
 
@@ -461,7 +515,10 @@ export function CreateGroupPage() {
                     value={frequencyDays}
                     onChange={(e) => setFrequencyDays(e.target.value)}
                     className={ui.input}
+                    aria-invalid={!!fieldErrors.frequencyDays}
+                    aria-describedby={fieldErrors.frequencyDays ? "frequencyDays-error" : undefined}
                   />
+                  <FieldError id="frequencyDays-error" message={fieldErrors.frequencyDays} />
                 </div>
               )}
               <div className="sm:max-w-xs">
@@ -476,7 +533,10 @@ export function CreateGroupPage() {
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
                   className={ui.input}
+                  aria-invalid={!!fieldErrors.startDate}
+                  aria-describedby={fieldErrors.startDate ? "startDate-error" : undefined}
                 />
+                <FieldError id="startDate-error" message={fieldErrors.startDate} />
               </div>
             </div>
           </FormSection>
@@ -507,7 +567,10 @@ export function CreateGroupPage() {
                   onChange={(e) => setShortfallInterestRatePercent(e.target.value)}
                   placeholder="2"
                   className={ui.input}
+                  aria-invalid={!!fieldErrors.interest}
+                  aria-describedby={fieldErrors.interest ? "shortfallInterest-error" : undefined}
                 />
+                <FieldError id="shortfallInterest-error" message={fieldErrors.interest} />
                 <p className={ui.helperText}>
                   {formatShortfallInterestHint(
                     frequency,

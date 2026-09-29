@@ -7,17 +7,10 @@ import { ui } from "../lib/ui";
 import { AuthShell } from "../components/AuthShell";
 import { resolvePendingInvite } from "../lib/pendingInvite";
 import { LIMITS, isValidEmail } from "../lib/validation";
+import { FieldError } from "../components/FieldError";
 
 type FieldErrors = Partial<Record<"displayName" | "email" | "password", string>>;
 
-function FieldError({ id, message }: { id: string; message?: string }) {
-  if (!message) return null;
-  return (
-    <p id={id} className="mt-2 text-xs font-normal text-danger-600">
-      {message}
-    </p>
-  );
-}
 
 export function RegisterPage() {
   const { register } = useAuth();
