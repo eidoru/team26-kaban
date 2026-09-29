@@ -279,7 +279,7 @@ export async function notifyRoundShortfalls(payload: RoundShortfallNotifications
       type: "general",
       title: `${payload.groupName}: round ${payload.roundNumber} shortfalls recorded`,
       body: `${payload.created} member${payload.created === 1 ? "" : "s"} owe a total of ₱${Number(payload.totalShortfall).toLocaleString()} from this round.`,
-      link: `/groups/${payload.groupId}`,
+      link: `/groups/${payload.groupId}?tab=issues`,
     });
   }
 
@@ -294,7 +294,7 @@ export async function notifyRoundShortfalls(payload: RoundShortfallNotifications
       type: "general",
       title: `${payload.groupName}: payment shortfall recorded`,
       body: `You owe ₱${Number(debtor.amount).toLocaleString()} to the organizer for round ${payload.roundNumber}.${interestNote}`,
-      link: `/groups/${payload.groupId}`,
+      link: `/groups/${payload.groupId}?tab=issues`,
     });
   }
 
@@ -735,7 +735,7 @@ export async function submitSettlementClaim(
       type: "general",
       title: `${group.name}: payment reported for review`,
       body: `${debtor.displayName} reported paying ₱${amount.toNumber().toLocaleString()} toward their outstanding debt.`,
-      link: `/groups/${groupId}`,
+      link: `/groups/${groupId}?tab=issues`,
     });
   }
 
@@ -800,7 +800,7 @@ export async function reviewSettlementClaim(
         body: `Your reported payment of ₱${Number(claim.amount).toLocaleString()} was not confirmed by the organizer.${
           reviewNote ? ` Note: ${reviewNote}` : ""
         }`,
-        link: `/groups/${groupId}`,
+        link: `/groups/${groupId}?tab=issues`,
       });
     }
 
@@ -850,7 +850,7 @@ export async function reviewSettlementClaim(
       type: "general",
       title: "Payment confirmed",
       body: `Your reported payment of ₱${Number(result.settlement.applied).toLocaleString()} was confirmed and applied to your debt.`,
-      link: `/groups/${groupId}`,
+      link: `/groups/${groupId}?tab=issues`,
     });
   }
 

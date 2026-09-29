@@ -199,9 +199,9 @@ export async function raiseDispute(
       userId: managerMembership.userId,
       groupId,
       type: "dispute_raised",
-      title: `${group.name}: dispute raised`,
-      body: `A payment dispute was raised for round ${contribution.round.number} (${contribution.membership.displayName}).`,
-      link: `/groups/${groupId}`,
+      title: `${group.name}: problem reported`,
+      body: `${contribution.membership.displayName} reported a problem with their round ${contribution.round.number} payment.`,
+      link: `/groups/${groupId}?tab=issues`,
     });
   }
 
