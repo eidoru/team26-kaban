@@ -1,10 +1,10 @@
-import { Group, Membership, ObligationStatus, SettlementClaimStatus } from "@prisma/client";
+import { Group, InviteTokenType, Membership, ObligationStatus, SettlementClaimStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { isPastStartDate } from "../lib/validation.js";
 import { disputesAboutMember, disputesInGroup } from "./disputes.js";
 import { serializeContributionForViewer } from "./contributions.js";
 import { canRaiseContributionDispute } from "./disputes.js";
-import { serializeGroup, serializeMember } from "./groups.js";
+import { inviteUrl, serializeGroup, serializeMember } from "./groups.js";
 import { serializeRound } from "./schedule.js";
 
 /** Build the group detail payload returned by GET /groups/:id. */
@@ -39,8 +39,25 @@ export async function loadGroupDetailPayload(
   group: Group,
   membership: Membership,
   viewerUserId: string,
+  /** When given, organizers also get each unclaimed seat's active claim link. */
+  appOrigin?: string,
 ) {
   const isManager = membership.isManager;
+  const claimLinksPromise =
+    isManager && appOrigin && group.status !== "completed"
+      ? prisma.inviteToken.findMany({
+          where: {
+            groupId: group.id,
+            type: InviteTokenType.membership_claim,
+            revokedAt: null,
+            targetMembershipId: { not: null },
+            OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+            targetMembership: { userId: null },
+          },
+          orderBy: { createdAt: "asc" },
+          select: { token: true, type: true, targetMembershipId: true },
+        })
+      : Promise.resolve([]);
 
   const started = group.status !== "forming";
   const [members, rounds, openDisputeCount, unsettledObligationCount, actionableCount] = await Promise.all([
@@ -125,7 +142,14 @@ export async function loadGroupDetailPayload(
     }
   }
 
+  // Newest link wins if older ones were never revoked.
+  const claimLinks: Record<string, string> = {};
+  for (const invite of await claimLinksPromise) {
+    claimLinks[invite.targetMembershipId!] = inviteUrl(invite.type, invite.token, appOrigin!);
+  }
+
   return {
+    claimLinks,
     group: {
       ...serializeGroup(group, filledCount, isManager ? "manager" : "member"),
       membershipId: membership.id,

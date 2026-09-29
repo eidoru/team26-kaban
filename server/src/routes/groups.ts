@@ -255,7 +255,7 @@ router.delete("/:id", loadGroup, requireGroupManager, async (req, res, next) => 
 
 router.get("/:id", loadGroup, requireGroupMember, async (req, res, next) => {
   try {
-    res.json(await loadGroupDetailPayload(req.group!, req.membership!, req.user!.id));
+    res.json(await loadGroupDetailPayload(req.group!, req.membership!, req.user!.id, resolveAppOrigin(req)));
   } catch (err) {
     next(err);
   }
@@ -473,6 +473,11 @@ router.post(
         }
       }
 
+      // One live claim link per seat: a new link replaces any earlier one for the same placeholder.
+      if (type === InviteTokenType.membership_claim) {
+        await revokeClaimLinks(group.id, membershipId!);
+      }
+
       const invite = await prisma.inviteToken.create({
         data: {
           type,
@@ -505,6 +510,44 @@ router.post(
         res.status(err.status).json({ error: err.message });
         return;
       }
+      next(err);
+    }
+  },
+);
+
+async function revokeClaimLinks(groupId: string, membershipId: string) {
+  const result = await prisma.inviteToken.updateMany({
+    where: {
+      groupId,
+      type: InviteTokenType.membership_claim,
+      targetMembershipId: membershipId,
+      revokedAt: null,
+    },
+    data: { revokedAt: new Date() },
+  });
+  return result.count;
+}
+
+router.delete(
+  "/:id/members/:mid/claim-link",
+  loadGroup,
+  requireGroupManager,
+  async (req, res, next) => {
+    try {
+      const membershipId = String(req.params.mid);
+      const revoked = await revokeClaimLinks(req.group!.id, membershipId);
+      if (revoked > 0) {
+        await writeAuditLog({
+          groupId: req.group!.id,
+          actorId: req.user!.id,
+          action: "invite.revoked",
+          entityType: "membership",
+          entityId: membershipId,
+          metadata: { type: "membership_claim", revoked },
+        });
+      }
+      res.status(204).send();
+    } catch (err) {
       next(err);
     }
   },

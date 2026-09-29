@@ -1,5 +1,5 @@
 import { type DragEvent, type FormEvent, useEffect, useMemo, useState } from "react";
-import { Check, ChevronDown, ChevronUp, GripVertical, Link2, Trash2, UserPlus } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Copy, GripVertical, Link2, Link2Off, Trash2, UserPlus } from "lucide-react";
 import { Avatar } from "../components/Avatar";
 import { formatFrequency } from "../lib/frequency";
 import { formatDueDate } from "../lib/dates";
@@ -164,31 +164,77 @@ function TermTile({ label, value }: { label: string; value: string }) {
 
 const memberListClass = "divide-y divide-ink-100 overflow-hidden rounded-3xl border border-ink-200 bg-white";
 
+/** A seat's claim link, inline in its row: tap to copy. Shows the link's tail so it's recognizable. */
+function ClaimLinkPill({ url, name }: { url: string; name: string }) {
+  const [copied, setCopied] = useState(false);
+  const shortUrl = url.replace(/^https?:\/\//, "");
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard unavailable: the full link is still in the tooltip.
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => void handleCopy()}
+      title={url}
+      aria-label={copied ? `Claim link for ${name} copied` : `Copy claim link for ${name}`}
+      className="flex h-8 shrink-0 items-center gap-1.5 rounded-full border-2 sm:min-w-0 sm:max-w-[13rem] sm:shrink border-brand-200 bg-brand-50 px-3 text-xs font-semibold text-brand-800 transition-colors hover:bg-brand-100"
+    >
+      <Link2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+      {/* Phones have no room for a readable URL, so they say what the pill does instead. */}
+      <span className="min-w-0 truncate sm:hidden">{copied ? "Copied" : "Copy link"}</span>
+      <span className="hidden min-w-0 truncate sm:inline">{shortUrl}</span>
+      {copied ? (
+        <Check className="h-3.5 w-3.5 shrink-0" aria-hidden />
+      ) : (
+        <Copy className="h-3.5 w-3.5 shrink-0" aria-hidden />
+      )}
+    </button>
+  );
+}
+
+const iconButton =
+  "flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors disabled:opacity-50";
+
 function MemberTableRow({
   member,
   turn,
+  showTurn,
   managerView,
   claimUrl,
   onClaimInvite,
+  onRevokeClaim,
   onRemoveMember,
   claimPending,
+  revokePending,
   removePending,
 }: {
   member: GroupMember;
   turn: number | null;
+  /** Turn numbers only exist once the payout order is locked; before that the column is hidden. */
+  showTurn: boolean;
   managerView: boolean;
   claimUrl?: string;
   onClaimInvite?: () => void;
+  onRevokeClaim?: () => void;
   onRemoveMember?: () => void;
   claimPending?: boolean;
+  revokePending?: boolean;
   removePending?: boolean;
 }) {
   return (
-    // min-h-16 fits a two-line name, so every row (including open seats) has the same height.
-    <li className="flex min-h-16 flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5">
-      <TurnChip turn={turn} />
+    // One line per row, whatever it holds (claim link included), so every row keeps the same height.
+    <li className="flex min-h-16 items-center gap-3 px-4 py-2.5">
+      {showTurn && <TurnChip turn={turn} />}
       <Avatar name={member.displayName} placeholder={member.isPlaceholder} />
-      <div className="min-w-0 flex-1">
+      <div className="min-w-[3.5rem] flex-1">
         <p className="truncate font-bold text-ink-900">{member.displayName}</p>
         {(member.isManager || member.contact) && (
           <p className="truncate text-xs text-ink-500">
@@ -196,47 +242,56 @@ function MemberTableRow({
           </p>
         )}
       </div>
-      {/* Actions stay on the name's line (Remove shrinks to an icon on phones) so the row keeps the
-          same height as the others. */}
       {managerView && member.isPlaceholder && (
-        <div className="flex shrink-0 items-center gap-1">
-          <button
-            type="button"
-            onClick={onClaimInvite}
-            disabled={claimPending}
-            className={`${ui.btnSecondarySm} inline-flex items-center gap-1.5 max-sm:px-2.5`}
-            aria-label={`Claim link for ${member.displayName}`}
-          >
-            <Link2 className="h-4 w-4 sm:hidden" aria-hidden />
-            <span className="hidden sm:inline">Claim link</span>
-          </button>
+        <div className="flex shrink-0 items-center gap-1 sm:min-w-0 sm:shrink">
+          {claimUrl ? (
+            <>
+              <ClaimLinkPill url={claimUrl} name={member.displayName} />
+              <button
+                type="button"
+                onClick={onRevokeClaim}
+                disabled={revokePending}
+                className={`${iconButton} text-ink-500 hover:bg-ink-100 hover:text-ink-800`}
+                aria-label={`Revoke claim link for ${member.displayName}`}
+                title="Revoke claim link"
+              >
+                <Link2Off className="h-4 w-4" aria-hidden />
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={onClaimInvite}
+              disabled={claimPending}
+              className={`${ui.btnSecondarySm} inline-flex items-center gap-1.5 max-sm:px-2.5`}
+              aria-label={`Create claim link for ${member.displayName}`}
+            >
+              <Link2 className="h-4 w-4 sm:hidden" aria-hidden />
+              <span className="hidden sm:inline">Claim link</span>
+            </button>
+          )}
           {!member.isManager && (
             <button
               type="button"
               onClick={onRemoveMember}
               disabled={removePending}
-              className={`${ui.btnDangerGhost} inline-flex items-center gap-1.5`}
+              className={`${iconButton} text-danger-700 hover:bg-danger-50`}
               aria-label={`Remove ${member.displayName}`}
+              title="Remove"
             >
-              <Trash2 className="h-4 w-4 sm:hidden" aria-hidden />
-              <span className="hidden sm:inline">Remove</span>
+              <Trash2 className="h-4 w-4" aria-hidden />
             </button>
           )}
-        </div>
-      )}
-      {managerView && claimUrl && (
-        <div className="w-full sm:pl-[5.5rem]">
-          <CopyableLink url={claimUrl} label="Claim link" compact />
         </div>
       )}
     </li>
   );
 }
 
-function OpenSlotRow() {
+function OpenSlotRow({ showTurn = false }: { showTurn?: boolean }) {
   return (
     <li className="flex min-h-16 items-center gap-3 px-4 py-3 text-sm font-semibold text-ink-500">
-      <span className="h-8 w-8 shrink-0" aria-hidden />
+      {showTurn && <span className="h-8 w-8 shrink-0" aria-hidden />}
       <span
         aria-hidden
         className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-dashed border-ink-300 text-xs"
@@ -362,6 +417,8 @@ export function FormingManagerPanel({
   onAddMember,
   onRemoveMember,
   onClaimInvite,
+  onRevokeClaim,
+  revokeClaimPending,
   onGroupInvite,
   onReorderMembers,
   onRandomize,
@@ -399,6 +456,8 @@ export function FormingManagerPanel({
   onAddMember: (e: FormEvent) => void;
   onRemoveMember: (memberId: string) => void;
   onClaimInvite: (memberId: string) => void;
+  onRevokeClaim: (memberId: string) => void;
+  revokeClaimPending: boolean;
   onGroupInvite: () => void;
   onReorderMembers: (orderedMemberIds: string[]) => void;
   onRandomize: () => void;
@@ -486,7 +545,6 @@ export function FormingManagerPanel({
             <p className="text-xs font-bold uppercase tracking-wide text-ink-500">Each round&apos;s pot</p>
             <p className="font-heading text-3xl font-bold tabular-nums text-ink-900">{pot}</p>
           </div>
-          <p className="text-sm font-semibold text-ink-600">Finish setup to open Round 1.</p>
         </div>
         <div>
           <SetupChecklist
@@ -517,11 +575,14 @@ export function FormingManagerPanel({
                   key={member.id}
                   member={member}
                   turn={orderDone ? getTurn(member) : null}
+                  showTurn={orderDone}
                   managerView
                   claimUrl={claimUrls[member.id]}
                   onClaimInvite={() => onClaimInvite(member.id)}
+                  onRevokeClaim={() => onRevokeClaim(member.id)}
                   onRemoveMember={() => onRemoveMember(member.id)}
                   claimPending={claimInvitePending}
+                  revokePending={revokeClaimPending}
                   removePending={removeMemberPending}
                 />
               ))}
@@ -631,11 +692,7 @@ export function FormingManagerPanel({
               </p>
             </div>
 
-            {orderLocked ? (
-              <p className={ui.success}>Payout order locked in.</p>
-            ) : (
-              <p className={ui.warning}>Draft — not saved until you lock in.</p>
-            )}
+            {orderLocked && <p className={ui.success}>Payout order locked in.</p>}
 
             <ol className="overflow-hidden rounded-3xl border border-ink-200 bg-white">
               {orderedMembers.map((member, index) => (
@@ -897,6 +954,7 @@ export function FormingMemberPanel({
                   key={member.id}
                   member={member}
                   turn={orderDone ? member.turnNumber : null}
+                  showTurn={orderDone}
                   managerView={false}
                 />
               ))}

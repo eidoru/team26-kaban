@@ -394,6 +394,8 @@ export interface RoundSummary {
 }
 
 export interface GroupDetail {
+  /** Organizers only: each unclaimed seat's active claim link, keyed by membership id. */
+  claimLinks?: Record<string, string>;
   group: GroupSummary;
   members: GroupMember[];
   pending: {
@@ -758,6 +760,9 @@ export const api = {
 
   removeMember: (groupId: string, memberId: string) =>
     request<void>(`/groups/${groupId}/members/${memberId}`, { method: "DELETE" }),
+
+  revokeClaimLink: (groupId: string, membershipId: string) =>
+    request<void>(`/groups/${groupId}/members/${membershipId}/claim-link`, { method: "DELETE" }),
 
   createInvite: (
     groupId: string,

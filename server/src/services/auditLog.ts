@@ -212,6 +212,16 @@ function formatAction(
         details,
       };
     }
+    case "invite.revoked": {
+      const name = memberName(ctx, log.entityId);
+      if (name) details.push(`Seat: ${name}`);
+      return {
+        category: "invite",
+        title: "Claim link revoked",
+        summary: name ? `The claim link for ${name}'s seat was revoked` : "A seat claim link was revoked",
+        details,
+      };
+    }
     case "group.advance_round":
     case "cron.advance_round": {
       const closed = metaNumber(metadata, "closedRound");

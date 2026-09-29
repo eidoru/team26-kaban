@@ -39,6 +39,7 @@ export function GroupLobbyPage() {
   const dialog = useDialog();
   const [inviteUrl, setInviteUrl] = useState<string | null>(null);
   const [claimUrls, setClaimUrls] = useState<Record<string, string>>({});
+  const [revokingClaim, setRevokingClaim] = useState(false);
   const [addName, setAddName] = useState("");
   const [addContact, setAddContact] = useState("");
   const [formError, setFormError] = useState("");
@@ -368,6 +369,8 @@ export function GroupLobbyPage() {
   const isManager = group.role === "manager";
   const isForming = group.status === "forming";
   const isActive = group.status === "active";
+  // Links the server knows about (they survive a reload) plus any created in this session.
+  const allClaimUrls = { ...(data.claimLinks ?? {}), ...claimUrls };
   const displayStartDate =
     startDate || (group.startDate ? String(group.startDate).slice(0, 10) : "");
 
@@ -701,6 +704,32 @@ export function GroupLobbyPage() {
     }
   }
 
+  async function handleRevokeClaim(membershipId: string) {
+    if (!id) return;
+    setFormError("");
+    setRevokingClaim(true);
+    try {
+      await api.revokeClaimLink(id, membershipId);
+      setClaimUrls((prev) => {
+        const next = { ...prev };
+        delete next[membershipId];
+        return next;
+      });
+      // Drop the server-provided link right away rather than waiting for the refetch.
+      queryClient.setQueryData<GroupDetail>(groupQueryKey(id), (current) => {
+        if (!current?.claimLinks?.[membershipId]) return current;
+        const claimLinks = { ...current.claimLinks };
+        delete claimLinks[membershipId];
+        return { ...current, claimLinks };
+      });
+      void queryClient.invalidateQueries({ queryKey: groupQueryKey(id) });
+    } catch (err) {
+      setFormError(err instanceof ApiError ? err.message : "Failed to revoke the claim link");
+    } finally {
+      setRevokingClaim(false);
+    }
+  }
+
   async function handleLeave() {
     setFormError("");
     try {
@@ -968,7 +997,7 @@ export function GroupLobbyPage() {
               addName={addName}
               addContact={addContact}
               inviteUrl={inviteUrl}
-              claimUrls={claimUrls}
+              claimUrls={allClaimUrls}
               addMemberPending={addMember.isPending}
               removeMemberPending={removeMember.isPending}
               claimInvitePending={claimInvite.isPending}
@@ -982,6 +1011,8 @@ export function GroupLobbyPage() {
               onAddMember={handleAddMember}
               onRemoveMember={(memberId) => void handleRemoveMember(memberId)}
               onClaimInvite={(memberId) => void handleClaimInvite(memberId)}
+              onRevokeClaim={(memberId) => void handleRevokeClaim(memberId)}
+              revokeClaimPending={revokingClaim}
               onGroupInvite={() => void handleGroupInvite()}
               onReorderMembers={handleReorderMembers}
               onRandomize={handleRandomizeOrder}
@@ -1066,7 +1097,7 @@ export function GroupLobbyPage() {
             onAdvanceRound={() => void handleAdvanceRound()}
             advanceRoundPending={advanceRound.isPending}
             showDemoTools={showDemoTools}
-            claimUrls={claimUrls}
+            claimUrls={allClaimUrls}
             onClaimInvite={(membershipId) => void handleClaimInvite(membershipId)}
             claimPending={claimInvite.isPending}
             unclaimedSeats={pending.unclaimedSeats}
