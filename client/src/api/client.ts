@@ -75,6 +75,12 @@ export interface GroupSummary {
   currentRoundNumber?: number | null;
   /** Active groups only: the round whose pot goes to the viewer. */
   myPayoutRoundNumber?: number | null;
+  /** Active groups only: the current round's due date (YYYY-MM-DD). */
+  currentRoundDueDate?: string | null;
+  /** Active groups only: the viewer's standing in the current round. */
+  myRoundStatus?: "due" | "reported" | "paid" | null;
+  /** Active groups only: what the viewer still owes this round, when due. */
+  myRoundDue?: string | null;
 }
 
 export interface GroupMember {
@@ -233,7 +239,10 @@ export interface HomeAttentionItem {
     | "forming_slots"
     | "confirm_payments"
     | "payment_due"
-    | "owed_outstanding";
+    | "owed_outstanding"
+    | "you_owe"
+    | "claims_to_review"
+    | "disputes_open";
   title: string;
   body: string;
   link: string;

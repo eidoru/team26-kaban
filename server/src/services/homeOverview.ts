@@ -4,13 +4,17 @@ import { getManagerTotalOutstanding } from "./dashboard.js";
 import { countUnreadNotifications } from "./notifications.js";
 import { startOfUtcDay } from "./schedule.js";
 import { formatDisplayDate } from "../lib/dates.js";
+import { getUserDebts, type GroupDebt } from "./myDebts.js";
 
 export type AttentionKind =
   | "forming_ready"
   | "forming_slots"
   | "confirm_payments"
   | "payment_due"
-  | "owed_outstanding";
+  | "owed_outstanding"
+  | "you_owe"
+  | "claims_to_review"
+  | "disputes_open";
 
 export interface AttentionItem {
   id: string;
@@ -21,7 +25,9 @@ export interface AttentionItem {
   priority: "high" | "normal";
 }
 
-const ATTENTION_CAP = 5;
+const ATTENTION_CAP = 6;
+
+type GroupCount = { groupId: string; groupName: string; count: number };
 
 interface FormingGroupDetail {
   groupId: string;
@@ -129,7 +135,8 @@ async function getMemberDueContributions(userId: string): Promise<DueContributio
 
   const rows = await prisma.contribution.findMany({
     where: {
-      status: { in: [ContributionStatus.pending, ContributionStatus.reported] },
+      // Reported payments are waiting on the organizer, not the member, so they aren't "due".
+      status: ContributionStatus.pending,
       membership: { userId },
       round: {
         status: RoundStatus.current,
@@ -157,12 +164,41 @@ async function getMemberDueContributions(userId: string): Promise<DueContributio
   }));
 }
 
-function buildAttentionItems(params: {
+/** Settlement claims and open disputes waiting on this organizer, counted per group. */
+async function getOrganizerQueue(managerUserId: string): Promise<{ claims: GroupCount[]; disputes: GroupCount[] }> {
+  const [claims, disputes] = await Promise.all([
+    prisma.settlementClaim.findMany({
+      where: { status: "pending", debtorMembership: { group: { managerId: managerUserId } } },
+      select: { debtorMembership: { select: { group: { select: { id: true, name: true } } } } },
+    }),
+    prisma.dispute.findMany({
+      where: { status: "open", contribution: { round: { group: { managerId: managerUserId } } } },
+      select: { contribution: { select: { round: { select: { group: { select: { id: true, name: true } } } } } } },
+    }),
+  ]);
+  const tally = (groups: { id: string; name: string }[]) => {
+    const map = new Map<string, GroupCount>();
+    for (const g of groups) {
+      const entry = map.get(g.id) ?? { groupId: g.id, groupName: g.name, count: 0 };
+      entry.count += 1;
+      map.set(g.id, entry);
+    }
+    return [...map.values()];
+  };
+  return {
+    claims: tally(claims.map((c) => c.debtorMembership.group)),
+    disputes: tally(disputes.map((d) => d.contribution.round.group)),
+  };
+}
+
+export function buildAttentionItems(params: {
   formingDetails: FormingGroupDetail[];
   pendingConfirmations: number;
   confirmGroup: { groupId: string; groupName: string } | null;
   dueContributions: DueContribution[];
   totalOwed: string | null;
+  debts: GroupDebt[];
+  queue: { claims: GroupCount[]; disputes: GroupCount[] };
 }): AttentionItem[] {
   const items: AttentionItem[] = [];
 
@@ -194,7 +230,7 @@ function buildAttentionItems(params: {
       id: "confirm-payments",
       kind: "confirm_payments",
       title: "Payments need confirmation",
-      body: `${params.pendingConfirmations} reported payment${params.pendingConfirmations === 1 ? "" : "s"} await your review${linkGroup ? ` in ${linkGroup.groupName}` : ""}.`,
+      body: `${params.pendingConfirmations} reported payment${params.pendingConfirmations === 1 ? " awaits" : "s await"} your review${linkGroup ? ` in ${linkGroup.groupName}` : ""}.`,
       link: linkGroup ? `/groups/${linkGroup.groupId}` : "/home",
       priority: "high",
     });
@@ -215,13 +251,48 @@ function buildAttentionItems(params: {
     });
   }
 
+  for (const debt of params.debts) {
+    items.push({
+      id: `you-owe-${debt.groupId}`,
+      kind: "you_owe",
+      title: `You owe ₱${Number(debt.remaining).toLocaleString()} in ${debt.groupName}`,
+      body: debt.hasPendingClaim
+        ? "Your payment is waiting for the organizer to confirm."
+        : `From ${debt.obligationCount} missed or partial round${debt.obligationCount === 1 ? "" : "s"}. Settle it when you can.`,
+      link: `/groups/${debt.groupId}?tab=issues`,
+      priority: debt.hasPendingClaim ? "normal" : "high",
+    });
+  }
+
+  for (const claim of params.queue.claims) {
+    items.push({
+      id: `claims-${claim.groupId}`,
+      kind: "claims_to_review",
+      title: `Review ${claim.count} debt payment${claim.count === 1 ? "" : "s"} in ${claim.groupName}`,
+      body: "Members reported paying off what they owe.",
+      link: `/groups/${claim.groupId}?tab=issues`,
+      priority: "high",
+    });
+  }
+
+  for (const dispute of params.queue.disputes) {
+    items.push({
+      id: `disputes-${dispute.groupId}`,
+      kind: "disputes_open",
+      title: `${dispute.count} problem${dispute.count === 1 ? "" : "s"} reported in ${dispute.groupName}`,
+      body: "A member says a payment was recorded wrong.",
+      link: `/groups/${dispute.groupId}?tab=issues`,
+      priority: "high",
+    });
+  }
+
   if (params.totalOwed) {
     items.push({
       id: "owed-outstanding",
       kind: "owed_outstanding",
-      title: "Outstanding shortfall debt",
-      body: `₱${Number(params.totalOwed).toLocaleString()} owed across your managed groups.`,
-      link: "/manager/obligations",
+      title: `Members owe you ₱${Number(params.totalOwed).toLocaleString()}`,
+      body: "Unsettled shortfalls across the groups you organize.",
+      link: "/money",
       priority: "normal",
     });
   }
@@ -258,12 +329,16 @@ export async function getHomeOverview(userId: string) {
     pendingConfirmationsInfo,
     dueContributions,
     formingDetails,
+    debts,
+    queue,
   ] = await Promise.all([
     countUnreadNotifications(userId),
     managesAnyGroup ? getManagerTotalOutstanding(userId) : Promise.resolve("0"),
     getPendingConfirmationsInfo(userId),
     getMemberDueContributions(userId),
     getFormingGroupDetails(memberships),
+    getUserDebts(userId),
+    managesAnyGroup ? getOrganizerQueue(userId) : Promise.resolve({ claims: [], disputes: [] }),
   ]);
 
   const { count: pendingConfirmations, confirmGroup } = pendingConfirmationsInfo;
@@ -283,6 +358,8 @@ export async function getHomeOverview(userId: string) {
     confirmGroup,
     dueContributions,
     totalOwed,
+    debts,
+    queue,
   });
 
   return {

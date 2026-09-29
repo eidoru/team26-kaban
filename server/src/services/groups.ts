@@ -1,4 +1,4 @@
-import { Group, GroupStatus, Membership, Prisma, RoundStatus } from "@prisma/client";
+import { ContributionStatus, Group, GroupStatus, Membership, Prisma, RoundStatus } from "@prisma/client";
 import { createNotification, writeAuditLog } from "../lib/audit.js";
 import { resolveAppOrigin } from "../lib/origin.js";
 import { prisma } from "../lib/prisma.js";
@@ -175,12 +175,25 @@ export async function listUserGroups(userId: string) {
               { recipientMembershipId: { in: activeMemberships.map((m) => m.id) } },
             ],
           },
-          select: { groupId: true, number: true, status: true, recipientMembershipId: true },
+          select: { groupId: true, number: true, status: true, recipientMembershipId: true, dueDate: true },
         });
+  // The viewer's own contribution in each current round, so the card can say "₱1,000 due" or "paid up".
+  const myCurrentContributions =
+    activeMemberships.length === 0
+      ? []
+      : await prisma.contribution.findMany({
+          where: { membershipId: { in: activeMemberships.map((m) => m.id) }, round: { status: RoundStatus.current } },
+          select: { membershipId: true, status: true, amount: true },
+        });
+  const myContributionByMembership = new Map(myCurrentContributions.map((c) => [c.membershipId, c]));
+  const currentDueDateByGroup = new Map<string, string>();
   const currentRoundByGroup = new Map<string, number>();
   const payoutRoundByMembership = new Map<string, number>();
   for (const round of activeRounds) {
-    if (round.status === RoundStatus.current) currentRoundByGroup.set(round.groupId, round.number);
+    if (round.status === RoundStatus.current) {
+      currentRoundByGroup.set(round.groupId, round.number);
+      currentDueDateByGroup.set(round.groupId, round.dueDate.toISOString().slice(0, 10));
+    }
     payoutRoundByMembership.set(round.recipientMembershipId, round.number);
   }
 
@@ -194,10 +207,26 @@ export async function listUserGroups(userId: string) {
       membershipId: m.id,
     };
     if (m.group.status === GroupStatus.active) {
+      const mine = myContributionByMembership.get(m.id);
+      const remaining = mine
+        ? Prisma.Decimal.max(m.group.contributionAmount.minus(mine.amount), new Prisma.Decimal(0))
+        : null;
       return {
         ...base,
         currentRoundNumber: currentRoundByGroup.get(m.groupId) ?? null,
+        currentRoundDueDate: currentDueDateByGroup.get(m.groupId) ?? null,
         myPayoutRoundNumber: payoutRoundByMembership.get(m.id) ?? null,
+        myRoundStatus: !mine
+          ? null
+          : mine.status === ContributionStatus.reported
+            ? ("reported" as const)
+            : mine.status === ContributionStatus.confirmed && remaining!.lte(0)
+              ? ("paid" as const)
+              : ("due" as const),
+        myRoundDue:
+          !mine || mine.status === ContributionStatus.reported
+            ? null
+            : (mine.status === ContributionStatus.confirmed ? remaining! : m.group.contributionAmount).toString(),
       };
     }
     if (m.group.status !== GroupStatus.completed) return base;

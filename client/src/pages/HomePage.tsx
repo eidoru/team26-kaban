@@ -5,11 +5,11 @@ import { api, type GroupSummary, type HomeAttentionItem, type NotificationItem }
 import { useAuth } from "../context/AuthContext";
 import { formatWhen } from "../lib/formatWhen";
 import { formatFrequency } from "../lib/frequency";
+import { formatDueDate } from "../lib/dates";
 import { ArrowRight, BadgeCheck, CircleAlert, Clock, Users, Wallet, type LucideIcon } from "lucide-react";
 import { Avatar } from "../components/Avatar";
 import { KabanChest } from "../components/Illustration";
 import { NotificationIcon } from "../components/NotificationIcon";
-import { StatCard, type StatCardIconName, type StatCardTone } from "../components/StatCard";
 import { patchNotificationRead } from "../lib/homeQueries";
 import { statusBadgeClass, ui } from "../lib/ui";
 
@@ -55,7 +55,18 @@ function groupStatusDetail(group: GroupSummary): string {
     return `${filled}/${group.slotCount} members · ready to start`;
   }
   if (group.status === "active") {
-    return `${group.slotCount} members · cycle in progress`;
+    const round = group.currentRoundNumber ? `Round ${group.currentRoundNumber} of ${group.slotCount}` : "In progress";
+    const you =
+      group.myRoundStatus === "due" && group.myRoundDue
+        ? `₱${Number(group.myRoundDue).toLocaleString()} due${
+            group.currentRoundDueDate ? ` ${formatDueDate(group.currentRoundDueDate)}` : ""
+          }`
+        : group.myRoundStatus === "reported"
+          ? "waiting for confirmation"
+          : group.myRoundStatus === "paid"
+            ? "you're paid up"
+            : null;
+    return [round, you].filter(Boolean).join(" · ");
   }
   const collected = group.totalCollected != null ? Number(group.totalCollected) : null;
   const debt = group.outstandingDebt != null ? Number(group.outstandingDebt) : null;
@@ -153,6 +164,9 @@ const ATTENTION_ICON: Record<HomeAttentionItem["kind"], LucideIcon> = {
   confirm_payments: BadgeCheck,
   payment_due: Clock,
   owed_outstanding: Wallet,
+  you_owe: Wallet,
+  claims_to_review: BadgeCheck,
+  disputes_open: CircleAlert,
 };
 
 function AttentionItem({ item }: { item: HomeAttentionItem }) {
@@ -291,7 +305,8 @@ export function HomePage() {
     });
   }
 
-  const recentActivity = (notificationsData?.notifications ?? []).slice(0, 6);
+  // A glimpse only; the Alerts tab has the full list.
+  const recentActivity = (notificationsData?.notifications ?? []).slice(0, 3);
 
   function handleActivityNavigate(link: string, notificationId: string, isUnread: boolean) {
     if (isUnread) void markRead.mutate(notificationId);
@@ -301,48 +316,14 @@ export function HomePage() {
   const groups = groupsData?.groups ?? [];
   const ongoing = groups.filter((g) => g.status !== "completed");
   const past = groups.filter((g) => g.status === "completed");
-  const stats = overviewData?.stats;
   const firstName = user?.displayName?.split(/\s+/)[0] ?? "there";
-
-  const metrics = [
-    stats && stats.paymentsDue > 0
-      ? { label: "Due now", value: String(stats.paymentsDue), hint: "payments this cycle", icon: "clock", tone: "warning" }
-      : null,
-    stats && stats.pendingConfirmations > 0
-      ? {
-          label: "To confirm",
-          value: String(stats.pendingConfirmations),
-          hint: "awaiting your review",
-          icon: "check",
-          tone: "success",
-        }
-      : null,
-    stats && stats.totalOwed != null && Number(stats.totalOwed) > 0
-      ? {
-          label: "Owed to you",
-          value: `₱${Number(stats.totalOwed).toLocaleString()}`,
-          hint: "outstanding obligations",
-          icon: "wallet",
-          tone: "danger",
-        }
-      : null,
-    stats && stats.unreadNotifications > 0
-      ? { label: "Unread", value: String(stats.unreadNotifications), hint: "notifications", icon: "bell", tone: "neutral" }
-      : null,
-  ].filter(Boolean) as {
-    label: string;
-    value: string;
-    hint: string;
-    icon: StatCardIconName;
-    tone: StatCardTone;
-  }[];
-
+  const attention = overviewData?.attention ?? [];
   const subtitle =
     ongoing.length === 0
       ? "Create a paluwagan or join one with an invite link."
-      : stats && metrics.length > 0
-        ? `${ongoing.length} group${ongoing.length === 1 ? "" : "s"} · ${metrics.length} item${metrics.length === 1 ? "" : "s"} need attention`
-        : `${ongoing.length} ongoing paluwagan${ongoing.length === 1 ? "" : "s"}`;
+      : attention.length > 0
+        ? `${attention.length} thing${attention.length === 1 ? "" : "s"} to do`
+        : "You're all caught up.";
 
   return (
     <div className="space-y-10">
@@ -380,22 +361,11 @@ export function HomePage() {
         </div>
       )}
 
-      {groups.length > 0 && metrics.length > 0 && (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {metrics.map((metric) => (
-            <StatCard key={metric.label} {...metric} />
-          ))}
-        </div>
-      )}
-
-      {!groupsLoading && !groupsError && overviewData && overviewData.attention.length > 0 && (
+      {!groupsLoading && !groupsError && overviewData && attention.length > 0 && (
         <section>
-          <SectionHeader
-            title="Needs action"
-            subtitle={`${overviewData.attention.length} item${overviewData.attention.length === 1 ? "" : "s"}`}
-          />
+          <SectionHeader title="To do" />
           <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            {overviewData.attention.map((item) => (
+            {attention.map((item) => (
               <li key={item.id}>
                 <AttentionItem item={item} />
               </li>
