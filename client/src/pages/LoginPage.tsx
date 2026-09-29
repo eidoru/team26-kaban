@@ -12,6 +12,7 @@ export function LoginPage() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [remember, setRemember] = useState(true);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -20,7 +21,7 @@ export function LoginPage() {
     setError("");
     setSubmitting(true);
     try {
-      await login(email, password);
+      await login(email, password, remember);
       prefetchHomeData();
       const handled = await resolvePendingInvite(navigate);
       if (!handled) navigate("/home");
@@ -82,9 +83,22 @@ export function LoginPage() {
             />
           </div>
 
-          <button type="submit" disabled={submitting} className={ui.btnPrimaryFull}>
-            {submitting ? "Signing in…" : "Sign in"}
-          </button>
+          <div className="space-y-4">
+            {/* Unchecked keeps the session in this tab only (sessionStorage); it ends when the tab closes. */}
+            <label className="flex w-fit cursor-pointer items-center gap-2.5 text-sm text-ink-600">
+              <input
+                type="checkbox"
+                checked={remember}
+                onChange={(e) => setRemember(e.target.checked)}
+                className="size-4 cursor-pointer accent-brand-700"
+              />
+              Remember me
+            </label>
+
+            <button type="submit" disabled={submitting} className={ui.btnPrimaryFull}>
+              {submitting ? "Signing in…" : "Sign in"}
+            </button>
+          </div>
         </form>
       </div>
     </AuthShell>
