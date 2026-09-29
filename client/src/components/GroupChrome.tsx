@@ -2,43 +2,29 @@ import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import { ui } from "../lib/ui";
 
-export type GroupStatus = "forming" | "active" | "completed";
-
-const STATUS_BADGE: Record<GroupStatus, { label: string; className: string }> = {
-  forming: { label: "Forming", className: ui.badgeForming },
-  active: { label: "Active", className: ui.badgeActive },
-  completed: { label: "Completed", className: ui.badgeCompleted },
-};
-
 export type GroupFact = {
   label: string;
   value: string;
 };
 
 /**
- * Page title, status and one line of terms. Round/due details live on the This round tab and setup
+ * Page title and one line of terms. Round/due details live on the This round tab and setup
  * progress in the forming checklist, so the header stays short and never repeats them.
  */
 export function GroupHeader({
   title,
-  status,
   subtitle,
   facts = [],
   factsClassName = "",
 }: {
   title: string;
-  status?: GroupStatus;
   subtitle?: string;
   facts?: GroupFact[];
   factsClassName?: string;
 }) {
-  const badge = status ? STATUS_BADGE[status] : null;
   return (
     <div className="mb-6 border-b border-ink-100 pb-5 sm:mb-8 sm:pb-6">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <h1 className={ui.pageTitle}>{title}</h1>
-        {badge && <span className={badge.className}>{badge.label}</span>}
-      </div>
+      <h1 className={ui.pageTitle}>{title}</h1>
       {subtitle && <p className={ui.pageSubtitle}>{subtitle}</p>}
 
       {facts.length > 0 && (

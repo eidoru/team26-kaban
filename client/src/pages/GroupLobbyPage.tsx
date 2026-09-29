@@ -978,7 +978,7 @@ export function GroupLobbyPage() {
 
   return (
     <div className="min-w-0">
-      <GroupHeader title={group.name} status={group.status} subtitle={headerSubtitle} />
+      <GroupHeader title={group.name} subtitle={headerSubtitle} />
 
       {isForming && (
         <div className="space-y-6">
