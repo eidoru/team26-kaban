@@ -256,7 +256,7 @@ function DisputeCard({
         <Avatar name={dispute.memberDisplayName} />
         <div className="min-w-0">
           <p className="text-sm text-ink-700">
-            <span className="font-bold text-ink-900">{dispute.raisedByName}</span> disputed{" "}
+            <span className="font-bold text-ink-900">{dispute.raisedByName}</span> reported a problem with{" "}
             {selfRaised ? (
               "their"
             ) : (
@@ -454,80 +454,139 @@ function IssuesPanel({
     );
   }
 
+  const debtorCard = (group: ObligationEntry[], own: boolean) => (
+    <DebtorCard
+      key={group[0].debtorMembershipId}
+      obligations={group}
+      isManager={isManager}
+      isOwnDebt={own}
+      actionPending={actionPending}
+      onSettleMemberDebts={onSettleMemberDebts}
+      onCoverObligationExternally={onCoverObligationExternally}
+      onSubmitSettlementClaim={onSubmitSettlementClaim}
+    />
+  );
+  const claimCard = (claim: SettlementClaimEntry) => (
+    <ClaimCard
+      key={claim.id}
+      claim={claim}
+      isManager={isManager}
+      actionPending={actionPending}
+      onReviewSettlementClaim={onReviewSettlementClaim}
+    />
+  );
+  const disputeCard = (dispute: DisputeEntry) => (
+    <DisputeCard
+      key={dispute.id}
+      dispute={dispute}
+      isManager={isManager}
+      actionPending={actionPending}
+      onResolveDispute={onResolveDispute}
+    />
+  );
+
+  const isMine = (membershipId: string) => !isManager && membershipId === viewerMembershipId;
+  const myDebt = debtors.find((group) => isMine(group[0].debtorMembershipId));
+  const otherDebtors = debtors.filter((group) => !isMine(group[0].debtorMembershipId));
+  const myPendingClaims = pendingClaims.filter((c) => isMine(c.debtorMembershipId));
+  const myLatestRejection = reviewedClaims
+    .filter((c) => isMine(c.debtorMembershipId) && c.status === "rejected")
+    .sort((a, b) => (b.reviewedAt ?? "").localeCompare(a.reviewedAt ?? ""))[0];
+  const myDisputes = openDisputes.filter((d) => isMine(d.memberMembershipId));
+
+  const summaryChips = [
+    totalOutstanding > 0 &&
+      `₱${totalOutstanding.toLocaleString()} owed by ${debtors.length} member${debtors.length === 1 ? "" : "s"}`,
+    pendingClaims.length > 0 &&
+      `${pendingClaims.length} settlement claim${pendingClaims.length === 1 ? "" : "s"} to review`,
+    openDisputes.length > 0 && `${openDisputes.length} open dispute${openDisputes.length === 1 ? "" : "s"}`,
+  ].filter(Boolean) as string[];
+
   return (
     <div className="space-y-8">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <StatCard
-          label="Outstanding"
-          value={`₱${totalOutstanding.toLocaleString()}`}
-          hint={`${debtors.length} member${debtors.length === 1 ? "" : "s"} owe`}
-          tone={totalOutstanding > 0 ? "danger" : "neutral"}
-          icon="wallet"
-        />
-        <StatCard
-          label="To review"
-          value={String(pendingClaims.length)}
-          hint="reported payments"
-          tone={pendingClaims.length > 0 ? "warning" : "neutral"}
-          icon="clock"
-        />
-        <StatCard
-          label="Open disputes"
-          value={String(openDisputes.length)}
-          hint={openDisputes.length > 0 ? "need resolving" : "none open"}
-          tone={openDisputes.length > 0 ? "danger" : "neutral"}
-          icon="alert"
-        />
-      </div>
+      {isManager ? (
+        <>
+          {summaryChips.length > 0 && (
+            <p className="flex flex-wrap gap-2" aria-label="Summary">
+              {summaryChips.map((chip) => (
+                <span key={chip} className="rounded-full bg-ink-100 px-3 py-1.5 text-sm font-bold text-ink-800">
+                  {chip}
+                </span>
+              ))}
+            </p>
+          )}
 
-      {(pendingClaims.length > 0 || openDisputes.length > 0) && (
-        <section>
-          <h2 className={`mb-3 ${ui.sectionHeader}`}>{isManager ? "Needs your attention" : "In progress"}</h2>
-          <ul className="space-y-3">
-            {pendingClaims.map((claim) => (
-              <ClaimCard
-                key={claim.id}
-                claim={claim}
-                isManager={isManager}
-                actionPending={actionPending}
-                onReviewSettlementClaim={onReviewSettlementClaim}
-              />
-            ))}
-            {openDisputes.map((dispute) => (
-              <DisputeCard
-                key={dispute.id}
-                dispute={dispute}
-                isManager={isManager}
-                actionPending={actionPending}
-                onResolveDispute={onResolveDispute}
-              />
-            ))}
-          </ul>
-        </section>
-      )}
+          {(pendingClaims.length > 0 || openDisputes.length > 0) && (
+            <section>
+              <h2 className={ui.sectionHeader}>To do</h2>
+              <p className={`mb-3 ${ui.sectionSubtitle}`}>
+                Members reporting debt payments, and payments they say were recorded wrong.
+              </p>
+              <ul className="space-y-3">
+                {pendingClaims.map(claimCard)}
+                {openDisputes.map(disputeCard)}
+              </ul>
+            </section>
+          )}
 
-      {debtors.length > 0 && (
-        <section>
-          <h2 className={ui.sectionHeader}>Who owes</h2>
-          <p className={`mb-3 ${ui.sectionSubtitle}`}>
-            Recorded when a round closes. Balances are owed to the organizer; interest may accrue each period until
-            settled.
-          </p>
-          <ul className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-            {debtors.map((group) => (
-              <DebtorCard
-                key={group[0].debtorMembershipId}
-                obligations={group}
-                isManager={isManager}
-                isOwnDebt={!isManager && group[0].debtorMembershipId === viewerMembershipId}
-                actionPending={actionPending}
-                onSettleMemberDebts={onSettleMemberDebts}
-                onCoverObligationExternally={onCoverObligationExternally}
-                onSubmitSettlementClaim={onSubmitSettlementClaim}
-              />
-            ))}
-          </ul>
-        </section>
+          {debtors.length > 0 && (
+            <section>
+              <h2 className={ui.sectionHeader}>Who owes</h2>
+              <p className={`mb-3 ${ui.sectionSubtitle}`}>
+                Recorded when a round closes and owed to you
+                {debtors.some((g) => g.some((o) => Number(o.accruedInterest) > 0)) ? ", with interest each period" : ""}.
+              </p>
+              <ul className="grid grid-cols-1 gap-3 lg:grid-cols-2">{debtors.map((group) => debtorCard(group, false))}</ul>
+            </section>
+          )}
+        </>
+      ) : (
+        <>
+          <section>
+            <h2 className={`mb-3 ${ui.sectionHeader}`}>Your balance</h2>
+            {myDebt || myPendingClaims.length > 0 ? (
+              <ul className="space-y-3">
+                {myDebt && debtorCard(myDebt, true)}
+                {myPendingClaims.map(claimCard)}
+                {myDebt && myLatestRejection && myPendingClaims.length === 0 && (
+                  <li className="rounded-3xl border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-ink-800">
+                    <p>
+                      Your ₱{Number(myLatestRejection.amount).toLocaleString()} payment claim was not accepted
+                      {myLatestRejection.reviewNote ? ":" : "."}
+                    </p>
+                    {myLatestRejection.reviewNote && (
+                      <p className="mt-1 italic text-ink-600">&ldquo;{myLatestRejection.reviewNote}&rdquo;</p>
+                    )}
+                  </li>
+                )}
+              </ul>
+            ) : (
+              <p className="flex items-center gap-2 rounded-3xl border border-ink-200 bg-white px-4 py-3 text-sm font-bold text-brand-800">
+                <CircleCheck className="h-4 w-4 shrink-0" aria-hidden />
+                You don&apos;t owe anything in this paluwagan.
+              </p>
+            )}
+          </section>
+
+          {myDisputes.length > 0 && (
+            <section>
+              <h2 className={`mb-3 ${ui.sectionHeader}`}>Your reported problems</h2>
+              <ul className="space-y-3">{myDisputes.map(disputeCard)}</ul>
+            </section>
+          )}
+
+          {otherDebtors.length > 0 && (
+            <section>
+              <h2 className={ui.sectionHeader}>Everyone&apos;s balances</h2>
+              <p className={`mb-3 ${ui.sectionSubtitle}`}>
+                What other members still owe the organizer from missed or partial rounds.
+              </p>
+              <ul className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                {otherDebtors.map((group) => debtorCard(group, false))}
+              </ul>
+            </section>
+          )}
+        </>
       )}
 
       {historyCount > 0 && (
@@ -569,7 +628,7 @@ function IssuesPanel({
               {resolvedDisputes.map((dispute) => (
                 <HistoryRow key={dispute.id} icon={<CircleCheck className="h-4 w-4 text-brand-600" aria-hidden />}>
                   <p>
-                    Dispute on <span className="font-bold text-ink-800">{dispute.memberDisplayName}</span>&apos;s
+                    Problem with <span className="font-bold text-ink-800">{dispute.memberDisplayName}</span>&apos;s
                     Round {dispute.roundNumber} payment · resolved
                   </p>
                   {dispute.resolution && <p className="mt-0.5 text-xs text-ink-500">{dispute.resolution}</p>}
@@ -993,7 +1052,7 @@ function ContributionRow({
       <span className="block h-5 w-5 rounded-full border-2 border-dashed border-ink-300" aria-hidden />
     );
 
-  // One primary action per row, by priority; Dispute stays available as a quiet link.
+  // One primary action per row, by priority; "Report a problem" stays available as a quiet link.
   const action = contribution.canConfirm ? (
     <button
       type="button"
@@ -1047,7 +1106,7 @@ function ContributionRow({
                 disabled={actionPending === `dispute-${contribution.id}`}
                 className="font-bold text-ink-600 underline-offset-2 hover:text-danger-700 hover:underline disabled:opacity-50"
               >
-                Dispute
+                Report a problem
               </button>
             </>
           )}

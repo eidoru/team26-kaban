@@ -69,6 +69,7 @@ export async function getGroupDisputes(groupId: string) {
     ...serializeDispute(d),
     raisedByName: d.raisedBy.displayName,
     memberDisplayName: d.contribution.membership.displayName,
+    memberMembershipId: d.contribution.membershipId,
     roundNumber: d.contribution.round.number,
     contributionStatus: d.contribution.status,
     contributionAmount: d.contribution.amount.toString(),

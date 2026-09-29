@@ -580,16 +580,16 @@ export function GroupLobbyPage() {
     }
   }
 
-  async function handleRaiseDispute(contributionId: string, memberName: string) {
+  async function handleRaiseDispute(contributionId: string) {
     setFormError("");
     const note = await dialog.prompt({
-      title: "Raise dispute",
-      description: `Why are you disputing ${memberName}'s payment?`,
-      label: "Reason",
+      title: "Report a problem",
+      description: "Tell the organizer what's wrong with how this payment was recorded.",
+      label: "What's wrong?",
       required: true,
       multiline: true,
       maxLength: LIMITS.disputeReason,
-      submitLabel: "Submit dispute",
+      submitLabel: "Send to organizer",
     });
     if (note == null || !note.trim()) return;
     setActionPending(`dispute-${contributionId}`);
@@ -895,7 +895,8 @@ export function GroupLobbyPage() {
 
   const openDisputeCount = data?.issueCounts?.openDisputes ?? 0;
   const unsettledObligationCount = data?.issueCounts?.unsettledObligations ?? 0;
-  const issuesCount = openDisputeCount + unsettledObligationCount;
+  // Only what this viewer can act on (server-computed); falls back to the group totals for older payloads.
+  const issuesCount = data?.issueCounts?.actionable ?? openDisputeCount + unsettledObligationCount;
 
   const cycleTabs: (SectionNavItem & { id: CycleTab })[] = [
     isActive
@@ -1027,7 +1028,7 @@ export function GroupLobbyPage() {
             onReportPayment={(cid, amount) => void handleReportPayment(cid, amount)}
             onConfirmPayment={(cid) => void handleConfirmPayment(cid)}
             onRecordPayment={(cid, amount) => void handleRecordPayment(cid, amount)}
-            onRaiseDispute={(cid, name) => void handleRaiseDispute(cid, name)}
+            onRaiseDispute={(cid) => void handleRaiseDispute(cid)}
             onSettleMemberDebts={(memberId, name) => void handleSettleMemberDebts(memberId, name)}
             onCoverObligationExternally={(oid, name) => void handleCoverObligationExternally(oid, name)}
             onResolveDispute={(disputeId) => void handleResolveDispute(disputeId)}

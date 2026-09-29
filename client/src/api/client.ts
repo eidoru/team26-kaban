@@ -111,6 +111,8 @@ export interface DisputeEntry {
   createdAt: string;
   raisedByName: string;
   memberDisplayName: string;
+  /** Whose payment the dispute is about. */
+  memberMembershipId: string;
   roundNumber: number;
   contributionStatus: string;
   contributionAmount: string;
@@ -380,6 +382,8 @@ export interface GroupDetail {
   issueCounts?: {
     openDisputes: number;
     unsettledObligations: number;
+    /** Items the viewer can act on: claims and disputes (organizer), own debts and disputes (member). */
+    actionable?: number;
   };
   reliability?: MemberReliability[];
 }

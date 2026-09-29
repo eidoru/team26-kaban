@@ -1,4 +1,4 @@
-import { Group, Membership, ObligationStatus } from "@prisma/client";
+import { Group, Membership, ObligationStatus, SettlementClaimStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { isPastStartDate } from "../lib/validation.js";
 import { serializeContributionForViewer } from "./contributions.js";
@@ -8,6 +8,32 @@ import { serializeRound } from "./schedule.js";
 
 /** Build the group detail payload returned by GET /groups/:id. */
 /** The full group page payload for one viewer. Every route returning a group detail should use this. */
+/**
+ * Issues the viewer can act on, for the tab badge. Organizers: settlement claims to review and open
+ * disputes. Members: their own unsettled debts and open disputes about their payments.
+ */
+async function countActionableIssues(groupId: string, membership: Membership): Promise<number> {
+  if (membership.isManager) {
+    const [claims, disputes] = await Promise.all([
+      prisma.settlementClaim.count({
+        where: { status: SettlementClaimStatus.pending, debtorMembership: { groupId } },
+      }),
+      prisma.dispute.count({ where: { status: "open", contribution: { round: { groupId } } } }),
+    ]);
+    return claims + disputes;
+  }
+  const [debts, disputes] = await Promise.all([
+    prisma.obligation.count({
+      where: {
+        debtorMembershipId: membership.id,
+        status: { in: [ObligationStatus.unsettled, ObligationStatus.partially_settled] },
+      },
+    }),
+    prisma.dispute.count({ where: { status: "open", contribution: { membershipId: membership.id } } }),
+  ]);
+  return debts + disputes;
+}
+
 export async function loadGroupDetailPayload(
   group: Group,
   membership: Membership,
@@ -15,7 +41,8 @@ export async function loadGroupDetailPayload(
 ) {
   const isManager = membership.isManager;
 
-  const [members, rounds, openDisputeCount, unsettledObligationCount] = await Promise.all([
+  const started = group.status !== "forming";
+  const [members, rounds, openDisputeCount, unsettledObligationCount, actionableCount] = await Promise.all([
     prisma.membership.findMany({
       where: { groupId: group.id },
       orderBy: [{ turnNumber: "asc" }, { createdAt: "asc" }],
@@ -42,6 +69,7 @@ export async function loadGroupDetailPayload(
             status: { in: [ObligationStatus.unsettled, ObligationStatus.partially_settled] },
           },
         }),
+    started ? countActionableIssues(group.id, membership) : Promise.resolve(0),
   ]);
 
   const filledCount = members.length;
@@ -125,6 +153,7 @@ export async function loadGroupDetailPayload(
     issueCounts: {
       openDisputes: openDisputeCount,
       unsettledObligations: unsettledObligationCount,
+      actionable: actionableCount,
     },
   };
 }
