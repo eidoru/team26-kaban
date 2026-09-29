@@ -1,5 +1,5 @@
 import { type DragEvent, type FormEvent, useEffect, useMemo, useState } from "react";
-import { Check, ChevronDown, ChevronUp, Copy, GripVertical, Link2, Link2Off, Trash2, UserPlus } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Copy, GripVertical, Link2, Link2Off, Send, Trash2, UserPlus } from "lucide-react";
 import { Avatar } from "../components/Avatar";
 import { formatFrequency } from "../lib/frequency";
 import { formatDueDate } from "../lib/dates";
@@ -263,11 +263,12 @@ function MemberTableRow({
               type="button"
               onClick={onClaimInvite}
               disabled={claimPending}
-              className={`${ui.btnSecondarySm} inline-flex items-center gap-1.5 max-sm:px-2.5`}
+              className={`${ui.btnSecondarySm} inline-flex items-center gap-1.5 max-sm:px-3`}
               aria-label={`Create claim link for ${member.displayName}`}
+              title={`Get a link ${member.displayName} can use to take this seat`}
             >
-              <Link2 className="h-4 w-4 sm:hidden" aria-hidden />
-              <span className="hidden sm:inline">Claim link</span>
+              <Send className="h-3.5 w-3.5" aria-hidden />
+              Claim
             </button>
           )}
           {!member.isManager && (
