@@ -2,6 +2,7 @@ import { Coins } from "lucide-react";
 import type { MemberRoundStatus, MemberSummary } from "../api/client";
 import { formatDueDate, formatLocalDate } from "../lib/dates";
 import { ui } from "../lib/ui";
+import { MetricTile } from "./MetricTile";
 
 const peso = (value: string | number) => `₱${Number(value).toLocaleString()}`;
 
@@ -70,25 +71,6 @@ function payoutTile(payout: MemberSummary["payout"]) {
   };
 }
 
-type TileTone = "neutral" | "success" | "warning" | "danger";
-
-const TILE_VALUE: Record<TileTone, string> = {
-  neutral: "text-ink-900",
-  success: "text-brand-700",
-  warning: "text-ink-900",
-  danger: "text-danger-700",
-};
-
-/** Compact metric so the card doesn't push the round hero off a phone screen. */
-function Tile({ label, value, hint, tone }: { label: string; value: string; hint: string; tone: TileTone }) {
-  return (
-    <div className="rounded-2xl bg-ink-50 px-4 py-3">
-      <p className="text-xs font-bold uppercase tracking-wide text-ink-500">{label}</p>
-      <p className={`font-heading mt-0.5 text-xl font-bold tabular-nums ${TILE_VALUE[tone]}`}>{value}</p>
-      <p className="mt-0.5 text-xs text-ink-600">{hint}</p>
-    </div>
-  );
-}
 
 /** The viewer's own standing in a started paluwagan: payout turn, payments, debt and round record. */
 export function MemberStandingCard({
@@ -123,8 +105,8 @@ export function MemberStandingCard({
       {/* Four answers only: when do I get paid, how much have I put in, what do I owe (or am owed),
           and am I paying on time. The current round's status lives on the This round tab. */}
       <div className="mt-4 grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
-        <Tile label="Your payout" value={payoutInfo.value} hint={payoutInfo.hint} tone={payoutInfo.tone} />
-        <Tile
+        <MetricTile label="Your payout" value={payoutInfo.value} hint={payoutInfo.hint} tone={payoutInfo.tone} />
+        <MetricTile
           label={isCompleted ? "You paid in" : "Paid so far"}
           value={peso(paid)}
           hint={
@@ -139,7 +121,7 @@ export function MemberStandingCard({
           tone={paid >= expected ? "success" : "warning"}
         />
         {receivable ? (
-          <Tile
+          <MetricTile
             label="Owed to you"
             value={peso(receivable.remaining)}
             hint={
@@ -152,7 +134,7 @@ export function MemberStandingCard({
             tone={receivable.obligationCount > 0 ? "warning" : "success"}
           />
         ) : (
-          <Tile
+          <MetricTile
             label="You owe"
             value={peso(owed)}
             hint={
@@ -165,7 +147,7 @@ export function MemberStandingCard({
             tone={owed > 0 ? "danger" : "success"}
           />
         )}
-        <Tile
+        <MetricTile
           label="On time"
           value={payments.paymentsMade > 0 ? `${payments.paymentsOnTime} of ${payments.paymentsMade}` : "—"}
           hint={payments.paymentsMade > 0 ? "payments made by the due date" : "No payments yet"}

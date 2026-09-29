@@ -905,7 +905,10 @@ export function GroupLobbyPage() {
     { id: "you", label: "You", icon: UserRound },
     { id: "schedule", label: "Schedule", shortLabel: "Dates", icon: CalendarDays },
     { id: "ledger", label: "Ledger", icon: BookOpen },
-    { id: "issues", label: "Issues", badge: issuesCount, icon: TriangleAlert },
+    // A finished group with nothing left owed or disputed has no use for the Issues tab.
+    ...(isCompleted && openDisputeCount + unsettledObligationCount === 0
+      ? []
+      : [{ id: "issues" as const, label: "Issues", badge: issuesCount, icon: TriangleAlert }]),
     ...(isManager ? [{ id: "audit" as const, label: "Audit log", shortLabel: "Audit", icon: ScrollText }] : []),
   ];
 

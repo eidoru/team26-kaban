@@ -17,14 +17,20 @@ import { formatDayHeading, formatDueDate, formatLocalDate, parseDateOnly } from 
 import { Avatar } from "../components/Avatar";
 import { statusBadgeClass, ui } from "../lib/ui";
 import { CopyableLink } from "../components/CopyableLink";
-import { StatCard } from "../components/StatCard";
 import { Celebration } from "../components/Celebration";
 import { CycleNetChart } from "../components/CycleNetChart";
 import { MemberStandingCard } from "../components/MemberStandingCard";
+import { MetricTile } from "../components/MetricTile";
 
 export type CycleTab = "overview" | "you" | "schedule" | "ledger" | "issues" | "audit";
 
-function CompletionSummaryPanel({ summary }: { summary: CompletionSummary }) {
+function CompletionSummaryPanel({
+  summary,
+  onOpenIssues,
+}: {
+  summary: CompletionSummary;
+  onOpenIssues?: () => void;
+}) {
   const amount = Number(summary.contributionAmount);
   const collected = Number(summary.totalCollected);
   const expected = Number(summary.totalExpected);
@@ -33,6 +39,7 @@ function CompletionSummaryPanel({ summary }: { summary: CompletionSummary }) {
   const startLabel = summary.startDate ? formatDueDate(summary.startDate) : null;
   const endLabel = summary.completedAt ? formatLocalDate(summary.completedAt) : null;
   const freq = formatFrequency(summary.frequency, summary.frequencyDays);
+  const disputesRaised = summary.openDisputes + summary.resolvedDisputes > 0;
 
   return (
     <div className="space-y-6">
@@ -51,51 +58,34 @@ function CompletionSummaryPanel({ summary }: { summary: CompletionSummary }) {
         )}
       </Celebration>
 
-      <div className={ui.metricGrid}>
-        <StatCard
-          label="Total collected"
-          value={`₱${collected.toLocaleString()}`}
-          hint={
-            expected > 0
-              ? `${summary.collectionRate}% of ₱${expected.toLocaleString()} expected`
-              : undefined
-          }
-          tone="success"
-          icon="wallet"
-        />
-        <StatCard
-          label="Collection rate"
-          value={`${summary.collectionRate}%`}
-          hint={`${summary.confirmedContributions} of ${summary.totalContributions} contributions confirmed`}
-          tone={summary.collectionRate >= 100 ? "success" : "warning"}
-          icon="check"
-        />
-        <StatCard
-          label="Outstanding debt"
-          value={`₱${outstanding.toLocaleString()}`}
-          hint={
-            summary.unsettledObligations > 0
-              ? `${summary.unsettledObligations} unsettled obligation${summary.unsettledObligations === 1 ? "" : "s"}`
-              : outstanding > 0
-                ? "Includes accrued interest where applicable"
-                : "All shortfalls settled"
-          }
-          tone={outstanding > 0 ? "danger" : "neutral"}
-          icon="wallet"
-        />
-        <StatCard
-          label="Disputes"
-          value={`${summary.resolvedDisputes} resolved`}
-          hint={
-            summary.openDisputes > 0
-              ? `${summary.openDisputes} still open`
-              : summary.resolvedDisputes > 0
-                ? "All disputes closed"
-                : "None raised"
-          }
-          tone={summary.openDisputes > 0 ? "warning" : "neutral"}
-          icon="alert"
-        />
+      <div>
+        <div className={`grid grid-cols-2 gap-2 sm:gap-3 ${disputesRaised ? "sm:grid-cols-3" : ""}`}>
+          <MetricTile
+            label="Collected"
+            value={`₱${collected.toLocaleString()}`}
+            hint={expected > 0 ? `${summary.collectionRate}% of ₱${expected.toLocaleString()} expected` : undefined}
+            tone={summary.collectionRate >= 100 ? "success" : "neutral"}
+          />
+          <MetricTile
+            label="Still owed"
+            value={`₱${outstanding.toLocaleString()}`}
+            hint={outstanding > 0 ? "to the organizer, interest included" : "Everyone settled up"}
+            tone={outstanding > 0 ? "danger" : "success"}
+          />
+          {disputesRaised && (
+            <MetricTile
+              label="Problems reported"
+              value={`${summary.resolvedDisputes + summary.openDisputes}`}
+              hint={summary.openDisputes > 0 ? `${summary.openDisputes} still open` : "All resolved"}
+              tone={summary.openDisputes > 0 ? "warning" : "neutral"}
+            />
+          )}
+        </div>
+        {outstanding > 0 && onOpenIssues && (
+          <button type="button" onClick={onOpenIssues} className={`mt-3 ${ui.link}`}>
+            See who still owes in Issues
+          </button>
+        )}
       </div>
 
       <div>
@@ -126,13 +116,6 @@ function CompletionSummaryPanel({ summary }: { summary: CompletionSummary }) {
           </ol>
         </section>
       </div>
-
-      {outstanding > 0 && (
-        <p className="rounded-2xl border border-danger-200 bg-danger-50 px-4 py-3 text-sm font-semibold text-danger-800">
-          ₱{outstanding.toLocaleString()} remains owed to the organizer. Check the Issues tab for unsettled
-          obligations and settlement options.
-        </p>
-      )}
     </div>
   );
 }
@@ -1758,7 +1741,7 @@ export function GroupCycleTabPanels(props: GroupCycleTabsProps) {
             <p className={`mt-2 text-sm ${ui.muted}`}>Refresh the page to try again.</p>
           </div>
         )}
-        {isCompleted && completionSummary && <CompletionSummaryPanel summary={completionSummary} />}
+        {isCompleted && completionSummary && <CompletionSummaryPanel summary={completionSummary} onOpenIssues={onOpenIssues} />}
 
         {currentRound ? (
           <>
