@@ -62,7 +62,7 @@ function lastPayoutDate(startDate: string, frequency: GroupFrequencyValue, custo
 
 function SummaryRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-baseline justify-between gap-4 border-b border-ink-100 py-3 last:border-0">
+    <div className="flex items-baseline justify-between gap-4 border-b border-ink-100 py-2.5 last:border-0">
       <dt className="text-sm text-ink-500">{label}</dt>
       <dd className="text-right text-sm font-bold text-ink-900">{value}</dd>
     </div>
@@ -113,7 +113,7 @@ function RosterDots({ totalSlots }: { totalSlots: number }) {
       {Array.from({ length: dotCount }, (_, i) => (
         <span
           key={i}
-          className={`h-3.5 w-3.5 rounded-full ${i === 0 ? "bg-sun-300" : "bg-white/25"}`}
+          className={`h-3 w-3 rounded-full ${i === 0 ? "bg-sun-300" : "bg-white/25"}`}
         />
       ))}
     </div>
@@ -348,32 +348,32 @@ export function CreateGroupPage() {
       <div className="flex flex-col gap-6 lg:flex-row lg:gap-10">
         {/* Live preview: the group as members will see it. Desktop only — phones get the facts under
             the title and the pot in the sticky submit bar. */}
-        <aside className="hidden space-y-4 lg:order-last lg:block lg:w-[25rem] lg:shrink-0 lg:self-start lg:sticky lg:top-24">
+        <aside className="hidden space-y-4 lg:order-last lg:block lg:w-72 lg:shrink-0 lg:self-start lg:sticky lg:top-24">
           <div className="overflow-hidden rounded-3xl border border-ink-200 bg-white shadow-card">
-            <div className="bg-gradient-to-br from-brand-700 to-brand-800 px-7 py-7 text-white">
+            <div className="bg-gradient-to-br from-brand-700 to-brand-800 px-6 py-6 text-white">
               <p className="text-xs font-bold uppercase tracking-wide text-brand-100">Preview</p>
-              <p className="font-heading mt-1 truncate text-2xl font-bold">{name.trim() || "New paluwagan"}</p>
-              <p className="mt-6 text-xs font-bold uppercase tracking-wide text-brand-100">Each round&apos;s pot</p>
-              <p className="font-heading mt-1 text-5xl font-bold tracking-tight tabular-nums">{summary.total}</p>
-              <p className="mt-2 text-base text-brand-50">
+              <p className="font-heading mt-1 truncate text-lg font-bold">{name.trim() || "New paluwagan"}</p>
+              <p className="mt-4 text-xs font-bold uppercase tracking-wide text-brand-100">Each round&apos;s pot</p>
+              <p className="font-heading mt-1 text-3xl font-bold tracking-tight tabular-nums">{summary.total}</p>
+              <p className="mt-1 text-sm text-brand-50">
                 <span className="font-bold text-white">{summary.contribution}</span> per member,{" "}
                 {summary.frequency.toLowerCase()}
               </p>
-              <div className="mt-6">
+              <div className="mt-5">
                 <RosterDots totalSlots={slots} />
-                <p className="mt-2 text-sm font-semibold text-brand-100">
+                <p className="mt-2 text-xs font-semibold text-brand-100">
                   {slotsValid ? `${slotsValue} members · your seat is the first` : "Set 2–30 members"}
                 </p>
               </div>
             </div>
-            <dl className="px-7 py-3">
+            <dl className="px-6 py-2">
               <SummaryRow label="Rounds" value={slotsValid ? `${slotsValue} (one payout each)` : "—"} />
               <SummaryRow label="First round due" value={summary.startDate} />
               <SummaryRow label="Last payout" value={summary.lastPayout} />
               <SummaryRow label="Shortfall interest" value={summary.shortfallInterest} />
             </dl>
           </div>
-          <p className="px-1 text-sm text-ink-500">
+          <p className="text-sm text-ink-500">
             Next: fill the roster, set the payout order, then launch to open Round 1.
           </p>
         </aside>
