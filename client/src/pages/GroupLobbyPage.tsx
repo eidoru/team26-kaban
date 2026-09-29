@@ -14,7 +14,6 @@ import {
 import { ApiError, api, type GroupDetail, type GroupMember } from "../api/client";
 import { useDialog } from "../context/DialogContext";
 import { formatFrequency } from "../lib/frequency";
-import { dueHint, formatDueDate } from "../lib/dates";
 import { useDemoToolsSetting } from "../lib/devTools";
 import { clearGroupQueries, deferContributionSideEffects, deferStructureSideEffects, groupQueryKey, groupSupplementalQueryOptions, invalidateGroupIssues, invalidateGroupShell, isGroupNotFoundError, mergeCurrentRoundIntoGroupCache, OPTIMISTIC_MEMBER_ID, patchConfirmedContribution, patchGroupCurrentRoundContribution, patchMemberAdded, patchMemberRemoved, patchPayoutOrder, patchRecordedContribution, patchReportedContribution, patchStartDate, refreshGroupView, shuffleMemberTurnOrder, shouldRetryGroupQuery } from "../lib/groupQueries";
 import { isSupabaseRealtimeConfigured } from "../lib/supabaseClient";
@@ -26,8 +25,6 @@ import {
   GroupHeader,
   GroupPageSkeleton,
   GroupSectionLayout,
-  type GroupFact,
-  type GroupPhase,
   type SectionNavItem,
 } from "../components/GroupChrome";
 import { FormingManagerPanel, FormingMemberPanel, formatGroupDate } from "./FormingPhase";
@@ -911,35 +908,21 @@ export function GroupLobbyPage() {
     ...(isManager ? [{ id: "audit" as const, label: "Audit log", shortLabel: "Audit", icon: ScrollText }] : []),
   ];
 
-  const phase: GroupPhase = isForming ? "forming" : isActive ? "active" : "completed";
-  const headerFacts: GroupFact[] = [
-    {
-      label: "Contribution",
-      value: `₱${Number(group.contributionAmount).toLocaleString()} ${formatFrequency(
-        group.frequency,
-        group.frequencyDays,
-      ).toLowerCase()}`,
-    },
-    { label: "Roster", value: `${group.filledCount ?? members.length} / ${group.slotCount}` },
-  ];
-  if (isActive && currentRound) {
-    const hint = dueHint(currentRound.dueDate);
-    headerFacts.push(
-      { label: "Round", value: `${currentRound.number} of ${schedule.length || group.slotCount}` },
-      {
-        label: "Next due",
-        value: formatDueDate(currentRound.dueDate),
-        hint: hint?.label,
-        hintTone: hint?.overdue ? "danger" : "muted",
-      },
-    );
-  } else if (isForming && displayStartDate) {
-    headerFacts.push({ label: "Starts", value: formatGroupDate(displayStartDate) });
-  }
+  const memberCount = group.slotCount;
+  const headerSubtitle = [
+    `₱${Number(group.contributionAmount).toLocaleString()} ${formatFrequency(
+      group.frequency,
+      group.frequencyDays,
+    ).toLowerCase()}`,
+    `${memberCount} members`,
+    isForming && displayStartDate ? `starts ${formatGroupDate(displayStartDate)}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <div className="min-w-0">
-      <GroupHeader title={group.name} phase={phase} facts={headerFacts} />
+      <GroupHeader title={group.name} status={group.status} subtitle={headerSubtitle} />
 
       {isForming && (
         <div className="space-y-6">

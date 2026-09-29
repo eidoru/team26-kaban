@@ -278,7 +278,13 @@ export function CreateGroupPage() {
 
   return (
     <div className="min-w-0">
-      <GroupHeader title="Create paluwagan" phase="create" facts={headerFacts} />
+      {/* The live summary sits in the sidebar on large screens; phones get it under the title instead. */}
+      <GroupHeader
+        title="Create paluwagan"
+        subtitle="Set the terms. You'll invite members and pick the payout order next."
+        facts={headerFacts}
+        factsClassName="lg:hidden"
+      />
 
       <div className="flex flex-col gap-6 lg:flex-row lg:gap-10">
         <aside className="hidden space-y-4 lg:order-last lg:block lg:w-72 lg:shrink-0 lg:self-start lg:sticky lg:top-24">

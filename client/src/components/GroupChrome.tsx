@@ -1,159 +1,56 @@
 import type { ReactNode } from "react";
-import { Check, type LucideIcon } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { ui } from "../lib/ui";
 
-export type GroupPhase = "create" | "forming" | "active" | "completed";
+export type GroupStatus = "forming" | "active" | "completed";
 
-const PHASES: { id: GroupPhase; label: string }[] = [
-  { id: "create", label: "Create" },
-  { id: "forming", label: "Forming" },
-  { id: "active", label: "Active" },
-  { id: "completed", label: "Completed" },
-];
-
-type StepState = "done" | "current" | "upcoming";
-
-function stepState(index: number, currentIndex: number): StepState {
-  return index < currentIndex ? "done" : index === currentIndex ? "current" : "upcoming";
-}
-
-/** Phone: a compact stepper that always fits the width. Wider screens: labelled pills. */
-export function GroupPhaseRail({ phase }: { phase: GroupPhase }) {
-  const currentIndex = PHASES.findIndex((p) => p.id === phase);
-  const current = PHASES[currentIndex];
-
-  return (
-    <nav aria-label="Paluwagan lifecycle">
-      <div className="sm:hidden">
-        <ol className="flex items-center">
-          {PHASES.map((step, index) => {
-            const state = stepState(index, currentIndex);
-            const isLast = index === PHASES.length - 1;
-            return (
-              <li
-                key={step.id}
-                className={`flex items-center ${isLast ? "" : "flex-1"}`}
-                aria-current={state === "current" ? "step" : undefined}
-              >
-                <span
-                  className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-                    state === "done"
-                      ? "bg-brand-700 text-white"
-                      : state === "current"
-                        ? "bg-brand-700 text-white ring-4 ring-brand-100"
-                        : "border-2 border-ink-200 bg-white text-ink-500"
-                  }`}
-                >
-                  {state === "done" ? <Check className="h-3.5 w-3.5" strokeWidth={3.5} aria-hidden /> : index + 1}
-                  <span className="sr-only">
-                    {step.label}
-                    {state === "done" ? " (done)" : ""}
-                  </span>
-                </span>
-                {!isLast && (
-                  <span
-                    aria-hidden
-                    className={`mx-1.5 h-0.5 flex-1 rounded-full ${index < currentIndex ? "bg-brand-300" : "bg-ink-200"}`}
-                  />
-                )}
-              </li>
-            );
-          })}
-        </ol>
-        <p className="mt-2 text-xs font-semibold text-ink-500" aria-hidden>
-          Step {currentIndex + 1} of {PHASES.length} · <span className="font-bold text-ink-900">{current?.label}</span>
-        </p>
-      </div>
-
-      <ol className="hidden items-center gap-1.5 sm:flex">
-        {PHASES.map((step, index) => {
-          const state = stepState(index, currentIndex);
-          return (
-            <li key={step.id} className="flex items-center gap-1.5" aria-current={state === "current" ? "step" : undefined}>
-              <span
-                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ${
-                  state === "current"
-                    ? "bg-brand-700 text-white"
-                    : state === "done"
-                      ? "bg-brand-100 text-brand-800"
-                      : "bg-ink-100 text-ink-500"
-                }`}
-              >
-                <span
-                  className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] ${
-                    state === "current"
-                      ? "bg-white text-brand-700"
-                      : state === "done"
-                        ? "bg-brand-700 text-white"
-                        : "border border-ink-300 bg-white text-ink-500"
-                  }`}
-                >
-                  {state === "done" ? <Check className="h-3 w-3" strokeWidth={3.5} aria-hidden /> : index + 1}
-                </span>
-                {step.label}
-              </span>
-              {index < PHASES.length - 1 && (
-                <span
-                  className={`h-0.5 w-4 rounded-full ${index < currentIndex ? "bg-brand-300" : "bg-ink-200"}`}
-                  aria-hidden
-                />
-              )}
-            </li>
-          );
-        })}
-      </ol>
-    </nav>
-  );
-}
+const STATUS_BADGE: Record<GroupStatus, { label: string; className: string }> = {
+  forming: { label: "Forming", className: ui.badgeForming },
+  active: { label: "Active", className: ui.badgeActive },
+  completed: { label: "Completed", className: ui.badgeCompleted },
+};
 
 export type GroupFact = {
   label: string;
   value: string;
-  /** Short qualifier shown after the value, e.g. "in 3 days". */
-  hint?: string;
-  hintTone?: "muted" | "danger";
 };
 
+/**
+ * Page title, status and one line of terms. Round/due details live on the This round tab and setup
+ * progress in the forming checklist, so the header stays short and never repeats them.
+ */
 export function GroupHeader({
   title,
-  phase,
-  facts,
+  status,
+  subtitle,
+  facts = [],
+  factsClassName = "",
 }: {
   title: string;
-  phase: GroupPhase;
-  facts: GroupFact[];
+  status?: GroupStatus;
+  subtitle?: string;
+  facts?: GroupFact[];
+  factsClassName?: string;
 }) {
+  const badge = status ? STATUS_BADGE[status] : null;
   return (
-    <div className="mb-8">
-      <div className="border-b border-ink-100 pb-6">
-        {/* The phase rail below already shows the current stage, so no separate status pill here. */}
+    <div className="mb-6 border-b border-ink-100 pb-5 sm:mb-8 sm:pb-6">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <h1 className={ui.pageTitle}>{title}</h1>
-        <div className="mt-4">
-          <GroupPhaseRail phase={phase} />
-        </div>
-
-        {facts.length > 0 && (
-          <dl className={ui.factStrip}>
-            {facts.map((fact) => (
-              <div key={fact.label}>
-                <dt className="text-xs font-bold uppercase tracking-wide text-ink-500">{fact.label}</dt>
-                <dd className="mt-0.5 text-sm font-bold text-ink-900 tabular-nums">
-                  {fact.value}
-                  {fact.hint && (
-                    <span
-                      className={`ml-1.5 text-xs font-semibold ${
-                        fact.hintTone === "danger" ? "text-danger-700" : "text-ink-500"
-                      }`}
-                    >
-                      {fact.hint}
-                    </span>
-                  )}
-                </dd>
-              </div>
-            ))}
-          </dl>
-        )}
+        {badge && <span className={badge.className}>{badge.label}</span>}
       </div>
+      {subtitle && <p className={ui.pageSubtitle}>{subtitle}</p>}
+
+      {facts.length > 0 && (
+        <dl className={`${ui.factStrip} ${factsClassName}`}>
+          {facts.map((fact) => (
+            <div key={fact.label}>
+              <dt className="text-xs font-bold uppercase tracking-wide text-ink-500">{fact.label}</dt>
+              <dd className="mt-0.5 text-sm font-bold tabular-nums text-ink-900">{fact.value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
     </div>
   );
 }
