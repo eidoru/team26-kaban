@@ -1,5 +1,5 @@
 import { type DragEvent, type FormEvent, useEffect, useMemo, useState } from "react";
-import { Check, ChevronDown, ChevronUp, GripVertical, Link2, UserPlus } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, GripVertical, Link2, Trash2, UserPlus } from "lucide-react";
 import { Avatar } from "../components/Avatar";
 import { formatFrequency } from "../lib/frequency";
 import { formatDueDate } from "../lib/dates";
@@ -184,7 +184,8 @@ function MemberTableRow({
   removePending?: boolean;
 }) {
   return (
-    <li className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3">
+    // min-h-16 fits a two-line name, so every row (including open seats) has the same height.
+    <li className="flex min-h-16 flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5">
       <TurnChip turn={turn} />
       <Avatar name={member.displayName} placeholder={member.isPlaceholder} />
       <div className="min-w-0 flex-1">
@@ -195,15 +196,30 @@ function MemberTableRow({
           </p>
         )}
       </div>
-      {/* Phones: actions drop to their own line under the name (indent = turn chip + avatar + gaps). */}
+      {/* Actions stay on the name's line (Remove shrinks to an icon on phones) so the row keeps the
+          same height as the others. */}
       {managerView && member.isPlaceholder && (
-        <div className="flex w-full flex-wrap gap-1 pl-[5.5rem] sm:w-auto sm:shrink-0 sm:justify-end sm:pl-0">
-          <button type="button" onClick={onClaimInvite} disabled={claimPending} className={ui.btnSecondarySm}>
-            Claim link
+        <div className="flex shrink-0 items-center gap-1">
+          <button
+            type="button"
+            onClick={onClaimInvite}
+            disabled={claimPending}
+            className={`${ui.btnSecondarySm} inline-flex items-center gap-1.5 max-sm:px-2.5`}
+            aria-label={`Claim link for ${member.displayName}`}
+          >
+            <Link2 className="h-4 w-4 sm:hidden" aria-hidden />
+            <span className="hidden sm:inline">Claim link</span>
           </button>
           {!member.isManager && (
-            <button type="button" onClick={onRemoveMember} disabled={removePending} className={ui.btnDangerGhost}>
-              Remove
+            <button
+              type="button"
+              onClick={onRemoveMember}
+              disabled={removePending}
+              className={`${ui.btnDangerGhost} inline-flex items-center gap-1.5`}
+              aria-label={`Remove ${member.displayName}`}
+            >
+              <Trash2 className="h-4 w-4 sm:hidden" aria-hidden />
+              <span className="hidden sm:inline">Remove</span>
             </button>
           )}
         </div>
@@ -219,7 +235,7 @@ function MemberTableRow({
 
 function OpenSlotRow() {
   return (
-    <li className="flex items-center gap-3 px-4 py-3 text-sm font-semibold text-ink-500">
+    <li className="flex min-h-16 items-center gap-3 px-4 py-3 text-sm font-semibold text-ink-500">
       <span className="h-8 w-8 shrink-0" aria-hidden />
       <span
         aria-hidden
