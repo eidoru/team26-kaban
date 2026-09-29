@@ -185,9 +185,9 @@ function ClaimLinkPill({ url, name }: { url: string; name: string }) {
       onClick={() => void handleCopy()}
       title={url}
       aria-label={copied ? `Claim link for ${name} copied` : `Copy claim link for ${name}`}
-      className="flex h-8 shrink-0 items-center gap-1.5 rounded-full border-2 sm:min-w-0 sm:max-w-[13rem] sm:shrink border-brand-200 bg-brand-50 px-3 text-xs font-semibold text-brand-800 transition-colors hover:bg-brand-100"
+      className="flex h-8 shrink-0 items-center gap-1.5 rounded-full border-2 border-brand-200 bg-brand-50 px-2.5 text-xs sm:min-w-0 sm:max-w-[13rem] sm:shrink sm:px-3 font-semibold text-brand-800 transition-colors hover:bg-brand-100"
     >
-      <Link2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+      <Link2 className="hidden h-3.5 w-3.5 shrink-0 sm:block" aria-hidden />
       {/* Phones have no room for a readable URL, so they say what the pill does instead. */}
       <span className="min-w-0 truncate sm:hidden">{copied ? "Copied" : "Copy link"}</span>
       <span className="hidden min-w-0 truncate sm:inline">{shortUrl}</span>
@@ -234,7 +234,7 @@ function MemberTableRow({
     <li className="flex min-h-16 items-center gap-3 px-4 py-2.5">
       {showTurn && <TurnChip turn={turn} />}
       <Avatar name={member.displayName} placeholder={member.isPlaceholder} />
-      <div className="min-w-[3.5rem] flex-1">
+      <div className="min-w-[2.5rem] flex-1">
         <p className="truncate font-bold text-ink-900">{member.displayName}</p>
         {(member.isManager || member.contact) && (
           <p className="truncate text-xs text-ink-500">
@@ -552,7 +552,9 @@ export function FormingManagerPanel({
             orderDone={orderLocked}
             startDone={startDone}
             needsStartDate={pending.startDateMissing}
-            ready={readyToActivate}
+            // "Launch" ticks once the organizer has moved on to the Launch tab, not the moment the
+            // order is locked; locking only completes "Set payout order".
+            ready={readyToActivate && tab === "start"}
           />
         </div>
       </div>
@@ -692,7 +694,6 @@ export function FormingManagerPanel({
               </p>
             </div>
 
-            {orderLocked && <p className={ui.success}>Payout order locked in.</p>}
 
             <ol className="overflow-hidden rounded-3xl border border-ink-200 bg-white">
               {orderedMembers.map((member, index) => (
