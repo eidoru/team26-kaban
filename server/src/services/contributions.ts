@@ -269,13 +269,18 @@ export async function getGroupLedger(groupId: string) {
     where: { round: { groupId } },
     include: {
       membership: { select: { displayName: true, userId: true, isManager: true } },
-      round: { select: { number: true, status: true, dueDate: true } },
+      round: {
+        select: { number: true, status: true, dueDate: true, group: { select: { contributionAmount: true } } },
+      },
     },
     orderBy: [{ round: { number: "asc" } }, { membership: { displayName: "asc" } }],
   });
 
   return contributions.map((c) => ({
     ...serializeContribution(c),
+    // Without these the ledger can't tell a ₱500-of-₱1,000 confirmation from a full payment.
+    expectedAmount: c.round.group.contributionAmount.toString(),
+    isPartial: c.status === "confirmed" && c.amount.lt(c.round.group.contributionAmount),
     displayName: c.membership.displayName,
     isPlaceholder: c.membership.userId === null,
     roundNumber: c.round.number,

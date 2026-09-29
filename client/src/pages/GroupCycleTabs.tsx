@@ -949,11 +949,10 @@ function ScheduleTimeline({
                     }`}
                   >
                     {member.displayName}
-                    {isYou && <span className="font-semibold text-ink-500"> (you)</span>}
                   </span>
-                  {(member.isManager || (isManager && member.isPlaceholder)) && (
+                  {(isYou || member.isManager || (isManager && member.isPlaceholder)) && (
                     <span className="block truncate text-xs font-semibold text-ink-500">
-                      {[member.isManager && "Organizer", isManager && member.isPlaceholder && "Unclaimed"]
+                      {[isYou && "You", member.isManager && "Organizer", isManager && member.isPlaceholder && "Unclaimed"]
                         .filter(Boolean)
                         .join(" · ")}
                     </span>
@@ -1364,6 +1363,7 @@ function LedgerRoundCard({
             <p className="mt-0.5 text-sm text-ink-600">
               <span className="font-bold tabular-nums text-ink-900">₱{confirmedTotal.toLocaleString()}</span> of ₱
               {expectedTotal.toLocaleString()} confirmed
+              {!roundClosed && " so far"}
             </p>
           </div>
           <span className="flex shrink-0 items-center gap-2">
@@ -1403,15 +1403,18 @@ function LedgerRoundCard({
 
 function LedgerList({ entries, contributionAmount }: { entries: LedgerEntry[]; contributionAmount: string }) {
   const rounds = groupLedgerByRound(entries);
+  // The ledger is history: the round in progress stays collapsed (This round shows it in full), and the
+  // most recent closed round opens instead.
+  const openRound = rounds.find(([, roundEntries]) => roundEntries[0].roundStatus === "closed")?.[0];
   return (
     <div className="space-y-3">
-      {rounds.map(([roundNumber, roundEntries], index) => (
+      {rounds.map(([roundNumber, roundEntries]) => (
         <LedgerRoundCard
           key={roundNumber}
           roundNumber={roundNumber}
           entries={roundEntries}
           contributionAmount={contributionAmount}
-          defaultOpen={index === 0}
+          defaultOpen={roundNumber === openRound}
         />
       ))}
     </div>
