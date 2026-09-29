@@ -14,6 +14,9 @@ import { resolveCorsOrigin } from "./lib/origin.js";
 import { serverTiming } from "./lib/timing.js";
 
 const app = express();
+// Vercel's proxy sets X-Forwarded-For; trust that one hop so req.ip (and the auth rate limits
+// keyed on it) is the real client instead of one shared proxy address.
+app.set("trust proxy", 1);
 
 app.use(serverTiming);
 app.use(helmet());
