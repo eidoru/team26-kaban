@@ -127,6 +127,10 @@ export interface PeriodSlot {
   pending: number;
   status: PeriodStatus;
   pendingReview: boolean;
+  /** Last time the organizer sent this slot a reminder this round. */
+  remindedAt: string | null;
+  /** Reminded within the last day; the next reminder waits. */
+  remindedRecently: boolean;
 }
 
 export interface PeriodView {
@@ -211,6 +215,23 @@ export interface MemberTotals {
 export interface GroupSummaryTotals {
   members: MemberTotals[];
   totals: { collected: number; paidOut: number; coveredByOrganizer: number; refunds: number; debtOutstanding: number };
+}
+
+export type ActivityCategory = "payments" | "debts" | "payouts" | "disputes" | "swaps" | "members" | "settings";
+
+/** One audit-log entry as members read it (§13). */
+export interface ActivityEntry {
+  id: string;
+  at: string;
+  action: string;
+  category: ActivityCategory;
+  actor: string;
+  /** Done by the app itself (a period closing, a reminder), not a person. */
+  system: boolean;
+  title: string;
+  detail: string | null;
+  proofAttached: boolean | null;
+  selfApproved: boolean;
 }
 
 export type ExportKind = "statement" | "ledger" | "summary";
@@ -582,6 +603,16 @@ export const api = {
     send<GroupDetail>("POST", `/groups/${id}/submissions/${submissionId}/deny`, { reason }),
   cancelSubmission: (id: string, submissionId: string) =>
     send<GroupDetail>("POST", `/groups/${id}/submissions/${submissionId}/cancel`),
+  // --- Activity (§13) and reminders (§12).
+  activity: (id: string, options: { before?: string; category?: ActivityCategory } = {}) => {
+    const query = new URLSearchParams();
+    if (options.before) query.set("before", options.before);
+    if (options.category) query.set("category", options.category);
+    const qs = query.toString();
+    return request<{ entries: ActivityEntry[]; hasMore: boolean }>(`/groups/${id}/activity${qs ? `?${qs}` : ""}`);
+  },
+  remindSlot: (id: string, slotId: string) => send<GroupDetail>("POST", `/groups/${id}/slots/${slotId}/remind`),
+
   // --- Records (§10, §14).
   summary: (id: string) => request<GroupSummaryTotals>(`/groups/${id}/summary`),
   /** Downloads a statement, the ledger or the summary as a file (the browser saves it). */

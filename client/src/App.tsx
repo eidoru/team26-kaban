@@ -23,6 +23,7 @@ const EditGroupPage = lazy(() =>
 const LaunchReviewPage = lazy(() =>
   import("./pages/group/LaunchReviewPage").then((m) => ({ default: m.LaunchReviewPage })),
 );
+const ActivityPage = lazy(() => import("./pages/group/ActivityPage").then((m) => ({ default: m.ActivityPage })));
 const InvitePage = lazy(() => import("./pages/join/InvitePage").then((m) => ({ default: m.InvitePage })));
 const ClaimPage = lazy(() => import("./pages/join/ClaimPage").then((m) => ({ default: m.ClaimPage })));
 
@@ -48,6 +49,7 @@ export function App() {
               <Route path="/groups/:id" element={<GroupPage />} />
               <Route path="/groups/:id/edit" element={<EditGroupPage />} />
               <Route path="/groups/:id/launch" element={<LaunchReviewPage />} />
+              <Route path="/groups/:id/activity" element={<ActivityPage />} />
             </Route>
           </Route>
 

@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Pencil } from "lucide-react";
+import { ChevronRight, History, Pencil } from "lucide-react";
 import type { GroupDetail } from "../../api/client";
 import { formatDueDate } from "../../lib/dates";
 import { formatPeso, formatRate } from "../../lib/money";
@@ -51,6 +51,17 @@ export function GroupDetails({ detail, onCancel }: { detail: GroupDetail; onCanc
           </div>
         ))}
       </dl>
+      <Link
+        to={`/groups/${group.id}/activity`}
+        className="mt-3 flex min-h-14 items-center gap-3 rounded-3xl border border-ink-200 bg-white px-5 py-3 transition-colors hover:border-brand-300"
+      >
+        <History className="h-5 w-5 shrink-0 text-ink-500" aria-hidden />
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-bold text-ink-900">Activity</span>
+          <span className="block text-xs text-ink-500">Everything that happens here, visible to every member</span>
+        </span>
+        <ChevronRight className="h-4 w-4 shrink-0 text-ink-400" aria-hidden />
+      </Link>
       {editable && onCancel && (
         <div className="mt-4 text-right">
           <button type="button" onClick={onCancel} className={ui.btnDangerGhost}>

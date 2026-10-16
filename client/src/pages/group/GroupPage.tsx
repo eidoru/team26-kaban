@@ -636,7 +636,12 @@ function GroupView({ detail }: { detail: GroupDetail }) {
       {detail.period && (
         <>
           <PeriodCard detail={detail} />
-          <PeriodStatusList detail={detail} onRecord={(slot) => pay(slot.id, "CONTRIBUTION")} />
+          <PeriodStatusList
+            detail={detail}
+            pending={pending}
+            onRecord={(slot) => pay(slot.id, "CONTRIBUTION")}
+            onRemind={(slot) => void run(`remind-${slot.id}`, () => api.remindSlot(group.id, slot.id))}
+          />
         </>
       )}
       <DebtsList detail={detail} onPay={(slot) => pay(slot.id, "DEBT_PAYMENT")} />

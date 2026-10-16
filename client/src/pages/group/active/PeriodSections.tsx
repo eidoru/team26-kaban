@@ -66,7 +66,18 @@ function StatusChip({ standing }: { standing: PeriodSlot }) {
  * always tappable to pay, whatever the Now panel is showing; the organizer's placeholder rows too,
  * to record their payments (R-SUB-02).
  */
-export function PeriodStatusList({ detail, onRecord }: { detail: GroupDetail; onRecord?: (slot: SlotView) => void }) {
+export function PeriodStatusList({
+  detail,
+  pending,
+  onRecord,
+  onRemind,
+}: {
+  detail: GroupDetail;
+  pending?: string | null;
+  onRecord?: (slot: SlotView) => void;
+  /** Organizer: nudge a member who hasn't fully paid (§15.1). */
+  onRemind?: (slot: SlotView) => void;
+}) {
   const period = detail.period!;
   const order = new Map(detail.schedule.map((r) => [r.recipientSlotId, r.number]));
   const slots = [...detail.slots].sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
@@ -103,9 +114,24 @@ export function PeriodStatusList({ detail, onRecord }: { detail: GroupDetail; on
             </>
           );
           const row = "flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left";
+          const remindable =
+            onRemind && detail.viewer.isOrganizer && slot.kind === "MEMBER" && !slot.isViewer && standing.status !== "PAID";
+          const remindedRecently = standing.remindedRecently;
           return (
-            <li key={slot.id}>
-              {recordable ? (
+            <li key={slot.id} className={remindable ? "flex items-center" : undefined}>
+              {remindable ? (
+                <>
+                  <div className={`${row} min-w-0 flex-1 pr-2`}>{body}</div>
+                  <button
+                    type="button"
+                    onClick={() => onRemind(slot)}
+                    disabled={remindedRecently || pending === `remind-${slot.id}`}
+                    className={`${ui.btnGhost} mr-2 shrink-0 text-xs`}
+                  >
+                    {remindedRecently ? "Reminded" : pending === `remind-${slot.id}` ? "…" : "Remind"}
+                  </button>
+                </>
+              ) : recordable ? (
                 <button type="button" onClick={() => onRecord(slot)} className={`${row} transition-colors hover:bg-ink-50`}>
                   {body}
                   <ChevronRight className="h-4 w-4 shrink-0 text-ink-400" aria-hidden />
