@@ -45,6 +45,7 @@ import { debtReportable, owedBy, payoutToActOn, reviewItems, standingOf, type Re
 import { DebtsList, MyPayments, PeriodCard, PeriodStatusList, RefundsOwed } from "./active/PeriodSections";
 import { DisputeSheet } from "./active/DisputeSheet";
 import { SwapSheet, SwapsList } from "./swaps/SwapSections";
+import { Recap, RecordsSection } from "./records/RecordsSections";
 import { swapToActOn } from "./swaps/swaps";
 import { ReviewSheet } from "./active/ReviewSheet";
 import { SlotsList } from "./SlotsList";
@@ -657,6 +658,7 @@ function GroupView({ detail }: { detail: GroupDetail }) {
         onDeny={(sw) => void denySwap(sw)}
         onCancel={(sw) => swapAction(sw, () => api.cancelSwap(group.id, sw.id))}
       />
+      {(group.state === "COMPLETED" || group.state === "COMPLETED_WITH_OUTSTANDING_DEBT") && <Recap detail={detail} />}
       {/* Once everyone has a turn, the schedule lists every member too, so it replaces the member list. */}
       {!ordered && (
         <SlotsList
@@ -678,6 +680,9 @@ function GroupView({ detail }: { detail: GroupDetail }) {
         onSelect={selectSlot}
         onOpenPayout={setPayoutRound}
       />
+      {(group.state === "ACTIVE" || group.state === "COMPLETED" || group.state === "COMPLETED_WITH_OUTSTANDING_DEBT") && (
+        <RecordsSection detail={detail} />
+      )}
       <GroupDetails detail={detail} onCancel={() => void cancelGroup()} />
 
       {inLobby && !isOrganizer && (

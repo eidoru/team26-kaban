@@ -193,6 +193,29 @@ export interface SwapView {
   reviewNote: string | null;
 }
 
+/** R-CMP-02: one member's totals, in centavos. */
+export interface MemberTotals {
+  slotId: string;
+  name: string;
+  position: number | null;
+  isOrganizer: boolean;
+  contributed: number;
+  received: number;
+  refunds: number;
+  coveredByOrganizer: number;
+  debtIncurred: number;
+  debtSettled: number;
+  debtOutstanding: number;
+}
+
+export interface GroupSummaryTotals {
+  members: MemberTotals[];
+  totals: { collected: number; paidOut: number; coveredByOrganizer: number; refunds: number; debtOutstanding: number };
+}
+
+export type ExportKind = "statement" | "ledger" | "summary";
+export type ExportFormat = "pdf" | "csv";
+
 export interface GroupDetail {
   group: GroupSummary & { organizerName: string };
   viewer: { slotId: string; isOrganizer: boolean };
@@ -559,6 +582,19 @@ export const api = {
     send<GroupDetail>("POST", `/groups/${id}/submissions/${submissionId}/deny`, { reason }),
   cancelSubmission: (id: string, submissionId: string) =>
     send<GroupDetail>("POST", `/groups/${id}/submissions/${submissionId}/cancel`),
+  // --- Records (§10, §14).
+  summary: (id: string) => request<GroupSummaryTotals>(`/groups/${id}/summary`),
+  /** Downloads a statement, the ledger or the summary as a file (the browser saves it). */
+  downloadExport: async (id: string, kind: ExportKind, format: ExportFormat, slotId?: string) => {
+    const query = slotId ? `?slot=${encodeURIComponent(slotId)}` : "";
+    const { blob, filename } = await requestFile(`/groups/${id}/exports/${kind}.${format}${query}`);
+    const url = URL.createObjectURL(blob);
+    const link = Object.assign(document.createElement("a"), { href: url, download: filename });
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  },
   /** Demo tools only. */
   activateNow: (id: string) => send<{ ok: true; activated: number }>("POST", `/dev/groups/${id}/activate-now`),
   /** Demo tools only: close the open period now. */
@@ -571,6 +607,18 @@ export const api = {
   getClaim: (token: string) => publicRequest<ClaimLanding>(`/claims/${token}`, { withAuth: true }),
   claimPlaceholder: (token: string) => send<{ groupId: string }>("POST", `/claims/${token}/claim`),
 };
+
+/** An authenticated download: the file and the name the server gave it. Refreshes the token once on 401. */
+async function requestFile(path: string, retry = true): Promise<{ blob: Blob; filename: string }> {
+  const tokens = getStoredTokens();
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: tokens?.accessToken ? { Authorization: `Bearer ${tokens.accessToken}` } : undefined,
+  });
+  if (res.status === 401 && retry && tokens?.refreshToken && (await refreshAccessToken())) return requestFile(path, false);
+  if (!res.ok) throw await errorFrom(res);
+  const filename = /filename="([^"]+)"/.exec(res.headers.get("content-disposition") ?? "")?.[1] ?? "kaban-export";
+  return { blob: await res.blob(), filename };
+}
 
 function send<T>(method: string, path: string, body?: unknown): Promise<T> {
   return request<T>(path, { method, body: JSON.stringify(body ?? {}) });
