@@ -11,7 +11,8 @@ const CONTACT_MAX = 200;
 
 /**
  * Filling open slots (R-LOB-01, R-LOB-02): share the invite link, or hold a slot for someone
- * without an account. `onAddPlaceholder` resolves true when the placeholder was added.
+ * without an account. `onAddPlaceholder` resolves true when the placeholder was added, which
+ * closes the sheet so the new slot shows on the board.
  */
 export function InviteSheet({
   open,
@@ -39,6 +40,7 @@ export function InviteSheet({
     if (await onAddPlaceholder({ name: name.trim(), contact: contact.trim() || undefined })) {
       setName("");
       setContact("");
+      onClose();
     }
   }
 
