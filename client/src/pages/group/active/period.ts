@@ -37,17 +37,16 @@ export function debtReportable(detail: GroupDetail, slotId: string) {
   return submissionCap(owedBy(detail, slotId), 0, pending);
 }
 
-/** The oldest payout this viewer has to act on: hand over (organizer), or confirm receipt (recipient). */
-export function payoutToActOn(detail: GroupDetail) {
-  const oldestFirst = [...detail.payouts].reverse();
+/** Payouts this viewer has to act on, oldest first: hand over (organizer), or confirm receipt (recipient). */
+export function payoutsToActOnFor(detail: GroupDetail) {
   const viewer = detail.viewer;
-  return (
-    oldestFirst.find((p) =>
+  return [...detail.payouts]
+    .reverse()
+    .filter((p) =>
       viewer.isOrganizer
         ? p.status === "AWAITING_HANDOVER"
         : p.status === "HANDED_OVER" && p.recipientSlotId === viewer.slotId,
-    ) ?? null
-  );
+    );
 }
 
 /** Pending disputes, oldest first: reviewed before payments, since they expire at the payout (R-DEC-21). */

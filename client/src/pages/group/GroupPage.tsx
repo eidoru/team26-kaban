@@ -5,13 +5,13 @@ import {
   ArrowLeftRight,
   Ban,
   Banknote,
+  BellRing,
   CalendarClock,
   CircleCheck,
   ClipboardCheck,
   CloudOff,
   HandCoins,
   Hourglass,
-  Lock,
   Rocket,
   Shuffle,
   Users,
@@ -27,8 +27,10 @@ import {
 } from "../../api/client";
 import { ActionBar } from "../../components/flow/ActionBar";
 import { NowPanel } from "../../components/flow/NowPanel";
+import { TodoBarButton, TodoPanel, type Todo } from "../../components/flow/TodoPanel";
+import { REMINDER_DAYS_BEFORE } from "@domain/constants";
 import { useDialog } from "../../context/useDialog";
-import { dueHint, formatDueDate } from "../../lib/dates";
+import { daysUntil, dueHint, formatDueDate } from "../../lib/dates";
 import { useDemoToolsSetting } from "../../lib/devTools";
 import { groupKey, useGroup, useGroupActions } from "../../lib/groupQueries";
 import { invalidateHomeLists } from "../../lib/homeQueries";
@@ -41,7 +43,7 @@ import { PayoutSchedule } from "./PayoutSchedule";
 import { currentOrder } from "./slots";
 import { PaySheet, type PayMode } from "./active/PaySheet";
 import { PayoutSheet } from "./active/PayoutSheet";
-import { debtReportable, owedBy, payoutToActOn, reviewItems, standingOf, type ReviewItem } from "./active/period";
+import { debtReportable, owedBy, payoutsToActOnFor, reviewItems, standingOf, type ReviewItem } from "./active/period";
 import { DebtsList, MyPayments, PeriodCard, PeriodStatusList, RefundsOwed } from "./active/PeriodSections";
 import { DisputeSheet } from "./active/DisputeSheet";
 import { SwapSheet, SwapsList } from "./swaps/SwapSections";
@@ -277,6 +279,10 @@ function GroupView({ detail }: { detail: GroupDetail }) {
         : undefined;
 
   const swapAction = (swap: SwapView, call: () => Promise<GroupDetail>) => void run(`swap-${swap.id}`, call);
+  /** Reminds each late payer in turn (the server allows one reminder a day per slot, §12). */
+  async function remindAll(slotIds: string[]) {
+    for (const slotId of slotIds) await run(`remind-${slotId}`, () => api.remindSlot(group.id, slotId));
+  }
   async function denySwap(swap: SwapView) {
     const note = await dialog.prompt({
       title: "Deny this swap?",
@@ -311,26 +317,17 @@ function GroupView({ detail }: { detail: GroupDetail }) {
           Invite members
         </button>
       );
-    } else if (!group.orderLocked) {
+    } else if (!ordered) {
       now = (
         <NowPanel
           tone="brand"
           icon={Shuffle}
           eyebrow="Next step"
-          title={ordered ? "Lock the payout order" : "Set the payout order"}
-          body={
-            ordered
-              ? "Check who gets paid when. Shuffle again or arrange it yourself, then lock it."
-              : "Everyone's in. Shuffle for a random order, or arrange it yourself."
-          }
+          title="Set the payout order"
+          body="Everyone's in. Shuffle for a random order, or arrange it yourself."
         />
       );
-      primary = ordered ? (
-        <button type="button" onClick={() => void run("lock", () => api.lockOrder(group.id))} disabled={pending === "lock"} className={ui.btnPrimary}>
-          <Lock className="h-4 w-4" aria-hidden />
-          {pending === "lock" ? "Locking…" : "Lock payout order"}
-        </button>
-      ) : (
+      primary = (
         <button type="button" onClick={() => void run("shuffle", () => api.shuffleOrder(group.id))} disabled={pending === "shuffle"} className={ui.btnPrimary}>
           <Shuffle className="h-4 w-4" aria-hidden />
           {pending === "shuffle" ? "Shuffling…" : "Shuffle order"}
@@ -350,7 +347,7 @@ function GroupView({ detail }: { detail: GroupDetail }) {
           icon={Rocket}
           eyebrow="Next step"
           title="Ready to launch"
-          body="Review everything once more. Launching locks the settings and the payout order."
+          body="Check who gets paid when. You can shuffle or arrange it until you launch; launching makes the order and settings final."
         />
       );
       primary = (
@@ -403,7 +400,7 @@ function GroupView({ detail }: { detail: GroupDetail }) {
     const period = detail.period;
     const mine = period ? standingOf(detail, viewer.slotId) : null;
     const queue = isOrganizer ? reviewItems(detail) : [];
-    const payout = payoutToActOn(detail);
+    const payoutsToActOn = payoutsToActOnFor(detail);
     const swapTask = swapToActOn(detail);
     /** "Your round 3 (Feb 1)" / "Mia's round 2 (Jan 1)", for the swap panel. */
     const turnLine = (slotId: string) => {
@@ -411,12 +408,6 @@ function GroupView({ detail }: { detail: GroupDetail }) {
       const round = detail.schedule.find((r) => r.recipientSlotId === slotId);
       return `${slot?.isViewer ? "Your" : `${slot?.name}'s`} round ${round?.number} (${round ? formatDueDate(round.payoutDate) : ""})`;
     };
-    const payButton = (
-      <button type="button" onClick={() => pay(viewer.slotId, "CONTRIBUTION")} className={ui.btnPrimary}>
-        <HandCoins className="h-4 w-4" aria-hidden />
-        {isOrganizer ? "Record your payment" : "Report a payment"}
-      </button>
-    );
     const owed = owedBy(detail, viewer.slotId);
     const debtLeft = debtReportable(detail, viewer.slotId);
     const hint = period ? dueHint(period.payoutDate) : null;
@@ -424,6 +415,8 @@ function GroupView({ detail }: { detail: GroupDetail }) {
     const due = hint ? `Due ${hint.label}.` : "";
     const owingSlots = detail.slots.filter((s) => s.debt.principal + s.debt.interest > 0);
 
+    // --- Everything the viewer can do right now, most urgent first (one list, not one task at a time).
+    const todos: Todo[] = [];
     if (queue.length > 0) {
       // Members are waiting on the organizer's reviews (R-SUB-03, R-DSP-02).
       const disputes = queue.filter((q) => q.kind === "dispute").length;
@@ -432,144 +425,148 @@ function GroupView({ detail }: { detail: GroupDetail }) {
         disputes > 0 && `${disputes} problem report${disputes === 1 ? "" : "s"}`,
         payments > 0 && `${payments} payment${payments === 1 ? "" : "s"}`,
       ].filter(Boolean);
-      now = (
-        <NowPanel
-          tone="sun"
-          icon={ClipboardCheck}
-          eyebrow="Needs you"
-          title={`${parts.join(" and ")} to review`}
-          body={
-            disputes > 0
-              ? "Problem reports first: they expire at the payout if you don't decide."
-              : "Oldest first. They count once you approve them."
-          }
-        />
-      );
-      primary = (
-        <button type="button" onClick={() => setReviewOpen(true)} className={ui.btnPrimary}>
-          Review payments
-        </button>
-      );
-    } else if (payout) {
+      todos.push({
+        id: "review",
+        icon: ClipboardCheck,
+        title: `Review ${parts.join(" and ")}`,
+        detail:
+          disputes > 0
+            ? "Problem reports first: they expire at the payout if you don't decide."
+            : "Oldest first. They count once you approve them.",
+        action: { label: "Review", onClick: () => setReviewOpen(true) },
+      });
+    }
+    for (const payout of payoutsToActOn) {
       const recipient = detail.slots.find((s) => s.id === payout.recipientSlotId);
       const confirming = payout.status === "HANDED_OVER";
       // The organizer already holds the pot they collected; taking their own payout is one step.
       const ownPayout = isOrganizer && !!recipient?.isViewer;
-      now = (
-        <NowPanel
-          tone="sun"
-          icon={Banknote}
-          eyebrow={`Round ${payout.round} payout`}
-          title={
-            confirming
-              ? `Did you get ${formatPeso(payout.net)}?`
-              : ownPayout
-                ? `Take your ${formatPeso(payout.net)} payout`
-                : `Hand ${formatPeso(payout.net)} to ${recipient?.name}`
-          }
-          body={
-            confirming
-              ? "Confirm once it's in your hands, so everyone sees it was paid."
-              : ownPayout
-                ? "You're holding the collected pot. Mark it received so everyone sees the round is paid out."
-                : payout.net < payout.gross
-                  ? `The ${formatPeso(payout.gross)} pot, less what ${recipient?.name} owed.`
-                  : `The full ${formatPeso(payout.gross)} pot.`
-          }
-        />
-      );
-      primary = (
-        <button type="button" onClick={() => setPayoutRound(payout.round)} className={ui.btnPrimary}>
-          {confirming ? "Confirm receipt" : ownPayout ? "Mark as received" : "Mark as handed over"}
-        </button>
-      );
-    } else if (swapTask) {
+      todos.push({
+        id: `payout-${payout.round}`,
+        icon: Banknote,
+        title: confirming
+          ? `Confirm you got ${formatPeso(payout.net)}`
+          : ownPayout
+            ? `Take your ${formatPeso(payout.net)} payout`
+            : `Hand ${formatPeso(payout.net)} to ${recipient?.name}`,
+        detail: `Round ${payout.round} payout. ${
+          confirming
+            ? "Confirm once it's in your hands, so everyone sees it was paid."
+            : ownPayout
+              ? "You're holding the collected pot; mark it received."
+              : payout.net < payout.gross
+                ? `The ${formatPeso(payout.gross)} pot, less what ${recipient?.name} owed.`
+                : `The full ${formatPeso(payout.gross)} pot.`
+        }`,
+        action: {
+          label: confirming ? "Confirm" : ownPayout ? "Mark received" : "Hand over",
+          onClick: () => setPayoutRound(payout.round),
+        },
+      });
+    }
+    if (mine && mine.reportable > 0) {
+      const amount = formatPeso(mine.reportable);
+      todos.push({
+        id: "pay",
+        icon: HandCoins,
+        title: mine.approved + mine.pending > 0 ? `Pay the remaining ${amount}` : `Pay your ${amount}`,
+        detail: (
+          <>
+            Round {period!.number}. {due}
+            {mine.pending > 0 && ` ${formatPeso(mine.pending)} is already waiting for review.`}
+            {isOrganizer && " Record it once your share is in the pot."}
+          </>
+        ),
+        action: { label: isOrganizer ? "Record" : "Report", onClick: () => pay(viewer.slotId, "CONTRIBUTION") },
+      });
+    }
+    if (isOrganizer && period) {
+      // Placeholders pay the organizer outside the app; the organizer records it for them (R-SUB-02).
+      // One task for all of them; it opens the first, and the list shrinks as they're recorded.
+      const toRecord = detail.slots
+        .filter((s) => s.kind === "PLACEHOLDER")
+        .map((slot) => ({ slot, standing: standingOf(detail, slot.id) }))
+        .filter((x) => x.standing && x.standing.reportable > 0);
+      if (toRecord.length > 0) {
+        const [first] = toRecord;
+        const names = toRecord.map((x) => x.slot.name);
+        const listed = names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+        todos.push({
+          id: "record",
+          icon: HandCoins,
+          title:
+            toRecord.length === 1
+              ? `Record ${first.slot.name}'s ${formatPeso(first.standing!.reportable)}`
+              : `Record payments for ${listed}`,
+          detail: `${toRecord.length === 1 ? "A placeholder" : "Placeholders"}: record once they've paid you.`,
+          action: { label: "Record", onClick: () => pay(first.slot.id, "CONTRIBUTION") },
+        });
+      }
+      // Late payers, once the reminder window opens (§12): one button reminds everyone not reminded today.
+      const daysLeft = daysUntil(period.payoutDate) ?? 0;
+      const unpaid = period.slots.filter((s) => {
+        const slot = detail.slots.find((x) => x.id === s.slotId);
+        return slot?.kind === "MEMBER" && !slot.isViewer && s.status !== "PAID" && s.pending === 0;
+      });
+      const remindable = unpaid.filter((s) => !s.remindedRecently);
+      if (daysLeft <= REMINDER_DAYS_BEFORE && remindable.length > 0) {
+        const names = unpaid.map((s) => detail.slots.find((x) => x.id === s.slotId)?.name).join(", ");
+        todos.push({
+          id: "remind",
+          icon: BellRing,
+          title: `Remind ${remindable.length === 1 ? names : `${remindable.length} members`} to pay`,
+          detail: `${due} Not paid yet: ${names}.`,
+          action: { label: "Remind", onClick: () => void remindAll(remindable.map((s) => s.slotId)), disabled: pending?.startsWith("remind-") },
+        });
+      }
+    }
+    if (swapTask) {
       const { swap, as } = swapTask;
       nowSwapId = swap.id;
       const requester = detail.slots.find((x) => x.id === swap.requesterSlotId);
       const target = detail.slots.find((x) => x.id === swap.targetSlotId);
-      now = (
-        <NowPanel
-          tone="sun"
-          icon={ArrowLeftRight}
-          eyebrow="Turn swap"
-          title={
-            as === "target"
-              ? `${requester?.name} asks to swap turns${target?.isViewer ? "" : ` with ${target?.name}`}`
-              : `Approve ${requester?.name} and ${target?.name} swapping turns`
-          }
-          body={
-            as === "target"
-              ? `${turnLine(swap.targetSlotId)} for ${turnLine(swap.requesterSlotId)}.`
-              : "They both agreed. Approving changes the payout order."
-          }
-        >
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() =>
-                as === "target"
-                  ? swapAction(swap, () => api.declineSwap(group.id, swap.id))
-                  : void denySwap(swap)
-              }
-              disabled={pending === `swap-${swap.id}`}
-              className={`${ui.btnSecondary} min-h-11 flex-1`}
-            >
-              {as === "target" ? "Decline" : "Deny"}
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                swapAction(swap, () =>
-                  as === "target" ? api.acceptSwap(group.id, swap.id) : api.approveSwap(group.id, swap.id),
-                )
-              }
-              disabled={pending === `swap-${swap.id}`}
-              className={`${ui.btnPrimary} min-h-11 flex-1`}
-            >
-              {as === "target" ? "Accept" : "Approve"}
-            </button>
-          </div>
-        </NowPanel>
-      );
-      // Paying stays the main action while a swap waits.
-      if (mine && mine.reportable > 0) primary = payButton;
-    } else if (mine && mine.reportable > 0) {
-      now = (
-        <NowPanel
-          tone="brand"
-          icon={HandCoins}
-          eyebrow={`Round ${period!.number}`}
-          title={mine.approved + mine.pending > 0 ? `Pay the remaining ${formatPeso(mine.reportable)}` : `Pay ${formatPeso(mine.due)}`}
-          body={
-            <>
-              {due}
-              {mine.pending > 0 && ` ${formatPeso(mine.pending)} is already waiting for review.`}
-              {owed > 0 && ` You also owe ${formatPeso(owed)} from earlier rounds.`}
-            </>
-          }
-        />
-      );
-      primary = payButton;
-    } else if (debtLeft > 0) {
-      now = (
-        <NowPanel
-          tone="danger"
-          icon={HandCoins}
-          eyebrow="You owe"
-          title={`${formatPeso(owed)} to ${group.organizerName}`}
-          body={
-            group.interestRate > 0 && group.state === "ACTIVE"
-              ? "Interest is added at every payout date until it's paid. Payments go to interest first."
-              : "Shortfalls the organizer covered for you."
-          }
-        />
-      );
-      primary = (
-        <button type="button" onClick={() => pay(viewer.slotId, "DEBT_PAYMENT")} className={ui.btnPrimary}>
-          Pay toward your debt
-        </button>
-      );
+      const busy = pending === `swap-${swap.id}`;
+      todos.push({
+        id: `swap-${swap.id}`,
+        icon: ArrowLeftRight,
+        title:
+          as === "target"
+            ? `Answer ${requester?.name}'s swap request`
+            : `Approve ${requester?.name} and ${target?.name} swapping turns`,
+        detail:
+          as === "target"
+            ? `${turnLine(swap.targetSlotId)} for ${turnLine(swap.requesterSlotId)}.`
+            : "They both agreed. Approving changes the payout order.",
+        secondary: {
+          label: as === "target" ? "Decline" : "Deny",
+          onClick: () => (as === "target" ? swapAction(swap, () => api.declineSwap(group.id, swap.id)) : void denySwap(swap)),
+          disabled: busy,
+        },
+        action: {
+          label: as === "target" ? "Accept" : "Approve",
+          onClick: () =>
+            swapAction(swap, () => (as === "target" ? api.acceptSwap(group.id, swap.id) : api.approveSwap(group.id, swap.id))),
+          disabled: busy,
+        },
+        inBar: false,
+      });
+    }
+    if (debtLeft > 0) {
+      todos.push({
+        id: "debt",
+        icon: HandCoins,
+        title: `Pay toward your ${formatPeso(owed)} debt`,
+        detail:
+          group.interestRate > 0 && group.state === "ACTIVE"
+            ? `Owed to ${group.organizerName}. Interest grows at each payout until it's paid.`
+            : `Shortfalls ${group.organizerName} covered for you.`,
+        action: { label: "Pay", onClick: () => pay(viewer.slotId, "DEBT_PAYMENT") },
+      });
+    }
+
+    if (todos.length > 0) {
+      now = <TodoPanel todos={todos} />;
+      if (todos.some((todo) => todo.inBar !== false)) primary = <TodoBarButton todos={todos} />;
     } else if (mine && mine.status !== "PAID") {
       now = (
         <NowPanel
@@ -592,7 +589,7 @@ function GroupView({ detail }: { detail: GroupDetail }) {
             recipientIsMe
               ? `This round's ${formatPeso(group.pot)} pot comes to you on ${formatDueDate(period.payoutDate)}.`
               : isOrganizer
-                ? "Nothing to review. Record payments for placeholders from the list below."
+                ? `Nothing needs you right now. Round ${period.number} closes on ${formatDueDate(period.payoutDate)}.`
                 : `Next contributions open after the ${formatDueDate(period.payoutDate)} payout.`
           }
         />

@@ -58,7 +58,6 @@ export interface GroupSummary {
   startDate: string;
   /** Hundredths of a percent: 125 is 1.25%. */
   interestRate: number;
-  orderLocked: boolean;
   createdAt: string;
   launchedAt: string | null;
   activatedAt: string | null;
@@ -628,7 +627,6 @@ export const api = {
     send<GroupDetail>("DELETE", `/groups/${id}/slots/${slotId}/claim-link`),
   setOrder: (id: string, slotIds: string[]) => send<GroupDetail>("PUT", `/groups/${id}/order`, { slotIds }),
   shuffleOrder: (id: string) => send<GroupDetail>("POST", `/groups/${id}/order/shuffle`),
-  lockOrder: (id: string) => send<GroupDetail>("POST", `/groups/${id}/order/lock`),
   launch: (id: string) => send<GroupDetail>("POST", `/groups/${id}/launch`),
   leaveGroup: (id: string) => send<{ ok: true }>("POST", `/groups/${id}/leave`),
   // --- Payments (§6.1). Upload a proof first (requestProofUpload, then lib/proofUpload), then submit.
