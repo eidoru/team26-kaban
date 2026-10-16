@@ -20,7 +20,6 @@ export type AuditAction =
   | "placeholder.claimed"
   | "order.changed"
   | "order.shuffled"
-  | "order.locked"
   | "order.reset"
   | "submission.created"
   | "submission.approved"

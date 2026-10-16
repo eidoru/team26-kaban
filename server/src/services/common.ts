@@ -54,13 +54,12 @@ export async function memberUserIds(db: Db, groupId: string): Promise<string[]> 
 }
 
 /**
- * R-LOB-11 / R-LOB-12: any roster or slot-count change clears the payout order and unlocks it.
+ * R-LOB-11 / R-LOB-12: any roster or slot-count change clears the payout order.
  * Audited only when there was an order to clear.
  */
 export async function resetOrder(db: Db, group: Group, actorUserId: string | null, reason: string) {
   const positioned = await db.slot.count({ where: { groupId: group.id, position: { not: null } } });
-  if (positioned === 0 && !group.orderLocked) return;
+  if (positioned === 0) return;
   await db.slot.updateMany({ where: { groupId: group.id }, data: { position: null } });
-  await db.group.update({ where: { id: group.id }, data: { orderLocked: false } });
   await audit(db, { groupId: group.id, actorUserId, action: "order.reset", after: { reason } });
 }

@@ -16,7 +16,6 @@ async function writeOrder(tx: Db, groupId: string, slotIds: string[]) {
   for (const [index, id] of slotIds.entries()) {
     await tx.slot.update({ where: { id }, data: { position: index + 1 } });
   }
-  await tx.group.update({ where: { id: groupId }, data: { orderLocked: false } });
 }
 
 /** R-ORD-01: ordering opens only once every slot is filled. */
@@ -54,25 +53,10 @@ export async function shuffleOrder(groupId: string, actorUserId: string) {
   });
 }
 
-/** R-ORD-03 */
-export async function lockOrder(groupId: string, actorUserId: string) {
-  return withGroupLock(groupId, async (tx, group) => {
-    assertState(group, ["LOBBY"], "The payout order is already final.");
-    const slots = await fullRoster(tx, groupId, group.slotCount);
-    if (slots.some((s) => s.position == null)) throw conflict("Arrange the payout order first.", "NO_ORDER");
-    await tx.group.update({ where: { id: groupId }, data: { orderLocked: true } });
-    await audit(tx, {
-      groupId,
-      actorUserId,
-      action: "order.locked",
-      after: { order: slots.map((s) => s.id) },
-    });
-  });
-}
-
 /**
- * R-LCH-02 / R-LCH-03: LOBBY → LAUNCHED. Settings lock, the invite link closes, and every round is
- * created from the locked order. Claim links stay live (R-CLM-03).
+ * R-LCH-02 / R-LCH-03: LOBBY → LAUNCHED. Settings and the payout order become final in this one
+ * step (R-ORD-03, R-DEC-27), the invite link closes, and every round is created from the order.
+ * Claim links stay live (R-CLM-03).
  */
 export async function launchGroup(groupId: string, actorUserId: string) {
   return withGroupLock(groupId, async (tx, group) => {
@@ -82,7 +66,7 @@ export async function launchGroup(groupId: string, actorUserId: string) {
     const blockers = launchBlockers({
       slotCount: group.slotCount,
       occupied: slots.length,
-      orderLocked: group.orderLocked,
+      ordered: slots.every((s) => s.position != null),
       startDate: settings.startDate,
       today: todayInManila(),
     });

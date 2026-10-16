@@ -164,7 +164,6 @@ function summary(group: Group) {
     frequencyLabel: frequencyLabel(group.frequency, group.intervalDays),
     startDate: settings.startDate,
     interestRate: group.interestRate,
-    orderLocked: group.orderLocked,
     createdAt: group.createdAt.toISOString(),
     launchedAt: group.launchedAt?.toISOString() ?? null,
     activatedAt: group.activatedAt?.toISOString() ?? null,
@@ -273,7 +272,7 @@ export async function groupDetail(groupId: string, viewerUserId: string, appOrig
             blockers: launchBlockers({
               slotCount: group.slotCount,
               occupied: group.slots.length,
-              orderLocked: group.orderLocked,
+              ordered: group.slots.every((s) => s.position != null),
               startDate: settings.startDate,
               today,
             }),

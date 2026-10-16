@@ -132,7 +132,6 @@ model Group {
   startDate    DateTime   @map("start_date") @db.Date
   /// Hundredths of a percent; 0 means no shortfall interest (R-SET-06).
   interestRate Int        @default(0) @map("interest_rate_bp")
-  orderLocked  Boolean    @default(false) @map("order_locked")
   launchedAt   DateTime?  @map("launched_at")
   activatedAt  DateTime?  @map("activated_at")
   completedAt  DateTime?  @map("completed_at")

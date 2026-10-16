@@ -45,7 +45,7 @@ A paluwagan is a rotating savings group. Every member contributes a fixed amount
                       ▼
    ┌──────────────► LOBBY ──────────────► CANCELLED
    │                  │   (organizer cancels)
-   │                  │ all slots filled + payout order locked + launch confirmed
+   │                  │ all slots filled + payout order set + launch confirmed
    │                  ▼
    │              LAUNCHED  (waiting; settings locked)
    │                  │ start date reached
@@ -136,8 +136,8 @@ No payout happens on the start date itself.
 |---|---|
 | R-LOB-09 | Any setup field may be edited while in LOBBY, subject to the same validation as §4. All members are notified of every change, including before/after values. |
 | R-LOB-10 | Slot count cannot go below the number of occupied slots (members + placeholders). When slot count changes, recalculate based on the stored amount mode: contribution mode → pot changes; pot mode → contribution changes (with R-AMT-02 rounding). |
-| R-LOB-11 | Any slot-count change resets the payout order (and unlocks it if locked). |
-| R-LOB-12 | Any member leaving, being kicked, or a placeholder being deleted after the payout order is locked also unlocks and resets it *(assumption)*. |
+| R-LOB-11 | Any slot-count change resets the payout order. |
+| R-LOB-12 | Any member leaving, being kicked, or a placeholder being deleted after the payout order is set also resets it *(assumption)*. |
 
 ### 5.3 Invite link flows
 
@@ -168,9 +168,9 @@ No payout happens on the start date itself.
 |---|---|
 | R-ORD-01 | Payout ordering becomes available only when **all slots are filled**. |
 | R-ORD-02 | The organizer can arrange the order manually or use **random shuffle**, as many times as they like. |
-| R-ORD-03 | The organizer **locks** the order to proceed. |
-| R-LCH-01 | After locking, the organizer sees a **launch summary**: all details, schedule with every payout date and recipient, member list. |
-| R-LCH-02 | Launch requires: all slots filled, payout order locked, start date still valid per R-SET-05 *(assumption; otherwise the organizer must edit the start date)*. |
+| R-ORD-03 | **Launching** makes the order final; there is no separate lock step (R-DEC-27). |
+| R-LCH-01 | Before launching, the organizer sees a **launch summary**: all details, schedule with every payout date and recipient, member list. |
+| R-LCH-02 | Launch requires: all slots filled, payout order set, start date still valid per R-SET-05 *(assumption; otherwise the organizer must edit the start date)*. |
 | R-LCH-03 | On launch → `LAUNCHED`. All settings are locked from this point onward. |
 | R-LCH-04 | When the start date is reached → `ACTIVE`, Contribution Period 1 opens, all members are notified. |
 
@@ -391,3 +391,4 @@ Test cases worth covering: the first recipient (all debt is post-payout), the la
 | R-DEC-24 | (R-SWP-01, R-SWP-03) A pending swap expires when either party's payout happens. The lock window and "already paid out" are re-checked when the swap is accepted and approved. |
 | R-DEC-25 | (R-SWP-04, R-DEC-12) Until `SWAP_REQUEST_EXPIRY_DAYS` has a value, pending swaps don't expire with time. |
 | R-DEC-26 | (§15.1) Round health compares the share of the pot collected (approved money) with the share of the period that has passed: **at risk** when collection is more than 10 points behind the calendar, **short** when the reminder window (`REMINDER_DAYS_BEFORE`) has started and the pot isn't full, otherwise **on track**. |
+| R-DEC-27 | (R-ORD-03, 2026-10-16) Locking and launching are one step. The organizer can shuffle or arrange the order until launch; launching makes the order final along with the settings. |

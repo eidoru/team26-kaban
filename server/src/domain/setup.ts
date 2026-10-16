@@ -161,18 +161,22 @@ export function settingChanges(before: GroupSettings, after: GroupSettings): Set
   return rows.filter((row) => row.before !== row.after);
 }
 
-/** Why the group can't launch yet (R-LCH-02), in the order the organizer should fix them. */
+/**
+ * Why the group can't launch yet (R-LCH-02), in the order the organizer should fix them. There is
+ * no separate lock step: launching makes the order final (R-ORD-03, R-DEC-27).
+ */
 export function launchBlockers(state: {
   slotCount: number;
   occupied: number;
-  orderLocked: boolean;
+  /** Every slot has a payout position. */
+  ordered: boolean;
   startDate: CalendarDate;
   today: CalendarDate;
 }): string[] {
   const blockers: string[] = [];
   const open = state.slotCount - state.occupied;
   if (open > 0) blockers.push(`Fill the ${open} open slot${open === 1 ? "" : "s"}.`);
-  else if (!state.orderLocked) blockers.push("Lock the payout order.");
+  else if (!state.ordered) blockers.push("Set the payout order.");
   if (state.startDate < earliestStartDate(state.today)) {
     blockers.push(`Move the start date to at least ${MIN_START_LEAD_DAYS} days from today.`);
   }

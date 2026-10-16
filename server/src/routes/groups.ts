@@ -7,7 +7,7 @@ import { resolveAppOrigin } from "../lib/origin.js";
 import { notifyGroupChangeSafe } from "../lib/realtimeNotify.js";
 import { cancelGroup, createGroup, editGroup, groupDetail } from "../services/groups.js";
 import { addPlaceholder, createClaimLink, createInviteLink, removeSlot, revokeClaimLink } from "../services/roster.js";
-import { launchGroup, lockOrder, setOrder, shuffleOrder } from "../services/launch.js";
+import { launchGroup, setOrder, shuffleOrder } from "../services/launch.js";
 import { cancelSubmission, reviewSubmission, submitPayment } from "../services/submissions.js";
 import { confirmReceipt, markHandedOver } from "../services/payouts.js";
 import { cancelDispute, raiseDispute, reviewDispute } from "../services/disputes.js";
@@ -127,7 +127,6 @@ router.delete(
 );
 router.put("/:id/order", validateBody(orderSchema), ...organizerAction((req, id, user) => setOrder(id, user, req.body.slotIds)));
 router.post("/:id/order/shuffle", ...organizerAction((_req, id, user) => shuffleOrder(id, user)));
-router.post("/:id/order/lock", ...organizerAction((_req, id, user) => lockOrder(id, user)));
 router.post("/:id/launch", ...organizerAction((_req, id, user) => launchGroup(id, user)));
 
 // --- Payments (§6.1). The browser uploads a proof photo first, then submits with its path.

@@ -92,8 +92,6 @@ export function describe(entry: {
       return T(`${actor} arranged the payout order`);
     case "order.shuffled":
       return T(`${actor} shuffled the payout order`);
-    case "order.locked":
-      return T(`${actor} locked the payout order`);
     case "order.reset":
       return T("The payout order was reset", typeof f.reason === "string" ? `${f.reason}.` : null);
     case "submission.created": {

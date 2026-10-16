@@ -81,15 +81,15 @@ describe("settingChanges (R-LOB-09)", () => {
 });
 
 describe("launchBlockers (R-LCH-02)", () => {
-  const ready = { slotCount: 5, occupied: 5, orderLocked: true, startDate: "2026-11-01", today: TODAY };
+  const ready = { slotCount: 5, occupied: 5, ordered: true, startDate: "2026-11-01", today: TODAY };
 
   it("is empty when the group can launch", () => {
     expect(launchBlockers(ready)).toEqual([]);
   });
 
-  it("asks to fill slots before locking the order", () => {
-    expect(launchBlockers({ ...ready, occupied: 3, orderLocked: false })).toEqual(["Fill the 2 open slots."]);
-    expect(launchBlockers({ ...ready, orderLocked: false })).toEqual(["Lock the payout order."]);
+  it("asks to fill slots before setting the order (R-DEC-27: no separate lock)", () => {
+    expect(launchBlockers({ ...ready, occupied: 3, ordered: false })).toEqual(["Fill the 2 open slots."]);
+    expect(launchBlockers({ ...ready, ordered: false })).toEqual(["Set the payout order."]);
   });
 
   it("flags a start date that has become too soon", () => {
