@@ -31,12 +31,9 @@ export interface Todo {
 export function TodoPanel({ todos }: { todos: Todo[] }) {
   return (
     <section aria-labelledby="todo-heading" className="animate-rise rounded-3xl border-2 border-brand-200 bg-brand-50 p-2 sm:p-3">
-      <div className="flex items-baseline justify-between gap-2 px-3 pb-2 pt-2">
-        <h2 id="todo-heading" className="text-xs font-bold uppercase tracking-wide text-brand-700">
-          To do
-        </h2>
-        <span className="text-xs font-bold text-brand-700">{todos.length}</span>
-      </div>
+      <h2 id="todo-heading" className="px-3 pb-2 pt-2 text-xs font-bold uppercase tracking-wide text-brand-700">
+        To do
+      </h2>
       <ol className="space-y-2">
         {todos.map((todo) => (
           // Two buttons (swaps) need the width, so only those rows let the buttons wrap under the text.

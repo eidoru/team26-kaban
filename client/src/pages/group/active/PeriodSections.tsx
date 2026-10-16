@@ -102,7 +102,6 @@ const CARD_THEMES = {
   collecting: {
     card: "bg-brand-700 text-white",
     muted: "text-brand-100",
-    pill: "bg-sun-300 text-brand-900",
     track: "bg-brand-900/50",
     fill: "bg-sun-300",
     fillPending: "bg-sun-300/40",
@@ -110,7 +109,6 @@ const CARD_THEMES = {
   payoutDay: {
     card: "bg-sun-400 text-sun-950",
     muted: "text-sun-900",
-    pill: "bg-sun-950 text-sun-200",
     track: "bg-sun-950/15",
     fill: "bg-sun-950",
     fillPending: "bg-sun-950/40",
@@ -125,41 +123,26 @@ export function PeriodCard({ detail, stats }: { detail: GroupDetail; stats?: Gro
   const pendingPercent = Math.min(100 - percent, Math.round((period.pendingTotal / period.expected) * 100));
   const payoutDay = (daysUntil(period.payoutDate) ?? 1) <= 0;
   const theme = CARD_THEMES[payoutDay ? "payoutDay" : "collecting"];
-  const who = recipient?.isViewer ? "You" : (recipient?.name ?? "—");
+  const who = recipient?.isViewer ? "you" : (recipient?.name ?? "—");
   return (
     <section
       aria-labelledby="current-round"
       className={`rounded-3xl p-5 shadow-card transition-colors sm:p-6 ${theme.card}`}
     >
-      {/* The stage heads the card (the round number is under the page title). The organizer sees the
-          round's health only when it needs attention: "on track" is the normal state, not news. */}
+      {/* Two facts: the money so far, and where it goes. The color is the stage (green collecting,
+          amber on payout day). The organizer sees the round's health only when it needs attention. */}
       <h2 id="current-round" className="sr-only">
         Round {period.number} of {detail.group.slotCount}
       </h2>
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ${theme.pill}`}>
-          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" aria-hidden />
-          {payoutDay ? "Payout day" : `Collecting · until ${formatMonthDay(period.payoutDate)}`}
-        </span>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <p className="font-heading text-3xl font-bold tabular-nums">
+          {formatPeso(period.approvedTotal)}
+          <span className={`text-base font-semibold ${theme.muted}`}> of {formatPeso(period.expected)} collected</span>
+        </p>
         {open && detail.viewer.isOrganizer && open.health !== "ON_TRACK" && <HealthChip health={open.health} />}
       </div>
-      <div className="flex items-center gap-3">
-        {recipient && <Avatar name={recipient.name} size="md" placeholder={recipient.kind === "PLACEHOLDER"} />}
-        <p className="min-w-0">
-          <span className={`block text-sm ${theme.muted}`}>{payoutDay ? "The pot goes out today to" : "This pot goes to"}</span>
-          <span className="font-heading block truncate text-xl font-bold">{who}</span>
-          {/* The recipient has their own projection in "You"; everyone else sees it here. */}
-          {open?.projectedPayout != null && open.projectedPayout < detail.group.pot && !recipient?.isViewer && (
-            <span className={`block text-xs ${theme.muted}`}>About {formatPeso(open.projectedPayout)} after what they owe</span>
-          )}
-        </p>
-      </div>
-      <p className="font-heading mt-4 text-3xl font-bold tabular-nums">
-        {formatPeso(period.approvedTotal)}
-        <span className={`text-base font-semibold ${theme.muted}`}> of {formatPeso(period.expected)} collected</span>
-      </p>
       <div
-        className={`mt-2 flex h-2.5 overflow-hidden rounded-full ${theme.track}`}
+        className={`mt-3 flex h-2.5 overflow-hidden rounded-full ${theme.track}`}
         role="progressbar"
         aria-valuenow={percent}
         aria-valuemin={0}
@@ -169,9 +152,13 @@ export function PeriodCard({ detail, stats }: { detail: GroupDetail; stats?: Gro
         <div className={`h-full ${theme.fill}`} style={{ width: `${percent}%` }} />
         <div className={`h-full ${theme.fillPending}`} style={{ width: `${pendingPercent}%` }} />
       </div>
-      {period.pendingTotal > 0 && (
-        <p className={`mt-2 text-xs ${theme.muted}`}>{formatPeso(period.pendingTotal)} more is waiting for review.</p>
-      )}
+      <div className="mt-5 flex items-center gap-3">
+        {recipient && <Avatar name={recipient.name} size="md" placeholder={recipient.kind === "PLACEHOLDER"} />}
+        <p className="min-w-0 text-base font-semibold">
+          Goes to <span className="font-heading font-bold">{who}</span>{" "}
+          {payoutDay ? "today" : `on ${formatMonthDay(period.payoutDate)}`}
+        </p>
+      </div>
       {payoutDay && (
         <p className={`mt-2 text-xs ${theme.muted}`}>Payments approved before midnight still count; then the round closes.</p>
       )}
@@ -182,14 +169,17 @@ export function PeriodCard({ detail, stats }: { detail: GroupDetail; stats?: Gro
 /** One size for whatever ends a row in "This round", a button or a status badge, so rows line up. */
 const TRAILING = "h-9 min-w-24 shrink-0 items-center justify-center px-3";
 
+/** A row's standing as one badge. Money waiting for review shows as "In review" (the amount is in the row's sheet). */
 function StatusChip({ standing }: { standing: PeriodSlot }) {
+  const kind = standing.status !== "PAID" && standing.pending > 0 ? "REVIEW" : standing.status;
   const styles = {
     PAID: "bg-brand-100 text-brand-800",
     PARTIAL: "bg-sun-100 text-sun-800",
     UNPAID: "bg-ink-100 text-ink-600",
+    REVIEW: "bg-sky-50 text-sky-900",
   } as const;
-  const label = { PAID: "Paid", PARTIAL: "Partly paid", UNPAID: "Not paid" }[standing.status];
-  return <span className={`inline-flex rounded-full text-sm font-bold ${TRAILING} ${styles[standing.status]}`}>{label}</span>;
+  const label = { PAID: "Paid", PARTIAL: "Partly paid", UNPAID: "Not paid", REVIEW: "In review" }[kind];
+  return <span className={`inline-flex rounded-full text-sm font-bold ${TRAILING} ${styles[kind]}`}>{label}</span>;
 }
 
 /**
@@ -235,15 +225,17 @@ export function PeriodStatusList({
                   {standing.status === "PAID"
                     ? formatPeso(standing.approved)
                     : `${formatPeso(standing.approved)} of ${formatPeso(standing.due)}`}
-                  {standing.pending > 0 && (
-                    <span className="text-ink-600"> · {formatPeso(standing.pending)} waiting for review</span>
-                  )}
                 </span>
               </span>
             </>
           );
           const remindable =
-            onRemind && detail.viewer.isOrganizer && slot.kind === "MEMBER" && !slot.isViewer && standing.status !== "PAID";
+            onRemind &&
+            detail.viewer.isOrganizer &&
+            slot.kind === "MEMBER" &&
+            !slot.isViewer &&
+            standing.status !== "PAID" &&
+            standing.pending === 0;
           const remindedRecently = standing.remindedRecently;
           // Each row's one action is a labelled button, not a tappable row with a bare chevron.
           return (
@@ -367,52 +359,6 @@ export function MyPayments({
   );
 }
 
-/**
- * Who owes the organizer, and how much (§8, R-DEC-06: everyone sees it). Hidden when nobody owes
- * anything. `onPay` opens a debt payment for the viewer's own row, or a placeholder's (organizer).
- */
-export function DebtsList({ detail, onPay }: { detail: GroupDetail; onPay: (slot: SlotView) => void }) {
-  const owing = detail.slots
-    .map((slot) => ({ slot, total: slot.debt.principal + slot.debt.interest }))
-    .filter((row) => row.total > 0)
-    .sort((a, b) => b.total - a.total);
-  if (owing.length === 0) return null;
-  const canPay = (slot: SlotView) => slot.isViewer || (detail.viewer.isOrganizer && slot.kind === "PLACEHOLDER");
-  return (
-    <section aria-labelledby="debts-heading">
-      <h2 id="debts-heading" className={ui.sectionHeading}>
-        Debts
-      </h2>
-      <p className={`${ui.sectionSubtitle} mb-3`}>
-        Shortfalls {detail.group.organizerName} covered{detail.group.interestRate > 0 ? ", with interest" : ""}.
-      </p>
-      <ul className="divide-y divide-ink-100 overflow-hidden rounded-3xl border border-ink-200 bg-white">
-        {owing.map(({ slot, total }) => (
-          <li key={slot.id} className={`flex min-h-16 items-center gap-3 px-4 py-3 ${slot.isViewer ? "bg-brand-50" : ""}`}>
-            <Avatar name={slot.name} size="md" placeholder={slot.kind === "PLACEHOLDER"} />
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-bold text-ink-900">
-                {slot.name}
-              </span>
-              <span className="block text-xs text-ink-500 tabular-nums">
-                {formatPeso(slot.debt.principal)} unpaid
-                {slot.debt.interest > 0 && ` + ${formatPeso(slot.debt.interest)} interest`}
-              </span>
-            </span>
-            <span className="flex shrink-0 flex-col items-end gap-1">
-              <span className="font-heading text-base font-bold tabular-nums text-danger-700">{formatPeso(total)}</span>
-              {canPay(slot) && (
-                <button type="button" onClick={() => onPay(slot)} className={`${ui.btnSecondarySm} min-h-9`}>
-                  {slot.isViewer ? "Pay" : "Record"}
-                </button>
-              )}
-            </span>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
 
 /** A dispute's outcome under its payment. */
 function DisputeLine({

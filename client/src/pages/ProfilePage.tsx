@@ -20,7 +20,6 @@ function FormAlerts({ success, error }: { success?: string; error?: string }) {
 function SecurityRow({
   title,
   value,
-  hint,
   open,
   onToggle,
   panelId,
@@ -28,7 +27,6 @@ function SecurityRow({
 }: {
   title: string;
   value: string;
-  hint?: string;
   open: boolean;
   onToggle: () => void;
   panelId: string;
@@ -40,11 +38,6 @@ function SecurityRow({
         <div className="min-w-0">
           <p className="text-sm font-bold text-ink-900">{title}</p>
           <p className="mt-0.5 truncate text-sm text-ink-600">{value}</p>
-          {hint && (
-            <p className={`mt-1 text-xs text-ink-500 ${open ? "invisible" : ""}`} aria-hidden={open}>
-              {hint}
-            </p>
-          )}
         </div>
         <button
           type="button"
@@ -221,10 +214,7 @@ export function ProfilePage() {
 
   return (
     <div className={`${ui.page} space-y-8`}>
-      <div>
-        <h1 className={ui.pageTitle}>Profile</h1>
-        <p className={ui.pageSubtitle}>How you appear in groups and how you sign in</p>
-      </div>
+      <h1 className={ui.pageTitle}>Profile</h1>
 
       <div className="overflow-hidden rounded-3xl border border-ink-200 bg-white shadow-card">
         <div className="relative overflow-hidden bg-brand-700 p-6 text-white sm:p-8">
@@ -237,9 +227,6 @@ export function ProfilePage() {
               <p className="mt-0.5 truncate text-sm text-brand-100">{user?.contact || "No contact added"}</p>
             </div>
           </div>
-          <p className="relative mt-5 text-sm text-brand-50">
-            Your display name and contact are visible to members in your paluwagan groups.
-          </p>
         </div>
 
         <div className="p-6 sm:p-8">
@@ -285,16 +272,12 @@ export function ProfilePage() {
       </div>
 
       <section>
-        <div className="mb-4">
-          <h2 className={ui.sectionHeading}>Account security</h2>
-          <p className={`mt-1 text-sm ${ui.muted}`}>Change sign-in details when you need to</p>
-        </div>
+        <h2 className={`${ui.sectionHeading} mb-4`}>Account security</h2>
 
         <div className="space-y-3">
           <SecurityRow
             title="Email address"
             value={user?.email ?? "…"}
-            hint="Used to sign in and receive notifications"
             open={emailOpen}
             onToggle={toggleEmailOpen}
             panelId={emailPanelId}
@@ -340,7 +323,6 @@ export function ProfilePage() {
           <SecurityRow
             title="Password"
             value="••••••••"
-            hint="Updating your password signs out other devices"
             open={passwordOpen}
             onToggle={togglePasswordOpen}
             panelId={passwordPanelId}
@@ -410,10 +392,7 @@ export function ProfilePage() {
 
       {demoToolsAvailable && (
         <section>
-          <div className="mb-4">
-            <h2 className={ui.sectionHeading}>Developer</h2>
-            <p className={`mt-1 text-sm ${ui.muted}`}>Testing aids. Only available on builds with demo tools enabled.</p>
-          </div>
+          <h2 className={`${ui.sectionHeading} mb-4`}>Developer</h2>
           <div className={`${ui.sectionCard} space-y-2`}>
             <ToggleSwitch
               id="showDemoTools"
@@ -421,10 +400,7 @@ export function ProfilePage() {
               onChange={setDemoToolsOn}
               label="Show demo tools"
             />
-            <p className="text-xs text-ink-500">
-              Adds a &ldquo;Start now&rdquo; button to launched paluwagans you organize, so they start without waiting
-              for the start date. Saved in this browser only.
-            </p>
+            <p className="text-xs text-ink-500">Testing shortcuts, in this browser only.</p>
           </div>
         </section>
       )}

@@ -1,6 +1,6 @@
 import { CircleAlert, CircleCheck, TriangleAlert } from "lucide-react";
 import type { GroupDetail, GroupStats, Health } from "../../../api/client";
-import { dueHint, formatDueDate, formatShortDate } from "../../../lib/dates";
+import { dueHint, formatShortDate } from "../../../lib/dates";
 import { formatPeso } from "../../../lib/money";
 import { ui } from "../../../lib/ui";
 
@@ -40,13 +40,8 @@ export function MyStanding({ detail, stats }: { detail: GroupDetail; stats?: Gro
     tiles.push({
       label: `Round ${detail.period!.number}`,
       value: paid ? "Paid" : `${formatPeso(standing.approved)} of ${formatPeso(standing.due)}`,
-      note: paid
-        ? `${formatPeso(standing.approved)} in`
-        : standing.pending > 0
-          ? `${formatPeso(standing.pending)} waiting for review`
-          : hint
-            ? `Due ${hint.label}`
-            : "",
+      // Money in review is shown once, in the To do item; here, just when it's due.
+      note: paid ? `${formatPeso(standing.approved)} in` : hint ? `Due ${hint.label}` : "",
       tone: paid ? "text-brand-700" : undefined,
     });
   }
@@ -58,16 +53,18 @@ export function MyStanding({ detail, stats }: { detail: GroupDetail; stats?: Gro
     tiles.push({
       label: "Your payout",
       value: got ? `Got ${formatPeso(turn.net!)}` : formatPeso(turn.projected ?? detail.group.pot),
-      note: `Round ${turn.round} · ${formatShortDate(turn.payoutDate)}`,
+      // The round number is turn-speak; the date is what a member plans around.
+      note: `${got ? "Received" : "Expected"} ${formatShortDate(turn.payoutDate, true)}`,
     });
   }
   if (tiles.length === 0) return null;
   return (
     <section aria-labelledby="standing-heading" className="rounded-3xl border border-ink-200 bg-white p-5">
-      <h2 id="standing-heading" className="text-xs font-bold uppercase tracking-wide text-ink-500">
+      {/* The tiles say "you" already; the heading is for screen readers. */}
+      <h2 id="standing-heading" className="sr-only">
         You
       </h2>
-      <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-4 sm:grid-cols-3">
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-4 sm:grid-cols-3">
         {tiles.map((t) => (
           <div key={t.label} className="min-w-0">
             <dt className="text-xs text-ink-500">{t.label}</dt>
@@ -96,16 +93,11 @@ export function YourTurn({ detail, stats }: { detail: GroupDetail; stats: GroupS
           <p className="font-heading mt-1 text-2xl font-bold tabular-nums text-ink-900">
             {got ? `You got ${formatPeso(turn.net!)}` : formatPeso(turn.projected ?? pot)}
           </p>
+          {/* When, briefly; the amount above already says what it comes to. */}
           <p className="mt-0.5 text-sm text-ink-600">
             {got
-              ? `Round ${turn.round} paid out on ${formatDueDate(turn.payoutDate)}.`
-              : `${formatDueDate(turn.payoutDate)}${hint && !hint.overdue ? ` · ${hint.label}` : ""}${
-                  turn.projected != null && turn.projected < pot
-                    ? `. That's the ${formatPeso(pot)} pot less what you owe now; paying it off first raises it.`
-                    : turn.projected != null
-                      ? ". The full pot, if you keep paying in full."
-                      : ""
-                }`}
+              ? `Paid out ${formatShortDate(turn.payoutDate, true)}`
+              : `${formatShortDate(turn.payoutDate, true)}${hint && !hint.overdue ? ` · ${hint.label}` : ""}`}
           </p>
         </div>
       </div>

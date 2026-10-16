@@ -94,8 +94,7 @@ function DisputeForm({
         }}
       >
         <p className="text-sm text-ink-600">
-          Ask {detail.group.organizerName} to change the amount: lower it to fix a mistake or get money back, or raise it
-          if you paid more. It has to be settled {payout}; if it isn&apos;t, {formatPeso(current)} stands.
+          {detail.group.organizerName} decides {payout}. If not, {formatPeso(current)} stands.
         </p>
         <AmountField label="Correct amount" value={amountText} onChange={setAmountText} error={amountError} />
         {refund > 0 && !amountError && (

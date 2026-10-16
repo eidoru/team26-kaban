@@ -17,11 +17,12 @@ import {
 } from "lucide-react";
 import { api, type ActivityCategory, type ActivityEntry } from "../../api/client";
 import { formatDayHeading } from "../../lib/dates";
-import { groupKey, useGroup } from "../../lib/groupQueries";
+import { groupKey } from "../../lib/groupQueries";
 import { ui } from "../../lib/ui";
+import { useGroupShell } from "./groupShell";
 
 const FILTERS: { value: ActivityCategory | null; label: string }[] = [
-  { value: null, label: "All" },
+  { value: null, label: "All activity" },
   { value: "payments", label: "Payments" },
   { value: "payouts", label: "Payouts" },
   { value: "debts", label: "Debts" },
@@ -47,7 +48,7 @@ const ICONS: Record<ActivityCategory, { icon: LucideIcon; tone: string }> = {
  */
 export function ActivityPage() {
   const { id = "" } = useParams<{ id: string }>();
-  const { data: detail } = useGroup(id);
+  const { detail, navMode } = useGroupShell();
   const [category, setCategory] = useState<ActivityCategory | null>(null);
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isPending } = useInfiniteQuery({
     queryKey: [...groupKey(id), "activity", category],
@@ -68,33 +69,38 @@ export function ActivityPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <Link to={`/groups/${id}`} className={`${ui.btnGhost} mb-4`}>
-          <ArrowLeft className="h-4 w-4" aria-hidden />
-          {detail?.group.name ?? "Back"}
-        </Link>
-        <h1 className={ui.pageTitle}>Activity</h1>
-        <p className={`${ui.pageSubtitle} flex items-start gap-2`}>
-          <Lock className="mt-1 h-4 w-4 shrink-0" aria-hidden />
-          Everything that happens here, visible to every member. Entries can&apos;t be changed or deleted.
-        </p>
-      </div>
+      {/* After launch the view navigation names this page; before it, the page has its own header. */}
+      {navMode ? (
+        <h2 className="sr-only">Activity</h2>
+      ) : (
+        <div>
+          <Link to={`/groups/${id}`} className={`${ui.btnGhost} mb-4`}>
+            <ArrowLeft className="h-4 w-4" aria-hidden />
+            {detail.group.name}
+          </Link>
+          <h1 className={ui.pageTitle}>Activity</h1>
+          <p className={`${ui.pageSubtitle} flex items-start gap-2`}>
+            <Lock className="mt-1 h-4 w-4 shrink-0" aria-hidden />
+            Everything that happens here, visible to every member. Entries can&apos;t be changed or deleted.
+          </p>
+        </div>
+      )}
 
-      <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0" role="group" aria-label="Show">
-        {FILTERS.map((f) => (
-          <button
-            key={f.label}
-            type="button"
-            onClick={() => setCategory(f.value)}
-            aria-pressed={category === f.value}
-            className={`min-h-9 shrink-0 rounded-full px-4 text-sm font-bold transition-colors ${
-              category === f.value ? "bg-brand-700 text-white" : "border-2 border-ink-200 bg-white text-ink-700 hover:border-brand-200"
-            }`}
-          >
-            {f.label}
-          </button>
-        ))}
-      </div>
+      {/* One quiet control instead of a row of pills: the filter is occasional, the log is the content. */}
+      <label className="flex items-center justify-end gap-2 text-sm font-semibold text-ink-600">
+        Show
+        <select
+          value={category ?? ""}
+          onChange={(e) => setCategory((e.target.value || null) as ActivityCategory | null)}
+          className="min-h-10 rounded-full border-2 border-ink-200 bg-white pl-4 pr-9 text-sm font-bold text-ink-900 hover:border-brand-200 focus:border-brand-500 focus:outline-none"
+        >
+          {FILTERS.map((f) => (
+            <option key={f.label} value={f.value ?? ""}>
+              {f.label}
+            </option>
+          ))}
+        </select>
+      </label>
 
       {isPending ? (
         <div className="space-y-3" aria-busy>

@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useState } from "react";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeftRight,
@@ -9,7 +9,6 @@ import {
   CalendarClock,
   CircleCheck,
   ClipboardCheck,
-  CloudOff,
   HandCoins,
   Hourglass,
   Rocket,
@@ -29,15 +28,13 @@ import { ActionBar } from "../../components/flow/ActionBar";
 import { NowPanel } from "../../components/flow/NowPanel";
 import { TodoBarButton, TodoPanel, type Todo } from "../../components/flow/TodoPanel";
 import { REMINDER_DAYS_BEFORE } from "@domain/constants";
-import { can } from "@domain/lifecycle";
 import { useDialog } from "../../context/useDialog";
 import { daysUntil, dueHint, formatDueDate } from "../../lib/dates";
 import { useDemoToolsSetting } from "../../lib/devTools";
-import { groupKey, useGroup, useGroupActions } from "../../lib/groupQueries";
+import { groupKey, useGroupActions } from "../../lib/groupQueries";
 import { invalidateHomeLists } from "../../lib/homeQueries";
 import { formatPeso } from "../../lib/money";
 import { ui } from "../../lib/ui";
-import { useGroupRealtime } from "../../lib/useGroupRealtime";
 import { GroupDetails } from "./GroupDetails";
 import { InviteLinkPanel, PlaceholderSheet, SlotSheet } from "./GroupSheets";
 import { PayoutSchedule } from "./PayoutSchedule";
@@ -45,70 +42,30 @@ import { currentOrder } from "./slots";
 import { PaySheet, type PayMode } from "./active/PaySheet";
 import { PayoutSheet } from "./active/PayoutSheet";
 import { debtReportable, owedBy, payoutsToActOnFor, reviewItems, standingOf, type ReviewItem } from "./active/period";
-import { DebtsList, MyPayments, PayoutStageCard, PeriodCard, PeriodStatusList, RefundsOwed } from "./active/PeriodSections";
+import { MyPayments, PayoutStageCard, PeriodCard, PeriodStatusList, RefundsOwed } from "./active/PeriodSections";
 import { DisputeSheet } from "./active/DisputeSheet";
 import { SwapSheet, SwapsList } from "./swaps/SwapSections";
 import { Recap } from "./records/RecordsSections";
 import { MyStanding, YourTurn } from "./dashboard/StatsSections";
 import { swapToActOn } from "./swaps/swaps";
 import { ReviewSheet } from "./active/ReviewSheet";
-import { PlaceholderInvites, SlotsList } from "./SlotsList";
+import { MembersList, SlotsList } from "./SlotsList";
+import { STATE_LABELS, useGroupShell } from "./groupShell";
 
 /** Only end states get a label; while it's being set up or runs, the page itself shows the state. */
-const STATE_LABELS: Partial<Record<GroupDetail["group"]["state"], string>> = {
-  COMPLETED: "Completed",
-  COMPLETED_WITH_OUTSTANDING_DEBT: "Completed, debts open",
-  CANCELLED: "Cancelled",
-};
+export type GroupViewName = "dashboard" | "schedule" | "members";
 
-export function GroupPage() {
-  const { id = "" } = useParams<{ id: string }>();
-  const queryClient = useQueryClient();
-  const { realtimeActive } = useGroupRealtime({
-    groupId: id,
-    enabled: !!id,
-    onUpdate: () => void queryClient.invalidateQueries({ queryKey: groupKey(id) }),
-  });
-  // Poll only while the live channel isn't up.
-  const { data: detail, error, refetch, isFetching } = useGroup(id, realtimeActive ? false : 15_000);
-
-  if (error instanceof ApiError && error.status === 404) {
-    return (
-      <div className={ui.emptyState}>
-        <p className="font-heading text-lg font-bold text-ink-900">This paluwagan isn&apos;t available</p>
-        <p className={`mt-1 text-sm ${ui.muted}`}>It may have been cancelled, or you&apos;re no longer a member.</p>
-        <Link to="/home" className={`mt-5 ${ui.btnPrimarySm}`}>
-          Go home
-        </Link>
-      </div>
-    );
-  }
-  if (error && !detail) {
-    return (
-      <div className={`${ui.emptyState} flex flex-col items-center`} role="alert">
-        <CloudOff className="h-8 w-8 text-danger-600" aria-hidden />
-        <p className="font-heading mt-3 text-lg font-bold text-ink-900">Couldn&apos;t load this paluwagan</p>
-        <button type="button" onClick={() => void refetch()} disabled={isFetching} className={`mt-5 ${ui.btnPrimarySm}`}>
-          {isFetching ? "Retrying…" : "Try again"}
-        </button>
-      </div>
-    );
-  }
-  if (!detail) return <GroupSkeleton />;
-  return <GroupView detail={detail} />;
+/**
+ * One paluwagan, inside GroupShell (which loads it). Before launch it's a single page; after,
+ * `view` picks Dashboard, Schedule or Members, and the sheets are shared by all three.
+ */
+export function GroupPage({ view = "dashboard" }: { view?: GroupViewName }) {
+  const { detail, navMode } = useGroupShell();
+  if (!navMode && view !== "dashboard") return <Navigate to={`/groups/${detail.group.id}`} replace />;
+  return <GroupView detail={detail} navMode={navMode} view={view} />;
 }
 
-function GroupSkeleton() {
-  return (
-    <div className="space-y-6" aria-busy>
-      <div className={`${ui.skeleton} h-16 w-2/3`} />
-      <div className={`${ui.skeleton} h-36`} />
-      <div className={`${ui.skeleton} h-64`} />
-    </div>
-  );
-}
-
-function GroupView({ detail }: { detail: GroupDetail }) {
+function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: boolean; view: GroupViewName }) {
   const { group, viewer } = detail;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -486,13 +443,10 @@ function GroupView({ detail }: { detail: GroupDetail }) {
         id: "pay",
         icon: HandCoins,
         title: mine.approved + mine.pending > 0 ? `Pay the remaining ${amount}` : `Pay your ${amount}`,
-        detail: (
-          <>
-            {due}
-            {mine.pending > 0 && ` ${formatPeso(mine.pending)} is already waiting for review.`}
-            {isOrganizer && " Record it once your share is in the pot."}
-          </>
-        ),
+        // The one place a member sees their own money in review, beside what's still to pay.
+        detail: [mine.pending > 0 && `${formatPeso(mine.pending)} in review`, due.replace(/\.$/, "")]
+          .filter(Boolean)
+          .join(" · "),
         action: { label: isOrganizer ? "Record" : "Report", onClick: () => pay(viewer.slotId, "CONTRIBUTION") },
       });
     }
@@ -631,67 +585,73 @@ function GroupView({ detail }: { detail: GroupDetail }) {
     now = <NowPanel tone="calm" icon={Ban} eyebrow="Cancelled" title="This paluwagan was cancelled" body="The organizer cancelled it before it launched." />;
   }
 
+  const schedule = (
+    <PayoutSchedule
+      detail={detail}
+      canArrange={isOrganizer && inLobby && full}
+      draft={orderDraft}
+      pending={pending}
+      onDraftChange={setOrderDraft}
+      onShuffle={() => void run("shuffle", () => api.shuffleOrder(group.id))}
+      onSaveOrder={(slotIds) =>
+        void run("order", () => api.setOrder(group.id, slotIds)).then((saved) => saved && setOrderDraft(null))
+      }
+      onSelect={group.state === "ACTIVE" ? undefined : selectSlot}
+      onOpenPayout={setPayoutRound}
+      onSwap={group.state === "ACTIVE" ? (slot) => setSwapWithSlotId(slot.id) : undefined}
+    />
+  );
+
   return (
     <div className="min-w-0 space-y-8">
-      {/* The terms are in Details; the header is the name, plus the round while it runs. */}
-      <header>
-        {STATE_LABELS[group.state] && (
-          <p className="mb-1 text-xs font-bold uppercase tracking-wide text-ink-500">{STATE_LABELS[group.state]}</p>
-        )}
-        <h1 className={ui.pageTitle}>{group.name}</h1>
-        {detail.period && (
-          <p className="mt-1 text-sm text-ink-500">
-            Round {detail.period.number} of {group.slotCount}
-          </p>
-        )}
-      </header>
-
-      {/* Once it runs, wide screens split the page: this round's work in the main column, reference
-          (schedule, details, page links) in a side column. Phones and the lobby stay one column. */}
-      <div className={started ? "lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start lg:gap-8" : ""}>
-        <div className="min-w-0 space-y-8">
-          {/* Members see their own numbers first, then what to do; the organizer sees the round first. */}
-          {started && !isOrganizer && <MyStanding detail={detail} stats={stats} />}
-          {!isOrganizer && now}
-          {detail.period && <PeriodCard detail={detail} stats={stats} />}
-          {/* Any earlier payout still on its way, with where it stands. */}
-          {[...detail.payouts]
-            .reverse()
-            .filter((p) => p.status !== "CONFIRMED")
-            .map((p) => (
-              <PayoutStageCard key={p.round} detail={detail} payout={p} onOpen={() => setPayoutRound(p.round)} />
-            ))}
-          {isOrganizer && now}
-          {error && (
-            <p className={ui.error} role="alert">
-              {error.message}{" "}
-              <button type="button" onClick={clearError} className="underline">
-                Dismiss
+      {!navMode ? (
+        // Before launch (and once cancelled): one page, top to bottom.
+        <>
+          <header>
+            {STATE_LABELS[group.state] && (
+              <p className="mb-1 text-xs font-bold uppercase tracking-wide text-ink-500">{STATE_LABELS[group.state]}</p>
+            )}
+            <h1 className={ui.pageTitle}>{group.name}</h1>
+          </header>
+          {now}
+      {error && (
+        <p className={ui.error} role="alert">
+          {error.message}{" "}
+          <button type="button" onClick={clearError} className="underline">
+            Dismiss
+          </button>
+        </p>
+      )}
+          {/* Once everyone has a turn, the schedule lists every member too, so it replaces the member list. */}
+          {!ordered && (
+            <SlotsList
+              detail={detail}
+              onSelect={selectSlot}
+              onOpenSlot={isOrganizer && inLobby ? () => setInviteOpen(true) : undefined}
+            />
+          )}
+          {schedule}
+          <GroupDetails detail={detail} onCancel={() => void cancelGroup()} />
+          {inLobby && !isOrganizer && (
+            <div className="text-center">
+              <button type="button" onClick={() => void leave()} className={ui.btnDangerGhost}>
+                Leave this paluwagan
               </button>
-            </p>
+            </div>
           )}
-
-          {detail.period && (
-            <>
-              <PeriodStatusList
-                detail={detail}
-                pending={pending}
-                onRecord={(slot) => pay(slot.id, "CONTRIBUTION")}
-                onRemind={(slot) => void run(`remind-${slot.id}`, () => api.remindSlot(group.id, slot.id))}
-              />
-            </>
-          )}
-          {/* Members have their payout in "You"; the organizer's turn card stays unless it's this round. */}
-          {isOrganizer && stats && stats.myTurn?.round !== detail.period?.number && <YourTurn detail={detail} stats={stats} />}
-          <DebtsList detail={detail} onPay={(slot) => pay(slot.id, "DEBT_PAYMENT")} />
-          <RefundsOwed detail={detail} />
-          <MyPayments
-            detail={detail}
-            pending={pending}
-            onWithdraw={(s) => void withdraw(s)}
-            onDispute={(s) => setDisputeForId(s.id)}
-            onWithdrawDispute={(d) => void withdrawDispute(d)}
-          />
+        </>
+      ) : view === "schedule" ? (
+        // Schedule: the order and when, and the swaps that change it.
+        <>
+      {error && (
+        <p className={ui.error} role="alert">
+          {error.message}{" "}
+          <button type="button" onClick={clearError} className="underline">
+            Dismiss
+          </button>
+        </p>
+      )}
+          {schedule}
           <SwapsList
             detail={detail}
             hideId={nowSwapId}
@@ -702,61 +662,88 @@ function GroupView({ detail }: { detail: GroupDetail }) {
             onDeny={(sw) => void denySwap(sw)}
             onCancel={(sw) => swapAction(sw, () => api.cancelSwap(group.id, sw.id))}
           />
-          {(group.state === "COMPLETED" || group.state === "COMPLETED_WITH_OUTSTANDING_DEBT") && <Recap detail={detail} />}
-          {/* Once everyone has a turn, the schedule lists every member too, so it replaces the member list. */}
-          {!ordered && (
-            <SlotsList
-              detail={detail}
-              onSelect={selectSlot}
-              onOpenSlot={isOrganizer && inLobby ? () => setInviteOpen(true) : undefined}
-            />
-          )}
-        </div>
-        {/* Beside the main column only once the page splits (running); stacked below it otherwise. */}
-        <aside aria-label="About this paluwagan" className={`mt-8 min-w-0 space-y-8 ${started ? "lg:mt-0" : ""}`}>
-          <PayoutSchedule
+        </>
+      ) : view === "members" ? (
+        // Members: everyone once, with what they owe and what you can do for them.
+        <>
+      {error && (
+        <p className={ui.error} role="alert">
+          {error.message}{" "}
+          <button type="button" onClick={clearError} className="underline">
+            Dismiss
+          </button>
+        </p>
+      )}
+          <MembersList
             detail={detail}
-            canArrange={isOrganizer && inLobby && full}
-            draft={orderDraft}
-            pending={pending}
-            onDraftChange={setOrderDraft}
-            onShuffle={() => void run("shuffle", () => api.shuffleOrder(group.id))}
-            onSaveOrder={(slotIds) =>
-              void run("order", () => api.setOrder(group.id, slotIds)).then((saved) => saved && setOrderDraft(null))
-            }
-            onSelect={selectSlot}
-            onOpenPayout={setPayoutRound}
+            onPayDebt={(slot) => pay(slot.id, "DEBT_PAYMENT")}
+            onInvite={(slot) => setSelectedSlotId(slot.id)}
           />
-          {/* After launch, claim links are how the organizer brings someone in (R-CLM-03). */}
-          {isOrganizer && !inLobby && can.claimPlaceholder(group.state) && (
-            <PlaceholderInvites detail={detail} onInvite={(slot) => setSelectedSlotId(slot.id)} />
-          )}
-          <GroupDetails detail={detail} onCancel={() => void cancelGroup()} />
-
-          {inLobby && !isOrganizer && (
-            <div className="text-center">
-              <button type="button" onClick={() => void leave()} className={ui.btnDangerGhost}>
-                Leave this paluwagan
-              </button>
-            </div>
-          )}
-          {/* Testing aids stay out of the real flow: last, and marked as demo. */}
-          {group.state === "ACTIVE" && isOrganizer && demoTools && detail.period && (
-            <section aria-labelledby="demo-heading" className="rounded-3xl border-2 border-dashed border-ink-300 p-5">
-              <h2 id="demo-heading" className="text-xs font-bold uppercase tracking-wide text-ink-500">
-                Demo tools
-              </h2>
-              <p className="mt-1 text-sm text-ink-600">Skip ahead without waiting for the calendar. Only you see this.</p>
-              <button type="button" onClick={() => void closeRoundNow()} className={`${ui.btnSecondarySm} mt-3`}>
-                Close round {detail.period.number} now
-              </button>
-            </section>
-          )}
-        </aside>
-      </div>
+        </>
+      ) : (
+        // Dashboard: members see their own numbers first, then what to do; the organizer the round first.
+        // The terms sit beside it on wide screens, and at the end on phones.
+        <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_17rem] lg:items-start lg:gap-8">
+          <div className="min-w-0 space-y-8">
+            {started && !isOrganizer && <MyStanding detail={detail} stats={stats} />}
+            {!isOrganizer && now}
+            {detail.period && <PeriodCard detail={detail} stats={stats} />}
+            {/* Any earlier payout still on its way, with where it stands. */}
+            {[...detail.payouts]
+              .reverse()
+              .filter((p) => p.status !== "CONFIRMED")
+              .map((p) => (
+                <PayoutStageCard key={p.round} detail={detail} payout={p} onOpen={() => setPayoutRound(p.round)} />
+              ))}
+            {isOrganizer && now}
+        {error && (
+          <p className={ui.error} role="alert">
+            {error.message}{" "}
+            <button type="button" onClick={clearError} className="underline">
+              Dismiss
+            </button>
+          </p>
+        )}
+            {detail.period && (
+              <PeriodStatusList
+                detail={detail}
+                pending={pending}
+                onRecord={(slot) => pay(slot.id, "CONTRIBUTION")}
+                onRemind={(slot) => void run(`remind-${slot.id}`, () => api.remindSlot(group.id, slot.id))}
+              />
+            )}
+            {/* Members have their payout in "You"; the organizer's turn card stays unless it's this round. */}
+            {isOrganizer && stats && stats.myTurn?.round !== detail.period?.number && <YourTurn detail={detail} stats={stats} />}
+            <RefundsOwed detail={detail} />
+            <MyPayments
+              detail={detail}
+              pending={pending}
+              onWithdraw={(s) => void withdraw(s)}
+              onDispute={(s) => setDisputeForId(s.id)}
+              onWithdrawDispute={(d) => void withdrawDispute(d)}
+            />
+            {(group.state === "COMPLETED" || group.state === "COMPLETED_WITH_OUTSTANDING_DEBT") && <Recap detail={detail} />}
+            {/* Testing aids stay out of the real flow: last, and marked as demo. */}
+            {group.state === "ACTIVE" && isOrganizer && demoTools && detail.period && (
+              <section aria-labelledby="demo-heading" className="rounded-3xl border-2 border-dashed border-ink-300 p-5">
+                <h2 id="demo-heading" className="text-xs font-bold uppercase tracking-wide text-ink-500">
+                  Demo tools
+                </h2>
+                <p className="mt-1 text-sm text-ink-600">Skip ahead without waiting for the calendar. Only you see this.</p>
+                <button type="button" onClick={() => void closeRoundNow()} className={`${ui.btnSecondarySm} mt-3`}>
+                  Close round {detail.period.number} now
+                </button>
+              </section>
+            )}
+          </div>
+          <aside aria-label="Details" className="mt-8 min-w-0 lg:mt-0">
+            <GroupDetails detail={detail} links={false} heading={false} />
+          </aside>
+        </div>
+      )}
 
       {/* While the order is being arranged, Save and Cancel are the only actions. */}
-      {primary && !orderDraft && <ActionBar>{primary}</ActionBar>}
+      {primary && !orderDraft && (!navMode || view === "dashboard") && <ActionBar>{primary}</ActionBar>}
 
       {isOrganizer && inLobby && (
         <PlaceholderSheet

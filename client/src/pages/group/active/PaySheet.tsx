@@ -132,13 +132,8 @@ function PayForm({
           void submit();
         }}
       >
-        <p className="text-sm text-ink-600">
-          {forSomeoneElse
-            ? "Record money you received for this slot. It still needs your review, and the audit log shows you approved your own entry."
-            : isDebt
-              ? `Tell ${detail.group.organizerName} what you paid back. Once approved, it pays interest first, then the rest.`
-              : `Tell ${detail.group.organizerName} what you paid. It counts once they approve it.`}
-        </p>
+        {/* The one rule worth stating here: how a debt payment is applied (R-DBT). */}
+        {isDebt && <p className="text-sm text-ink-600">Pays interest first, then the rest.</p>}
         <AmountField
           label="Amount paid"
           value={amountText}
@@ -189,7 +184,6 @@ function PayForm({
               />
             </label>
           )}
-          {!file && <p className={ui.helperText}>Without proof, the organizer sees “No proof attached”.</p>}
         </div>
 
         <div>

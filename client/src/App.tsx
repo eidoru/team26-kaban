@@ -16,6 +16,7 @@ const NotificationsPage = lazy(() =>
 const CreateGroupPage = lazy(() =>
   import("./pages/create/CreateGroupPage").then((m) => ({ default: m.CreateGroupPage })),
 );
+const GroupShell = lazy(() => import("./pages/group/GroupShell").then((m) => ({ default: m.GroupShell })));
 const GroupPage = lazy(() => import("./pages/group/GroupPage").then((m) => ({ default: m.GroupPage })));
 const MoneyRecordsPage = lazy(() =>
   import("./pages/group/MoneyRecordsPage").then((m) => ({ default: m.MoneyRecordsPage })),
@@ -51,13 +52,18 @@ export function App() {
               {/* Old "Owed to you" address, kept for bookmarks and older notifications. */}
               <Route path="/manager/obligations" element={<Navigate to="/money" replace />} />
               <Route path="/groups/new" element={<CreateGroupPage />} />
-              <Route path="/groups/:id" element={<GroupPage />} />
+              {/* One paluwagan: the shell loads it and, once launched, adds the view navigation. */}
+              <Route path="/groups/:id" element={<GroupShell />}>
+                <Route index element={<GroupPage view="dashboard" />} />
+                <Route path="schedule" element={<GroupPage view="schedule" />} />
+                <Route path="members" element={<GroupPage view="members" />} />
+                <Route path="money" element={<MoneyRecordsPage />} />
+                <Route path="activity" element={<ActivityPage />} />
+                <Route path="history" element={<HistoryPage />} />
+              </Route>
               <Route path="/groups/:id/edit" element={<EditGroupPage />} />
               {/* The review step is gone (R-DEC-28); launching happens on the group page. */}
               <Route path="/groups/:id/launch" element={<Navigate to=".." relative="path" replace />} />
-              <Route path="/groups/:id/activity" element={<ActivityPage />} />
-              <Route path="/groups/:id/history" element={<HistoryPage />} />
-              <Route path="/groups/:id/money" element={<MoneyRecordsPage />} />
             </Route>
           </Route>
 

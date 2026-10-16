@@ -1,10 +1,21 @@
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeftRight, Banknote, ChevronRight, ClipboardCheck, HandCoins, Plus, type LucideIcon } from "lucide-react";
+import {
+  ArrowLeftRight,
+  Banknote,
+  CalendarDays,
+  Check,
+  ChevronRight,
+  ClipboardCheck,
+  HandCoins,
+  Plus,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
 import { api, type HomeDashboard } from "../api/client";
 import { KabanChest } from "../components/Illustration";
 import { NotificationIcon } from "../components/NotificationIcon";
-import { dueHint, formatDueDate } from "../lib/dates";
+import { dueHint, formatShortDate } from "../lib/dates";
 import { formatPeso } from "../lib/money";
 import { homeKey } from "../lib/homeQueries";
 import { ui } from "../lib/ui";
@@ -24,32 +35,62 @@ function waitingItems(groups: Group[]) {
   return items;
 }
 
-/** One line on where a paluwagan stands for this viewer. */
-function standingLine(g: Group): string {
-  switch (g.state) {
-    case "LOBBY":
-      return g.occupied < g.slotCount ? `${g.occupied} of ${g.slotCount} joined` : "Everyone's in. Waiting to launch.";
-    case "LAUNCHED":
-      return `Starts ${formatDueDate(g.startDate)}`;
-    case "ACTIVE": {
-      const s = g.myStanding;
-      if (!g.openRound || !s) return "Running";
-      return s.approved >= s.due
-        ? `Round ${g.openRound.number}: you're paid up`
-        : `Round ${g.openRound.number}: ${formatPeso(s.approved)} of ${formatPeso(s.due)} paid`;
-    }
-    case "COMPLETED_WITH_OUTSTANDING_DEBT":
-      return g.owed > 0 ? `Complete. You still owe ${formatPeso(g.owed)}` : "Complete. Some debts are still open";
-    default:
-      return "Complete";
-  }
+interface Badge {
+  icon: LucideIcon;
+  text: string;
+  tone: string;
 }
 
-function turnLine(g: Group): string | null {
-  if (!g.myTurn || g.state === "LOBBY") return null;
-  if (g.myTurn.paid) return `You got your payout in round ${g.myTurn.round}`;
-  const hint = dueHint(g.myTurn.payoutDate);
-  return `Your turn: round ${g.myTurn.round}, ${formatDueDate(g.myTurn.payoutDate)}${hint && !hint.overdue ? ` (${hint.label})` : ""}`;
+const TONES = {
+  good: "bg-brand-100 text-brand-800",
+  due: "bg-sun-100 text-sun-900",
+  bad: "bg-danger-50 text-danger-700",
+  info: "bg-ink-100 text-ink-700",
+};
+
+/** Where a paluwagan stands for this viewer, as short badges: one fact each, no sentences. */
+function badges(g: Group): Badge[] {
+  const out: Badge[] = [];
+  switch (g.state) {
+    case "LOBBY":
+      out.push(
+        g.occupied < g.slotCount
+          ? { icon: Users, text: `${g.occupied} of ${g.slotCount} joined`, tone: TONES.info }
+          : { icon: Users, text: "Ready to launch", tone: TONES.info },
+      );
+      break;
+    case "LAUNCHED":
+      out.push({ icon: CalendarDays, text: `Starts ${formatShortDate(g.startDate)}`, tone: TONES.info });
+      break;
+    case "ACTIVE": {
+      const s = g.myStanding;
+      if (g.openRound && s) {
+        out.push(
+          s.approved >= s.due
+            ? { icon: Check, text: "Paid up", tone: TONES.good }
+            : { icon: HandCoins, text: `${formatPeso(s.approved)} of ${formatPeso(s.due)} paid`, tone: TONES.due },
+        );
+      }
+      break;
+    }
+    case "COMPLETED_WITH_OUTSTANDING_DEBT":
+      out.push(
+        g.owed > 0
+          ? { icon: HandCoins, text: `You owe ${formatPeso(g.owed)}`, tone: TONES.bad }
+          : { icon: Check, text: "Complete, debts open", tone: TONES.info },
+      );
+      break;
+    default:
+      out.push({ icon: Check, text: "Complete", tone: TONES.info });
+  }
+  if (g.myTurn && g.state !== "LOBBY") {
+    out.push(
+      g.myTurn.paid
+        ? { icon: Banknote, text: "Got your payout", tone: TONES.info }
+        : { icon: Banknote, text: `Payout ${formatShortDate(g.myTurn.payoutDate, true)}`, tone: TONES.info },
+    );
+  }
+  return out;
 }
 
 /**
@@ -128,15 +169,17 @@ export function HomePage() {
                 <li key={`${item.groupId}-${item.kind}`} className="flex items-center gap-3 px-4 py-3">
                   <HandCoins className={`h-5 w-5 shrink-0 ${item.kind === "DEBT" ? "text-danger-700" : "text-brand-700"}`} aria-hidden />
                   <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-bold tabular-nums text-ink-900">
+                    {/* What and where on one line; when on the next. The round is on the group page. */}
+                    <span className="block truncate text-sm font-bold tabular-nums text-ink-900">
                       {formatPeso(item.amount)}
                       {item.kind === "DEBT" && <span className="font-semibold text-danger-700"> debt</span>}
+                      <span className="font-semibold text-ink-600"> · {item.groupName}</span>
                     </span>
-                    <span className="block text-xs text-ink-500">
-                      {item.groupName}
-                      {item.round != null && ` · round ${item.round}`}
-                      {item.dueDate && ` · due ${formatDueDate(item.dueDate)}${hint ? ` (${hint.label})` : ""}`}
-                    </span>
+                    {hint && (
+                      <span className={`block text-xs ${hint.overdue ? "font-semibold text-danger-700" : "text-ink-500"}`}>
+                        {hint.overdue ? `${hint.label[0].toUpperCase()}${hint.label.slice(1)}` : `Due ${hint.label}`}
+                      </span>
+                    )}
                   </span>
                   <Link
                     to={`/groups/${item.groupId}?pay=${item.kind === "DEBT" ? "debt" : "contribution"}`}
@@ -170,8 +213,14 @@ export function HomePage() {
                     {formatPeso(g.contribution)} {g.frequencyLabel.toLowerCase()}
                   </p>
                   <p className="font-heading mt-0.5 truncate text-lg font-bold text-ink-900">{g.name}</p>
-                  <p className="mt-0.5 text-sm text-ink-700">{standingLine(g)}</p>
-                  {turnLine(g) && <p className="text-xs text-ink-500">{turnLine(g)}</p>}
+                  <ul className="mt-2 flex flex-wrap gap-1.5">
+                    {badges(g).map((b) => (
+                      <li key={b.text} className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${b.tone}`}>
+                        <b.icon className="h-3.5 w-3.5" aria-hidden />
+                        {b.text}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
                 <ChevronRight className="h-5 w-5 shrink-0 text-ink-400" aria-hidden />
               </Link>

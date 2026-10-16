@@ -1,6 +1,8 @@
 import { ChevronRight, Link2, Plus } from "lucide-react";
 import type { GroupDetail, SlotView } from "../../api/client";
 import { Avatar } from "../../components/Avatar";
+import { can } from "@domain/lifecycle";
+import { formatPeso } from "../../lib/money";
 import { ui } from "../../lib/ui";
 import { slotHasActions, slotTag } from "./slots";
 
@@ -78,34 +80,59 @@ export function SlotsList({
 }
 
 /**
- * After launch, the way to bring someone in: a placeholder's claim link (R-CLM-01, R-CLM-03). The
- * invite link closes at launch (R-INV-06), so this is the organizer's "invite" from then on. Lists
- * unclaimed placeholders; Invite opens the seat's sheet to create, share or revoke its link.
+ * The Members view of a running paluwagan: everyone once, by name, with what they owe the organizer
+ * (R-DBT, visible to all per R-DEC-06) and the actions that person allows:
+ * - a debt payment: the viewer's own ("Pay"), or the organizer recording one for a placeholder;
+ * - for the organizer, "Invite" on a placeholder: its claim link is how someone joins after launch
+ *   (R-CLM-03), since the invite link closes at launch (R-INV-06).
  */
-export function PlaceholderInvites({ detail, onInvite }: { detail: GroupDetail; onInvite: (slot: SlotView) => void }) {
-  const placeholders = detail.slots.filter((s) => s.kind === "PLACEHOLDER");
-  if (placeholders.length === 0) return null;
+export function MembersList({
+  detail,
+  onPayDebt,
+  onInvite,
+}: {
+  detail: GroupDetail;
+  onPayDebt: (slot: SlotView) => void;
+  onInvite: (slot: SlotView) => void;
+}) {
+  const { viewer, group } = detail;
+  // By name: turns and roles are in Schedule; this is the list of people.
+  const slots = [...detail.slots].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
   return (
-    <section aria-labelledby="placeholder-invites-heading">
-      <h2 id="placeholder-invites-heading" className={`${ui.sectionHeading} mb-3`}>
-        Invite to a placeholder seat
-      </h2>
+    <section aria-label="Members">
       <ul className="divide-y divide-ink-100 overflow-hidden rounded-3xl border border-ink-200 bg-white">
-        {placeholders.map((slot) => (
-          <li key={slot.id} className="flex min-h-16 items-center gap-3 px-4 py-3">
-            <Avatar name={slot.name} size="md" placeholder />
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-bold text-ink-900">{slot.name}</span>
-              <span className="flex items-center gap-1 text-xs text-ink-500">
-                {slot.claimLink && <Link2 className="h-3 w-3" aria-hidden />}
-                {slot.claimLink ? "Claim link sent" : "No link yet"}
-              </span>
-            </span>
-            <button type="button" onClick={() => onInvite(slot)} className={`${ui.btnSecondarySm} shrink-0`}>
-              Invite
-            </button>
-          </li>
-        ))}
+        {slots.map((slot) => {
+          const owed = slot.debt.principal + slot.debt.interest;
+          const canPayDebt = owed > 0 && (slot.isViewer || (viewer.isOrganizer && slot.kind === "PLACEHOLDER"));
+          const canInvite = viewer.isOrganizer && slot.kind === "PLACEHOLDER" && can.claimPlaceholder(group.state);
+          return (
+            <li key={slot.id} className={`flex min-h-16 items-center gap-3 px-4 py-3 ${slot.isViewer ? "bg-brand-50" : ""}`}>
+              <Avatar name={slot.name} size="md" placeholder={slot.kind === "PLACEHOLDER"} />
+              <span className="min-w-0 flex-1 truncate text-sm font-bold text-ink-900">{slot.name}</span>
+              {/* What they owe the organizer, as an amount beside the name rather than a second line. */}
+              {owed > 0 && (
+                <span className="shrink-0 text-sm font-bold tabular-nums text-danger-700">
+                  <span className="sr-only">Owes </span>
+                  {formatPeso(owed)}
+                </span>
+              )}
+              {(canPayDebt || canInvite) && (
+                <span className="flex shrink-0 gap-2">
+                  {canPayDebt && (
+                    <button type="button" onClick={() => onPayDebt(slot)} className={ui.btnSecondarySm}>
+                      {slot.isViewer ? "Pay" : "Record"}
+                    </button>
+                  )}
+                  {canInvite && (
+                    <button type="button" onClick={() => onInvite(slot)} className={ui.btnSecondarySm}>
+                      Invite
+                    </button>
+                  )}
+                </span>
+              )}
+            </li>
+          );
+        })}
       </ul>
     </section>
   );

@@ -103,9 +103,6 @@ export function RegisterPage() {
               aria-describedby={fieldErrors.displayName ? "displayName-error" : undefined}
             />
             <FieldError id="displayName-error" message={fieldErrors.displayName} />
-            {!fieldErrors.displayName && (
-              <p className={ui.helperText}>Shown to members in your paluwagan groups.</p>
-            )}
           </div>
 
           <div>

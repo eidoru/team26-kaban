@@ -84,6 +84,7 @@ export function CreateGroupPage() {
       <p className={ui.pageSubtitle}>{STEPS[step].subtitle}</p>
 
       <form
+        id="create-group-form"
         className="mt-8 space-y-6"
         onSubmit={(e) => {
           e.preventDefault();
@@ -101,7 +102,13 @@ export function CreateGroupPage() {
         {submitError && <p className={ui.error}>{submitError}</p>}
 
         <ActionBar hint={stepErrors.length > 0 ? "Fix the highlighted fields to continue." : undefined}>
-          <button type="submit" disabled={stepErrors.length > 0 || submitting} className={`${ui.btnPrimary} sm:min-w-44`}>
+          {/* The bar renders outside the form (ActionBar portals it), so the button names its form. */}
+          <button
+            type="submit"
+            form="create-group-form"
+            disabled={stepErrors.length > 0 || submitting}
+            className={`${ui.btnPrimary} sm:min-w-44`}
+          >
             {isLast ? (submitting ? "Creating…" : "Create paluwagan") : "Continue"}
           </button>
         </ActionBar>

@@ -1,9 +1,10 @@
-import { ArrowDown, ArrowUp, ChevronRight, Shuffle } from "lucide-react";
+import { ArrowDown, ArrowLeftRight, ArrowUp, ChevronRight, Shuffle } from "lucide-react";
 import type { GroupDetail, SlotView } from "../../api/client";
 import { dueHint, formatShortDate } from "../../lib/dates";
 import { formatPeso } from "../../lib/money";
 import { ui } from "../../lib/ui";
 import { currentOrder, slotHasActions } from "./slots";
+import { swapRequestBlocker } from "./swaps/swaps";
 
 const PAYOUT_LINE = {
   AWAITING_HANDOVER: (net: string) => `${net} to hand over`,
@@ -27,6 +28,7 @@ export function PayoutSchedule({
   onSaveOrder,
   onSelect,
   onOpenPayout,
+  onSwap,
 }: {
   detail: GroupDetail;
   /** Organizer, in the lobby, with every slot filled (R-ORD-01). */
@@ -40,6 +42,8 @@ export function PayoutSchedule({
   onSelect?: (slot: SlotView) => void;
   /** Closed rounds open their payout (breakdown, handover, receipt). */
   onOpenPayout?: (round: number) => void;
+  /** While it runs: ask to swap turns with that slot (§9). Shown as a "Swap" button where allowed. */
+  onSwap?: (slot: SlotView) => void;
 }) {
   const { schedule, slots, group } = detail;
   const slotById = new Map(slots.map((s) => [s.id, s]));
@@ -68,9 +72,11 @@ export function PayoutSchedule({
 
   return (
     <section aria-labelledby="schedule-heading">
-      <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+      {/* Once it runs, the Schedule view's tab names this list: the heading is for screen readers only,
+          with no margin, so the list starts where the Members list does. */}
+      <div className={group.state === "LOBBY" ? "mb-3 flex flex-wrap items-end justify-between gap-2" : ""}>
         <div>
-          <h2 id="schedule-heading" className={ui.sectionHeading}>
+          <h2 id="schedule-heading" className={group.state === "LOBBY" ? ui.sectionHeading : "sr-only"}>
             Payout schedule
           </h2>
           {subtitle && <p className={ui.sectionSubtitle}>{subtitle}</p>}
@@ -112,31 +118,38 @@ export function PayoutSchedule({
               >
                 {round.number}
               </span>
+              {/* Who on top, when underneath (with the payout's status once there is one), so every
+                  date starts in the same place whatever the row's action on the right. */}
               <span className="min-w-0 flex-1">
                 {slot ? (
                   <>
-                    <span className="block truncate text-sm font-bold text-ink-900">
-                      {slot.name}
+                    <span className="block truncate text-sm font-bold text-ink-900">{slot.name}</span>
+                    <span className="block truncate text-xs tabular-nums text-ink-500">
+                      {formatShortDate(round.payoutDate, withYear)}
+                      {status && ` · ${status}`}
                     </span>
-                    {status && (
-                      <span className={`block truncate text-xs ${payout ? "text-ink-500" : "font-semibold text-brand-700"}`}>
-                        {status}
-                      </span>
-                    )}
                   </>
                 ) : (
-                  // No order yet (the subtitle says so): the countdown is all there is to say.
-                  <span className="block truncate text-sm text-ink-500">{hint.charAt(0).toUpperCase() + hint.slice(1)}</span>
+                  // No order yet: the date, and how far off it is.
+                  <>
+                    <span className="block truncate text-sm font-bold tabular-nums text-ink-700">
+                      {formatShortDate(round.payoutDate, withYear)}
+                    </span>
+                    <span className="block truncate text-xs text-ink-500">{hint.charAt(0).toUpperCase() + hint.slice(1)}</span>
+                  </>
                 )}
               </span>
-              <span className="shrink-0 text-sm font-semibold tabular-nums text-ink-700">{formatShortDate(round.payoutDate, withYear)}</span>
             </>
           );
           const opensPayout = !!payout && !!onOpenPayout;
-          const tappable = !draft && slot && (opensPayout || (onSelect && slotHasActions(slot, detail)));
+          // A labelled button, not a bare chevron: swapping is an action people need to see to know of.
+          // Only where the viewer may actually ask (R-SWP-01/03, R-DEC-23).
+          const canSwap = !!onSwap && !draft && !payout && !!slot && !slot.isViewer && swapRequestBlocker(detail, slot.id) === null;
+          const tappable = !draft && !canSwap && slot && (opensPayout || (onSelect && slotHasActions(slot, detail)));
           // One fixed height for every row, arranging or not: it fits the 44px move buttons, and the
           // text lines truncate instead of wrapping. Arranging tightens the spacing to leave the name room.
-          const rowClass = `flex h-14 w-full items-center ${draft ? "gap-2 px-3" : "gap-3 px-4"} text-left ${slot?.isViewer ? "bg-brand-50" : ""}`;
+          // 64px, like the Members rows (a 40px avatar plus padding), so the two lists read alike.
+          const rowClass = `flex h-16 w-full items-center ${draft ? "gap-2 px-3" : "gap-3 px-4"} text-left ${slot?.isViewer ? "bg-brand-50" : ""}`;
           return (
             <li key={round.number}>
               {tappable ? (
@@ -151,8 +164,15 @@ export function PayoutSchedule({
               ) : (
                 <div className={rowClass}>
                   {body}
-                  {/* Same width as the chevron on tappable rows, so every date lines up. */}
-                  {!draft && <span className="w-4 shrink-0" aria-hidden />}
+                  {canSwap ? (
+                    <button type="button" onClick={() => onSwap!(slot!)} className={`${ui.btnSecondarySm} shrink-0`}>
+                      <ArrowLeftRight className="h-4 w-4" aria-hidden />
+                      Swap
+                    </button>
+                  ) : (
+                    // Same width as the chevron on tappable rows, so every date lines up.
+                    !draft && <span className="w-4 shrink-0" aria-hidden />
+                  )}
                   {draft && (
                     <span className="flex shrink-0 gap-1">
                       <button type="button" onClick={() => move(index, -1)} disabled={index === 0} aria-label={`Move ${slot?.name} earlier`} className={moveButton}>

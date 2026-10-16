@@ -64,6 +64,7 @@ function EditForm({ detail }: { detail: GroupDetail }) {
         </span>
       </p>
       <form
+        id="edit-group-form"
         className="mt-8 space-y-10"
         onSubmit={(e) => {
           e.preventDefault();
@@ -82,7 +83,8 @@ function EditForm({ detail }: { detail: GroupDetail }) {
         </div>
         {error && !error.fields && <p className={ui.error}>{error.message}</p>}
         <ActionBar hint={hasErrors ? "Fix the highlighted fields to save." : undefined}>
-          <button type="submit" disabled={hasErrors || pending === "save"} className={ui.btnPrimary}>
+          {/* The bar renders outside the form (ActionBar portals it), so the button names its form. */}
+          <button type="submit" form="edit-group-form" disabled={hasErrors || pending === "save"} className={ui.btnPrimary}>
             {pending === "save" ? "Saving…" : "Save changes"}
           </button>
         </ActionBar>

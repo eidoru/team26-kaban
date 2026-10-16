@@ -113,7 +113,8 @@ export function RecordsSection({ detail }: { detail: GroupDetail }) {
   const others = detail.slots.filter((s) => !s.isViewer);
   return (
     <section aria-labelledby="records-heading">
-      <h2 id="records-heading" className={`${ui.sectionHeading} mb-3`}>
+      {/* The Money & records tab names this; the heading is for screen readers. */}
+      <h2 id="records-heading" className="sr-only">
         Records
       </h2>
       <ul className="divide-y divide-ink-100 overflow-hidden rounded-3xl border border-ink-200 bg-white">

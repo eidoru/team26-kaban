@@ -1,11 +1,12 @@
-import { Link, Navigate, useParams } from "react-router-dom";
+import { Navigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft } from "lucide-react";
+import { ReceiptText } from "lucide-react";
 import { api } from "../../api/client";
-import { groupKey, useGroup } from "../../lib/groupQueries";
-import { ui } from "../../lib/ui";
+import { groupKey } from "../../lib/groupQueries";
 import { MoneyOverview, Trends } from "./dashboard/StatsSections";
 import { RecordsSection } from "./records/RecordsSections";
+import { PageLink } from "./GroupDetails";
+import { useGroupShell } from "./groupShell";
 
 /**
  * The paluwagan's numbers and downloads, off the main page so it stays about this round: the
@@ -13,36 +14,25 @@ import { RecordsSection } from "./records/RecordsSections";
  */
 export function MoneyRecordsPage() {
   const { id = "" } = useParams<{ id: string }>();
-  const { data: detail } = useGroup(id);
+  const { detail } = useGroupShell();
   const started =
-    detail?.group.state === "ACTIVE" ||
-    detail?.group.state === "COMPLETED" ||
-    detail?.group.state === "COMPLETED_WITH_OUTSTANDING_DEBT";
+    detail.group.state === "ACTIVE" ||
+    detail.group.state === "COMPLETED" ||
+    detail.group.state === "COMPLETED_WITH_OUTSTANDING_DEBT";
   // Same key as the group page's, so a group refresh (realtime included) refreshes it too.
   const { data: stats } = useQuery({
     queryKey: [...groupKey(id), "stats"],
     queryFn: () => api.stats(id),
-    enabled: started && !!detail?.viewer.isOrganizer,
+    enabled: started && detail.viewer.isOrganizer,
   });
 
-  if (!detail) return <div className={`${ui.skeleton} h-96`} aria-busy />;
   if (!started) return <Navigate to={`/groups/${id}`} replace />;
   const { group, viewer } = detail;
 
   return (
     <div className="space-y-8">
-      <div>
-        <Link to={`/groups/${id}`} className={`${ui.btnGhost} mb-4`}>
-          <ArrowLeft className="h-4 w-4" aria-hidden />
-          {group.name}
-        </Link>
-        <h1 className={ui.pageTitle}>Money &amp; records</h1>
-        <p className={ui.pageSubtitle}>
-          {viewer.isOrganizer
-            ? "What's been collected and paid out, how each round went, and the records to download."
-            : "Your statement and the paluwagan's summary, to download."}
-        </p>
-      </div>
+      {/* The view navigation names this page; the title is for screen readers only. */}
+      <h2 className="sr-only">Money &amp; records</h2>
       {viewer.isOrganizer && stats && (
         <>
           {/* Once it's finished the Recap carries these totals, so they show only while it runs. */}
@@ -51,6 +41,7 @@ export function MoneyRecordsPage() {
         </>
       )}
       <RecordsSection detail={detail} />
+      <PageLink to={`/groups/${id}/history`} icon={ReceiptText} title="Your history" note="Every payment, debt change and payout for your slot" />
     </div>
   );
 }

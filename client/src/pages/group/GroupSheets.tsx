@@ -126,12 +126,8 @@ export function SlotSheet({
     >
       <div className="space-y-6">
         {isPlaceholder && (
-          <section>
-            <h3 className="text-sm font-bold text-ink-900">Claim link</h3>
-            <p className="mt-0.5 text-sm text-ink-500">
-              Send this to {slot.name}. It works once: whoever opens it and signs in takes over this slot and its history.
-            </p>
-            <div className="mt-3 space-y-2">
+          <section aria-label="Claim link">
+            <div className="space-y-2">
               {slot.claimLink ? (
                 <>
                   <ShareLink url={slot.claimLink.url} shareText={`Claim your slot in ${detail.group.name} on Kaban`} />

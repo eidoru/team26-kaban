@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
 import { api, type HistoryEvent } from "../../api/client";
 import { formatDayHeading } from "../../lib/dates";
-import { groupKey, useGroup } from "../../lib/groupQueries";
+import { groupKey } from "../../lib/groupQueries";
 import { formatPeso } from "../../lib/money";
 import { ui } from "../../lib/ui";
 
@@ -20,7 +20,6 @@ function debtChange(e: HistoryEvent): string | null {
  */
 export function HistoryPage() {
   const { id = "" } = useParams<{ id: string }>();
-  const { data: detail } = useGroup(id);
   const { data, isPending } = useQuery({ queryKey: [...groupKey(id), "history"], queryFn: () => api.history(id) });
   const days: { heading: string; items: HistoryEvent[] }[] = [];
   for (const event of data?.events ?? []) {
@@ -32,12 +31,12 @@ export function HistoryPage() {
   return (
     <div className="space-y-6">
       <div>
-        <Link to={`/groups/${id}`} className={`${ui.btnGhost} mb-4`}>
+        {/* Reached from Money & records, which the view navigation highlights. */}
+        <Link to={`/groups/${id}/money`} className={`${ui.btnGhost} mb-4`}>
           <ArrowLeft className="h-4 w-4" aria-hidden />
-          {detail?.group.name ?? "Back"}
+          Money &amp; records
         </Link>
-        <h1 className={ui.pageTitle}>Your history</h1>
-        <p className={ui.pageSubtitle}>Every payment, debt change and payout for your slot.</p>
+        <h2 className={ui.sectionHeading}>Your history</h2>
         {data?.claimedAt && (
           <p className="mt-2 rounded-2xl bg-sky-50 px-4 py-3 text-sm text-sky-900">
             You claimed this slot on {new Date(data.claimedAt).toLocaleDateString()}. Earlier records came with it and are marked
