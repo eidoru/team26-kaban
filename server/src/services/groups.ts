@@ -17,6 +17,7 @@ import { prisma } from "../lib/prisma.js";
 import { fromCalendarDate, todayInManila, toCalendarDate } from "../lib/today.js";
 import { notifyUsers } from "./notifications.js";
 import { openPeriodView, visibleSubmissions } from "./submissions.js";
+import { visibleDisputes } from "./disputes.js";
 import { proofViewUrls } from "../lib/storage.js";
 import { assertState, memberUserIds, resetOrder, settingsOf, slotName, withGroupLock, type Db } from "./common.js";
 
@@ -255,15 +256,17 @@ export async function groupDetail(groupId: string, viewerUserId: string, appOrig
         );
 
   const period = await openPeriodView(prisma, groupId, settings.contribution);
-  const submissions =
-    group.state === "LOBBY" || group.state === "LAUNCHED" || group.state === "CANCELLED"
-      ? []
-      : await visibleSubmissions(prisma, groupId, period?.roundId ?? null, {
+  const viewerScope = { userId: viewerUserId, slotId: viewer.id, isOrganizer };
+  const started = !(group.state === "LOBBY" || group.state === "LAUNCHED" || group.state === "CANCELLED");
+  const submissions = !started
+    ? []
+    : await visibleSubmissions(prisma, groupId, period?.roundId ?? null, {
           userId: viewerUserId,
           slotId: viewer.id,
           isOrganizer,
         });
   const payouts = await payoutsView(groupId, viewer.id, isOrganizer);
+  const disputes = started ? await visibleDisputes(prisma, groupId, viewerScope) : [];
 
   return {
     group: { ...summary(group), organizerName: group.organizer.displayName },
@@ -278,6 +281,8 @@ export async function groupDetail(groupId: string, viewerUserId: string, appOrig
     /** The open contribution period and each slot's standing in it (R-SUB-07); null outside ACTIVE. */
     period,
     submissions,
+    /** Disputes the viewer may see (§6.2), oldest first, with any refund they created. */
+    disputes,
     payouts,
     launch:
       group.state === "LOBBY"

@@ -28,3 +28,5 @@ export const RECEIPT_AUTO_CONFIRM_DAYS: number | null = null;
 export const NOTE_MAX_LENGTH = 500;
 /** Largest proof image, matching the bucket's limit (assumption; the spec sets none). */
 export const MAX_PROOF_BYTES = 5 * 1024 * 1024;
+/** Dispute reasons (the pre-rewrite dispute limit; the spec sets none). */
+export const DISPUTE_REASON_MAX_LENGTH = 1000;

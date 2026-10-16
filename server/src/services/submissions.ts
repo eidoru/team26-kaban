@@ -319,12 +319,14 @@ export async function visibleSubmissions(
     where: {
       groupId,
       ...(viewer.isOrganizer ? {} : { slotId: viewer.slotId }),
-      // This period's, anything still waiting, and everything that went toward debt.
+      // This period's, anything still waiting, everything that went toward debt, and anything ever
+      // disputed (so the dispute's outcome stays visible after the period closes).
       OR: [
         ...(openRoundId ? [{ roundId: openRoundId }] : []),
         { status: "PENDING" },
         { type: "DEBT_PAYMENT" },
         { appliedAs: "DEBT_PAYMENT" },
+        { disputes: { some: {} } },
       ],
     },
     include: { round: { select: { number: true } } },

@@ -1,4 +1,4 @@
-import type { Centavos } from "./money.js";
+import { formatPeso, type Centavos } from "./money.js";
 
 /** R-SUB-01 */
 export type SubmissionType = "CONTRIBUTION" | "DEBT_PAYMENT";
@@ -28,3 +28,27 @@ export function periodStatus(contribution: Centavos, approved: Centavos, pending
   const status: PeriodStatus = approved >= contribution ? "PAID" : approved > 0 ? "PARTIAL" : "UNPAID";
   return { status, pendingReview: pendingCount > 0 };
 }
+
+/**
+ * R-DSP-01 / R-DEC-13: why `proposed` can't replace an approved contribution of `current`, or null.
+ * It may go down (a correction or a refund request) or up, but the member's approved total for
+ * the period can't pass the contribution. `approvedTotal` includes `current`.
+ */
+export function disputeAmountError(
+  proposed: Centavos,
+  current: Centavos,
+  approvedTotal: Centavos,
+  contribution: Centavos,
+): string | null {
+  if (!Number.isInteger(proposed) || proposed < 0) return "Enter an amount of zero or more.";
+  if (proposed === current) return "That's the amount already recorded.";
+  const ceiling = contribution - (approvedTotal - current);
+  if (proposed > ceiling) return `That would be more than the contribution. The most it can be is ${formatPeso(ceiling)}.`;
+  return null;
+}
+
+/** The refund an approved correction creates (R-DSP-03): only a decrease refunds anything. */
+export function refundFor(current: Centavos, proposed: Centavos): Centavos {
+  return Math.max(0, current - proposed);
+}
+

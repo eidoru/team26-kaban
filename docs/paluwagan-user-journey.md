@@ -382,6 +382,7 @@ Test cases worth covering: the first recipient (all debt is post-payout), the la
 | R-DEC-15 | (R-SET-01) Name uniqueness is case-insensitive and ignores the organizer's cancelled paluwagans. |
 | R-DEC-16 | (§9) Swaps are allowed only while ACTIVE. |
 | R-DEC-17 | Proof photos are visible only to the submitter's slot and the organizer; amounts, statuses and the proof-attached flag stay visible to everyone. GCash screenshots can show account details. |
-| R-DEC-18 | *(assumption, to confirm)* A contribution period stays open through the whole payout date, so members can still pay that day (§12 reminds them on payout day). It closes, and the payout is computed, just after midnight Manila time. |
-| R-DEC-19 | *(assumption, to confirm)* A late contribution or debt payment can't be approved for more than the debt it would pay off (for example, the recipient's own shortfall was already taken out of their payout). The organizer denies it instead. |
-| R-DEC-20 | *(assumption, to confirm)* A payout with a net amount of zero has nothing to hand over, so it is marked received straight away. |
+| R-DEC-18 | A contribution period stays open through the whole payout date, so members can still pay that day (§12 reminds them on payout day). It closes, and the payout is computed, just after midnight Manila time. |
+| R-DEC-19 | A late contribution or debt payment can't be approved for more than the debt it would pay off (for example, the recipient's own shortfall was already taken out of their payout). The organizer denies it instead. |
+| R-DEC-20 | A payout with a net amount of zero has nothing to hand over, so it is marked received straight away. |
+| R-DEC-21 | (R-DSP-04) A dispute still pending when its period closes expires: the approved amount stands, the member is notified, and any missing amount can still be paid as a debt payment (R-DSP-05). One unreviewed dispute never delays a payout. |

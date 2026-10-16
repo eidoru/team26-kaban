@@ -35,7 +35,13 @@ export type AuditAction =
   | "debt.interest_charged"
   | "debt.deducted"
   | "debt.repaid"
-  | "group.completed";
+  | "group.completed"
+  | "dispute.raised"
+  | "dispute.approved"
+  | "dispute.denied"
+  | "dispute.cancelled"
+  | "dispute.expired"
+  | "refund.recorded";
 
 /**
  * Append one immutable entry (R-AUD-02, R-AUD-04). Amounts are centavos. `actorUserId` is null for

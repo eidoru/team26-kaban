@@ -54,6 +54,8 @@ enum ReviewStatus {
   APPROVED
   DENIED
   CANCELLED
+  /// A dispute left pending when its period closed (R-DEC-21).
+  EXPIRED
 }
 
 /// R-PAY-05, R-DEC-07
@@ -333,6 +335,8 @@ model Dispute {
   submissionId   String       @map("submission_id")
   slotId         String       @map("slot_id")
   raisedById     String       @map("raised_by_id")
+  /// The submission's amount when the dispute was raised; the correction is from this to proposedAmount.
+  previousAmount BigInt       @map("previous_amount")
   proposedAmount BigInt       @map("proposed_amount")
   reason         String
   status         ReviewStatus @default(PENDING)

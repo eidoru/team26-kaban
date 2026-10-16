@@ -21,7 +21,11 @@ export type NotificationKind =
   | "payout.handed_over"
   | "debt.created"
   | "debt.interest"
-  | "group.completed";
+  | "group.completed"
+  | "dispute.raised"
+  | "dispute.approved"
+  | "dispute.denied"
+  | "dispute.expired";
 
 /** Send the same notification to several users, skipping duplicates and nulls. */
 export async function notifyUsers(

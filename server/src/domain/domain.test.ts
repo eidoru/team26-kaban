@@ -5,7 +5,7 @@ import { canTransition, can } from "./lifecycle.js";
 import { formatPeso, interestOn, pesos, rateFromPercent } from "./money.js";
 import { processPayout, type PayoutResult } from "./payout.js";
 import { buildSchedule, payoutDates } from "./schedule.js";
-import { periodStatus, submissionAmountError, submissionCap } from "./submissions.js";
+import { disputeAmountError, periodStatus, refundFor, submissionAmountError, submissionCap } from "./submissions.js";
 
 describe("money", () => {
   it("charges interest to the nearest centavo, half up (R-AMT-04)", () => {
@@ -104,6 +104,27 @@ describe("submissions (R-SUB-06, R-SUB-07)", () => {
     expect(periodStatus(pesos(2_000), pesos(2_000), 0)).toEqual({ status: "PAID", pendingReview: false });
     expect(periodStatus(pesos(2_000), pesos(500), 1)).toEqual({ status: "PARTIAL", pendingReview: true });
     expect(periodStatus(pesos(2_000), 0, 2)).toEqual({ status: "UNPAID", pendingReview: true });
+  });
+});
+
+describe("disputes (R-DSP-01, R-DEC-13, R-DSP-03)", () => {
+  const contribution = pesos(2_000);
+  it("allows lowering an approved amount, down to zero", () => {
+    expect(disputeAmountError(pesos(1_500), pesos(2_000), pesos(2_000), contribution)).toBeNull();
+    expect(disputeAmountError(0, pesos(2_000), pesos(2_000), contribution)).toBeNull();
+    expect(refundFor(pesos(2_000), pesos(1_500))).toBe(pesos(500));
+  });
+
+  it("allows raising it, but not past the contribution", () => {
+    // ₱500 and ₱1,000 approved; the ₱500 one can go up to ₱1,000.
+    expect(disputeAmountError(pesos(1_000), pesos(500), pesos(1_500), contribution)).toBeNull();
+    expect(disputeAmountError(pesos(1_001), pesos(500), pesos(1_500), contribution)).toMatch(/₱1,000/);
+    expect(refundFor(pesos(500), pesos(1_000))).toBe(0);
+  });
+
+  it("rejects no change and negative amounts", () => {
+    expect(disputeAmountError(pesos(2_000), pesos(2_000), pesos(2_000), contribution)).not.toBeNull();
+    expect(disputeAmountError(-1, pesos(2_000), pesos(2_000), contribution)).not.toBeNull();
   });
 });
 

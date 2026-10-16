@@ -10,6 +10,7 @@ import { addPlaceholder, createClaimLink, createInviteLink, removeSlot, revokeCl
 import { launchGroup, lockOrder, setOrder, shuffleOrder } from "../services/launch.js";
 import { cancelSubmission, reviewSubmission, submitPayment } from "../services/submissions.js";
 import { confirmReceipt, markHandedOver } from "../services/payouts.js";
+import { cancelDispute, raiseDispute, reviewDispute } from "../services/disputes.js";
 import { createProofUpload, PROOF_CONTENT_TYPES } from "../lib/storage.js";
 import { can } from "../domain/lifecycle.js";
 import { conflict } from "../lib/errors.js";
@@ -40,6 +41,8 @@ const submissionSchema = z.object({
 });
 const denySchema = z.object({ reason: z.string() });
 const handoverSchema = z.object({ proofPath: z.string().optional() });
+const disputeSchema = z.object({ submissionId: z.string(), proposedAmount: z.number().int(), reason: z.string() });
+const denyDisputeSchema = z.object({ note: z.string() });
 
 const detail = (req: Request, groupId: string) => groupDetail(groupId, req.user!.id, resolveAppOrigin(req));
 
@@ -149,6 +152,24 @@ router.post(
 router.post(
   "/:id/submissions/:submissionId/cancel",
   ...memberAction((req, id, user) => cancelSubmission(id, user, String(req.params.submissionId))),
+);
+
+// --- Disputes (§6.2): change an approved contribution while its period is open.
+router.post("/:id/disputes", validateBody(disputeSchema), ...memberAction((req, id, user) => raiseDispute(id, user, req.body)));
+router.post(
+  "/:id/disputes/:disputeId/approve",
+  ...organizerAction((req, id, user) => reviewDispute(id, user, String(req.params.disputeId), { approve: true })),
+);
+router.post(
+  "/:id/disputes/:disputeId/deny",
+  validateBody(denyDisputeSchema),
+  ...organizerAction((req, id, user) =>
+    reviewDispute(id, user, String(req.params.disputeId), { approve: false, note: req.body.note }),
+  ),
+);
+router.post(
+  "/:id/disputes/:disputeId/cancel",
+  ...memberAction((req, id, user) => cancelDispute(id, user, String(req.params.disputeId))),
 );
 
 // --- Payouts (§7, R-PAY-05). Rounds are addressed by number.

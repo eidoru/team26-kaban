@@ -7,6 +7,7 @@ import { prisma } from "../lib/prisma.js";
 import { isProofPathFor, proofExists } from "../lib/storage.js";
 import { fromCalendarDate, todayInManila } from "../lib/today.js";
 import { debtOf, groupHasDebt, recordDebtChange } from "./debts.js";
+import { expireDisputes } from "./disputes.js";
 import { notifyUsers } from "./notifications.js";
 import { periodTotals } from "./submissions.js";
 import { memberUserIds, slotName, withGroupLock, type Db } from "./common.js";
@@ -24,6 +25,8 @@ export async function closeOpenRound(groupId: string, actorUserId: string | null
     if (group.state !== "ACTIVE") throw conflict("Only a running paluwagan has a period to close.", "WRONG_STATE");
     const round = await tx.round.findFirst({ where: { groupId, status: "OPEN" } });
     if (!round) throw conflict("No contribution period is open.", "NO_OPEN_PERIOD");
+    // R-DEC-21: unresolved disputes don't hold up the payout; the approved amounts stand.
+    await expireDisputes(tx, groupId, round.id, round.number);
     const slots = await tx.slot.findMany({ where: { groupId }, include: { user: true } });
     const contribution = Number(group.contribution);
 
