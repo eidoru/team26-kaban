@@ -1,235 +1,46 @@
 import { Router } from "express";
-import { InviteTokenType } from "@prisma/client";
-import { prisma } from "../lib/prisma.js";
-import { createNotification, writeAuditLog } from "../lib/audit.js";
 import { optionalAuth, requireAuth } from "../middleware/auth.js";
-import {
-  CLAIM_CLOSED_MESSAGE,
-  countFilledSlots,
-  getMembership,
-  GroupError,
-  serializeGroup,
-} from "../services/groups.js";
 import { notifyGroupChangeSafe } from "../lib/realtimeNotify.js";
+import { claimPlaceholder, getClaim, getInvite, joinViaInvite } from "../services/roster.js";
 
+/**
+ * Link landing pages. Viewing is public (R-INV-01); joining and claiming need an account, and the
+ * client carries the token through login or registration (R-INV-02, R-CLM-04).
+ */
 const router = Router();
 
-async function loadInvite(token: string) {
-  const invite = await prisma.inviteToken.findUnique({
-    where: { token },
-    include: { group: true, targetMembership: true },
-  });
-  if (!invite || invite.revokedAt) {
-    throw new GroupError(404, "Invalid or expired invite");
-  }
-  if (invite.expiresAt && invite.expiresAt < new Date()) {
-    throw new GroupError(410, "This invite link has expired");
-  }
-  return invite;
-}
-
-router.get("/:token", optionalAuth, async (req, res, next) => {
+router.get("/invites/:token", optionalAuth, async (req, res, next) => {
   try {
-    const invite = await loadInvite(String(req.params.token));
-    const group = invite.group;
-
-    const [filledCount, members, manager, viewerMembership] = await Promise.all([
-      countFilledSlots(group.id),
-      prisma.membership.findMany({
-        where: { groupId: group.id },
-        select: {
-          displayName: true,
-          isManager: true,
-          userId: true,
-          turnNumber: true,
-        },
-        orderBy: [{ isManager: "desc" }, { turnNumber: "asc" }, { createdAt: "asc" }],
-      }),
-      prisma.user.findUnique({
-        where: { id: group.managerId },
-        select: { displayName: true },
-      }),
-      req.user ? getMembership(req.user.id, group.id) : Promise.resolve(null),
-    ]);
-
-    let canJoin = true;
-    let reason: string | undefined;
-    const alreadyMember = !!viewerMembership;
-
-    if (alreadyMember) {
-      canJoin = false;
-      reason = "You're already in this paluwagan.";
-    } else if (invite.type === InviteTokenType.group_invite) {
-      if (group.status !== "forming") {
-        canJoin = false;
-        reason = "This group is no longer accepting new members.";
-      } else if (filledCount >= group.slotCount) {
-        canJoin = false;
-        reason = "This group is full.";
-      }
-    } else if (group.status === "completed") {
-      canJoin = false;
-      reason = CLAIM_CLOSED_MESSAGE;
-    } else if (!invite.targetMembership || invite.targetMembership.userId !== null) {
-      canJoin = false;
-      reason = "This chair has already been claimed.";
-    }
-
-    res.json({
-      invite: {
-        type: invite.type,
-        token: invite.token,
-        canJoin,
-        reason,
-        alreadyMember,
-        expiresAt: invite.expiresAt?.toISOString() ?? null,
-      },
-      group: serializeGroup(group, filledCount),
-      manager: { displayName: manager?.displayName ?? "Organizer" },
-      members: members.map((m) => ({
-        displayName: m.displayName,
-        isManager: m.isManager,
-        isPlaceholder: m.userId === null,
-        turnNumber: m.turnNumber,
-      })),
-      placeholder:
-        invite.type === InviteTokenType.membership_claim && invite.targetMembership
-          ? {
-              displayName: invite.targetMembership.displayName,
-              turnNumber: invite.targetMembership.turnNumber,
-              contact: invite.targetMembership.contact,
-            }
-          : null,
-    });
+    res.json(await getInvite(String(req.params.token), req.user?.id));
   } catch (err) {
-    if (err instanceof GroupError) {
-      res.status(err.status).json({ error: err.message });
-      return;
-    }
     next(err);
   }
 });
 
-router.post("/:token/resolve", requireAuth, async (req, res, next) => {
+router.post("/invites/:token/join", requireAuth, async (req, res, next) => {
   try {
-    const invite = await loadInvite(String(req.params.token));
-    const userId = req.user!.id;
-    const group = invite.group;
-
-    if (invite.type === InviteTokenType.group_invite) {
-      if (group.status !== "forming") {
-        res.status(409).json({ error: "This group is no longer accepting new members" });
-        return;
-      }
-
-      const existing = await getMembership(userId, group.id);
-      if (existing) {
-        res.json({
-          alreadyMember: true,
-          groupId: group.id,
-          membershipId: existing.id,
-        });
-        return;
-      }
-
-      const filledCount = await countFilledSlots(group.id);
-      if (filledCount >= group.slotCount) {
-        res.status(409).json({ error: "This group is full" });
-        return;
-      }
-
-      const membership = await prisma.membership.create({
-        data: {
-          groupId: group.id,
-          userId,
-          displayName: req.user!.displayName,
-        },
-      });
-
-      await writeAuditLog({
-        groupId: group.id,
-        actorId: userId,
-        action: "membership.joined_via_invite",
-        entityType: "membership",
-        entityId: membership.id,
-        metadata: { inviteTokenId: invite.id, displayName: req.user!.displayName },
-      });
-
-      notifyGroupChangeSafe(group.id, "memberships");
-      res.status(201).json({
-        groupId: group.id,
-        membershipId: membership.id,
-      });
-      return;
-    }
-
-    // membership_claim
-    if (group.status === "completed") {
-      res.status(409).json({ error: CLAIM_CLOSED_MESSAGE });
-      return;
-    }
-    const placeholder = invite.targetMembership;
-    if (!placeholder || placeholder.userId !== null) {
-      res.status(409).json({ error: "This chair has already been claimed" });
-      return;
-    }
-
-    const existingInGroup = await getMembership(userId, group.id);
-    if (existingInGroup) {
-      res.status(409).json({ error: "You already have a seat in this group" });
-      return;
-    }
-
-    const membership = await prisma.membership.update({
-      where: { id: placeholder.id },
-      data: {
-        userId,
-        displayName: req.user!.displayName,
-      },
-    });
-
-    await prisma.inviteToken.update({
-      where: { id: invite.id },
-      data: { revokedAt: new Date() },
-    });
-
-    await writeAuditLog({
-      groupId: group.id,
-      actorId: userId,
-      action: "membership.claimed",
-      entityType: "membership",
-      entityId: membership.id,
-      metadata: {
-        inviteTokenId: invite.id,
-        displayName: req.user!.displayName,
-        placeholderName: placeholder.displayName,
-      },
-    });
-
-    const managerMembership = await prisma.membership.findFirst({
-      where: { groupId: group.id, isManager: true },
-    });
-    if (managerMembership?.userId) {
-      await createNotification({
-        userId: managerMembership.userId,
-        groupId: group.id,
-        type: "chair_claimed",
-        title: `${group.name}: chair claimed`,
-        body: `${req.user!.displayName} claimed the seat for ${placeholder.displayName}.`,
-        link: `/groups/${group.id}`,
-      });
-    }
-
-    notifyGroupChangeSafe(group.id, "memberships");
-    res.json({
-      groupId: group.id,
-      membershipId: membership.id,
-    });
+    const result = await joinViaInvite(String(req.params.token), req.user!.id);
+    if (!result.alreadyMember) notifyGroupChangeSafe(result.groupId, "memberships");
+    res.json(result);
   } catch (err) {
-    if (err instanceof GroupError) {
-      res.status(err.status).json({ error: err.message });
-      return;
-    }
+    next(err);
+  }
+});
+
+router.get("/claims/:token", optionalAuth, async (req, res, next) => {
+  try {
+    res.json(await getClaim(String(req.params.token), req.user?.id));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/claims/:token/claim", requireAuth, async (req, res, next) => {
+  try {
+    const result = await claimPlaceholder(String(req.params.token), req.user!.id);
+    notifyGroupChangeSafe(result.groupId, "memberships");
+    res.json(result);
+  } catch (err) {
     next(err);
   }
 });

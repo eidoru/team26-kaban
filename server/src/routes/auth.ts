@@ -13,7 +13,6 @@ import {
 import { requireAuth } from "../middleware/auth.js";
 import { validateBody } from "../middleware/validate.js";
 import { emailField, newPasswordField, optionalText, requiredText } from "../lib/validation.js";
-import { getUserActivityStats } from "../services/userActivity.js";
 
 const router = Router();
 
@@ -203,15 +202,6 @@ router.get("/me", requireAuth, async (req, res, next) => {
       select: { id: true, email: true, displayName: true, contact: true, createdAt: true },
     });
     res.json({ user });
-  } catch (err) {
-    next(err);
-  }
-});
-
-router.get("/me/activity", requireAuth, async (req, res, next) => {
-  try {
-    const activity = await getUserActivityStats(req.user!.id);
-    res.json({ activity });
   } catch (err) {
     next(err);
   }
