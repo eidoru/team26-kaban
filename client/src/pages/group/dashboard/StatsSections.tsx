@@ -1,5 +1,4 @@
-import { Link } from "react-router-dom";
-import { CircleAlert, CircleCheck, ChevronRight, TriangleAlert } from "lucide-react";
+import { CircleAlert, CircleCheck, TriangleAlert } from "lucide-react";
 import type { GroupDetail, GroupStats, Health } from "../../../api/client";
 import { dueHint, formatDueDate } from "../../../lib/dates";
 import { formatPeso } from "../../../lib/money";
@@ -54,10 +53,6 @@ export function YourTurn({ detail, stats }: { detail: GroupDetail; stats: GroupS
           </p>
         </div>
       </div>
-      <Link to={`/groups/${detail.group.id}/history`} className="mt-3 flex items-center gap-1 text-sm font-bold text-brand-700 hover:underline">
-        Your history
-        <ChevronRight className="h-4 w-4" aria-hidden />
-      </Link>
     </section>
   );
 }

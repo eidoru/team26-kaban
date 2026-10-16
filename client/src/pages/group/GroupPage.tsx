@@ -449,7 +449,7 @@ function GroupView({ detail }: { detail: GroupDetail }) {
           : ownPayout
             ? `Take your ${formatPeso(payout.net)} payout`
             : `Hand ${formatPeso(payout.net)} to ${recipient?.name}`,
-        detail: `Round ${payout.round} payout. ${
+        detail: `From round ${payout.round}. ${
           confirming
             ? "Confirm once it's in your hands, so everyone sees it was paid."
             : ownPayout
@@ -472,7 +472,7 @@ function GroupView({ detail }: { detail: GroupDetail }) {
         title: mine.approved + mine.pending > 0 ? `Pay the remaining ${amount}` : `Pay your ${amount}`,
         detail: (
           <>
-            Round {period!.number}. {due}
+            {due}
             {mine.pending > 0 && ` ${formatPeso(mine.pending)} is already waiting for review.`}
             {isOrganizer && " Record it once your share is in the pot."}
           </>
@@ -572,7 +572,7 @@ function GroupView({ detail }: { detail: GroupDetail }) {
         <NowPanel
           tone="calm"
           icon={Hourglass}
-          eyebrow={`Round ${period!.number}`}
+          eyebrow="This round"
           title="Waiting for review"
           body={`Your ${formatPeso(mine.pending)} is with ${group.organizerName}. It counts once approved.`}
         />
@@ -583,7 +583,7 @@ function GroupView({ detail }: { detail: GroupDetail }) {
         <NowPanel
           tone="calm"
           icon={CircleCheck}
-          eyebrow={`Round ${period.number}`}
+          eyebrow="This round"
           title="You're paid up for this round"
           body={
             recipientIsMe
@@ -630,7 +630,12 @@ function GroupView({ detail }: { detail: GroupDetail }) {
   return (
     <div className="min-w-0 space-y-8">
       <header>
-        <p className="text-xs font-bold uppercase tracking-wide text-ink-500">{STATE_LABELS[group.state]}</p>
+        {/* While it runs, the header is the one place that names the current round. */}
+        <p className="text-xs font-bold uppercase tracking-wide text-ink-500">
+          {detail.period
+            ? `Round ${detail.period.number} of ${group.slotCount} · payout ${formatDueDate(detail.period.payoutDate)}`
+            : STATE_LABELS[group.state]}
+        </p>
         <h1 className={`${ui.pageTitle} mt-1`}>{group.name}</h1>
         <p className="mt-1 text-sm text-ink-600">
           {formatPeso(group.contribution)} {group.frequencyLabel.toLowerCase()} · {group.slotCount} slots · pot{" "}
@@ -659,7 +664,7 @@ function GroupView({ detail }: { detail: GroupDetail }) {
           />
         </>
       )}
-      {stats && <YourTurn detail={detail} stats={stats} />}
+      {stats && stats.myTurn?.round !== detail.period?.number && <YourTurn detail={detail} stats={stats} />}
       <DebtsList detail={detail} onPay={(slot) => pay(slot.id, "DEBT_PAYMENT")} />
       <RefundsOwed detail={detail} />
       <MyPayments

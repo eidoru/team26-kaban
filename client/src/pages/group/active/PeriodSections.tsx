@@ -19,21 +19,14 @@ export function PeriodCard({ detail, stats }: { detail: GroupDetail; stats?: Gro
   const pendingPercent = Math.min(100 - percent, Math.round((period.pendingTotal / period.expected) * 100));
   return (
     <section aria-label={`Round ${period.number}`} className="rounded-3xl bg-brand-700 p-5 text-white shadow-card sm:p-6">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="text-xs font-bold uppercase tracking-wide text-brand-100">
-          Round {period.number} of {detail.group.slotCount}
-        </p>
-        <p className="text-sm text-brand-50">Payout {formatDueDate(period.payoutDate)}</p>
-      </div>
+      {/* The page header names the round and its payout date; the card is about the pot. */}
       {open && detail.viewer.isOrganizer && (
-        <div className="mt-2 flex flex-wrap items-center gap-2">
+        <div className="mb-3 flex flex-wrap items-center gap-2">
           <HealthChip health={open.health} />
-          <span className="text-xs text-brand-100">
-            Collecting {formatDueDate(open.periodStart)} to {formatDueDate(open.payoutDate)}
-          </span>
+          <span className="text-xs text-brand-100">Collecting since {formatDueDate(open.periodStart)}</span>
         </div>
       )}
-      <div className="mt-3 flex items-center gap-3">
+      <div className="flex items-center gap-3">
         {recipient && <Avatar name={recipient.name} size="md" placeholder={recipient.kind === "PLACEHOLDER"} />}
         <p className="min-w-0">
           <span className="block text-sm text-brand-100">This pot goes to</span>
@@ -42,7 +35,7 @@ export function PeriodCard({ detail, stats }: { detail: GroupDetail; stats?: Gro
           </span>
           {open?.projectedPayout != null && open.projectedPayout < detail.group.pot && (
             <span className="block text-xs text-brand-100">
-              About {formatPeso(open.projectedPayout)} after what they owe
+              About {formatPeso(open.projectedPayout)} after what {recipient?.isViewer ? "you" : "they"} owe
             </span>
           )}
         </p>
