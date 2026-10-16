@@ -115,10 +115,7 @@ export function MoneyOverview({ stats }: { stats: GroupStats }) {
     { label: "Owed to you", value: stats.money.owedToOrganizer },
   ].filter((t) => t.always || t.value > 0);
   return (
-    <section aria-labelledby="money-heading">
-      <h2 id="money-heading" className={`${ui.sectionHeading} mb-3`}>
-        Money so far
-      </h2>
+    <section aria-label="Money so far">
       <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {tiles.map((t) => (
           <div key={t.label} className="rounded-2xl border border-ink-200 bg-white p-4">
