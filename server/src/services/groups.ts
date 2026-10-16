@@ -16,6 +16,7 @@ import { AppError, conflict } from "../lib/errors.js";
 import { prisma } from "../lib/prisma.js";
 import { fromCalendarDate, todayInManila, toCalendarDate } from "../lib/today.js";
 import { notifyUsers } from "./notifications.js";
+import { openPeriodView, visibleSubmissions } from "./submissions.js";
 import { assertState, memberUserIds, resetOrder, settingsOf, slotName, withGroupLock, type Db } from "./common.js";
 
 /** A 400 that carries per-field messages, shown under each form field. */
@@ -250,6 +251,11 @@ export async function groupDetail(groupId: string, viewerUserId: string, appOrig
           (r) => ({ ...r, recipientSlotId: bySlotPosition.get(r.number) ?? null, status: "UPCOMING" as const }),
         );
 
+  const period = await openPeriodView(prisma, groupId, settings.contribution);
+  const submissions = period
+    ? await visibleSubmissions(prisma, groupId, period.roundId, { userId: viewerUserId, slotId: viewer.id, isOrganizer })
+    : [];
+
   return {
     group: { ...summary(group), organizerName: group.organizer.displayName },
     viewer: { slotId: viewer.id, isOrganizer },
@@ -260,6 +266,9 @@ export async function groupDetail(groupId: string, viewerUserId: string, appOrig
         ? { url: `${appOrigin}/invite/${group.inviteLinks[0].token}`, createdAt: group.inviteLinks[0].createdAt.toISOString() }
         : null,
     schedule,
+    /** The open contribution period and each slot's standing in it (R-SUB-07); null outside ACTIVE. */
+    period,
+    submissions,
     launch:
       group.state === "LOBBY"
         ? {

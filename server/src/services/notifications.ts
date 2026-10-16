@@ -13,7 +13,10 @@ export type NotificationKind =
   | "member.joined"
   | "member.left"
   | "member.kicked"
-  | "placeholder.claimed";
+  | "placeholder.claimed"
+  | "submission.pending"
+  | "submission.approved"
+  | "submission.denied";
 
 /** Send the same notification to several users, skipping duplicates and nulls. */
 export async function notifyUsers(

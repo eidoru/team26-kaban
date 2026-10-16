@@ -21,7 +21,11 @@ export type AuditAction =
   | "order.changed"
   | "order.shuffled"
   | "order.locked"
-  | "order.reset";
+  | "order.reset"
+  | "submission.created"
+  | "submission.approved"
+  | "submission.denied"
+  | "submission.cancelled";
 
 /**
  * Append one immutable entry (R-AUD-02, R-AUD-04). Amounts are centavos. `actorUserId` is null for

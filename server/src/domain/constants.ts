@@ -24,3 +24,7 @@ export const SWAP_REQUEST_EXPIRY_DAYS: number | null = null;
 export const REMINDER_DAYS_BEFORE = 3;
 /** R-DEC-07 */
 export const RECEIPT_AUTO_CONFIRM_DAYS: number | null = null;
+/** Notes on submissions and denial reasons (the pre-rewrite note limit; the spec sets none). */
+export const NOTE_MAX_LENGTH = 500;
+/** Largest proof image, matching the bucket's limit (assumption; the spec sets none). */
+export const MAX_PROOF_BYTES = 5 * 1024 * 1024;

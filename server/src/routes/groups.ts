@@ -8,6 +8,10 @@ import { notifyGroupChangeSafe } from "../lib/realtimeNotify.js";
 import { cancelGroup, createGroup, editGroup, groupDetail, listMyGroups } from "../services/groups.js";
 import { addPlaceholder, createClaimLink, createInviteLink, removeSlot, revokeClaimLink } from "../services/roster.js";
 import { launchGroup, lockOrder, setOrder, shuffleOrder } from "../services/launch.js";
+import { cancelSubmission, reviewSubmission, submitContribution } from "../services/submissions.js";
+import { createProofUpload, PROOF_CONTENT_TYPES } from "../lib/storage.js";
+import { can } from "../domain/lifecycle.js";
+import { conflict } from "../lib/errors.js";
 
 const router = Router();
 router.use(requireAuth);
@@ -25,28 +29,42 @@ const setupSchema = z.object({
 });
 const placeholderSchema = z.object({ name: z.string(), contact: z.string().optional() });
 const orderSchema = z.object({ slotIds: z.array(z.string()).min(1) });
+const proofSchema = z.object({ contentType: z.enum(PROOF_CONTENT_TYPES as [string, ...string[]]) });
+const submissionSchema = z.object({
+  slotId: z.string(),
+  amount: z.number().int(),
+  proofPath: z.string().optional(),
+  note: z.string().optional(),
+});
+const denySchema = z.object({ reason: z.string() });
 
 const detail = (req: Request, groupId: string) => groupDetail(groupId, req.user!.id, resolveAppOrigin(req));
 
 /**
- * An organizer action on `:id`: run it, broadcast the change, and answer with the fresh detail so
- * the client doesn't need to refetch.
+ * An action on `:id`: run it, broadcast the change, and answer with the fresh detail so the client
+ * doesn't need to refetch. `organizerAction` also requires the organizer.
  */
-function organizerAction(action: (req: Request, groupId: string, userId: string) => Promise<unknown>) {
-  return [
-    loadGroup,
-    requireOrganizer,
-    async (req: Request, res: Response, next: NextFunction) => {
-      try {
-        const groupId = req.group!.id;
-        await action(req, groupId, req.user!.id);
-        notifyGroupChangeSafe(groupId, "memberships");
-        res.json(await detail(req, groupId));
-      } catch (err) {
-        next(err);
-      }
-    },
-  ] as const;
+type GroupAction = (req: Request, groupId: string, userId: string) => Promise<unknown>;
+
+function memberAction(action: GroupAction) {
+  return [loadGroup, answerWithDetail(action)] as const;
+}
+
+function organizerAction(action: GroupAction) {
+  return [loadGroup, requireOrganizer, answerWithDetail(action)] as const;
+}
+
+function answerWithDetail(action: GroupAction) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const groupId = req.group!.id;
+      await action(req, groupId, req.user!.id);
+      notifyGroupChangeSafe(groupId, "memberships");
+      res.json(await detail(req, groupId));
+    } catch (err) {
+      next(err);
+    }
+  };
 }
 
 router.get("/", async (req, res, next) => {
@@ -96,6 +114,36 @@ router.put("/:id/order", validateBody(orderSchema), ...organizerAction((req, id,
 router.post("/:id/order/shuffle", ...organizerAction((_req, id, user) => shuffleOrder(id, user)));
 router.post("/:id/order/lock", ...organizerAction((_req, id, user) => lockOrder(id, user)));
 router.post("/:id/launch", ...organizerAction((_req, id, user) => launchGroup(id, user)));
+
+// --- Payments (§6.1). The browser uploads a proof photo first, then submits with its path.
+router.post("/:id/proofs", loadGroup, validateBody(proofSchema), async (req, res, next) => {
+  try {
+    if (!can.submitContribution(req.group!.state)) throw conflict("Payments open once the paluwagan starts.", "WRONG_STATE");
+    res.json(await createProofUpload(req.group!.id, req.body.contentType));
+  } catch (err) {
+    next(err);
+  }
+});
+router.post(
+  "/:id/submissions",
+  validateBody(submissionSchema),
+  ...memberAction((req, id, user) => submitContribution(id, user, req.body)),
+);
+router.post(
+  "/:id/submissions/:submissionId/approve",
+  ...organizerAction((req, id, user) => reviewSubmission(id, user, String(req.params.submissionId), { approve: true })),
+);
+router.post(
+  "/:id/submissions/:submissionId/deny",
+  validateBody(denySchema),
+  ...organizerAction((req, id, user) =>
+    reviewSubmission(id, user, String(req.params.submissionId), { approve: false, reason: req.body.reason }),
+  ),
+);
+router.post(
+  "/:id/submissions/:submissionId/cancel",
+  ...memberAction((req, id, user) => cancelSubmission(id, user, String(req.params.submissionId))),
+);
 
 router.post("/:id/leave", loadGroup, async (req, res, next) => {
   try {
