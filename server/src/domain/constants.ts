@@ -1,4 +1,4 @@
-// Configurable limits from docs/paluwagan-user-journey.md. `null` marks a value the spec leaves TBD
+// Configurable limits from docs/PRODUCT_SPEC.md. `null` marks a value the spec leaves TBD
 // (R-OQ-01, R-DEC-12): the rule isn't enforced until a value is decided. Don't fill these in without a decision.
 
 /** R-SET-01 */

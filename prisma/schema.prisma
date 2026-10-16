@@ -1,4 +1,4 @@
-// Paluwagan process rewrite. Spec: docs/paluwagan-user-journey.md (rule IDs in comments).
+// Paluwagan process rewrite. Spec: docs/PRODUCT_SPEC.md (rule IDs in comments).
 // Money is integer centavos in BigInt columns (R-AMT-03); convert to number at the service boundary.
 
 generator client {
