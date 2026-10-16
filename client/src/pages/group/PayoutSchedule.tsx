@@ -1,7 +1,6 @@
-import { ArrowDown, ArrowUp, ChevronRight, Lock, Shuffle } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronRight, Shuffle } from "lucide-react";
 import type { GroupDetail, SlotView } from "../../api/client";
-import { Avatar } from "../../components/Avatar";
-import { formatDueDate } from "../../lib/dates";
+import { dueHint, formatDateParts } from "../../lib/dates";
 import { formatPeso } from "../../lib/money";
 import { ui } from "../../lib/ui";
 import { currentOrder, slotHasActions, slotTag } from "./slots";
@@ -62,9 +61,9 @@ export function PayoutSchedule({
   const subtitle =
     group.state === "LOBBY" && !order
       ? "Who gets each payout is set once every slot is filled."
-      : group.orderLocked || group.state !== "LOBBY"
-        ? "The order is locked."
-        : "Not locked yet. Lock it when everyone agrees.";
+      : group.state !== "LOBBY"
+        ? "The order is final."
+        : "You can change it until you launch.";
   const moveButton =
     "flex h-11 w-11 items-center justify-center rounded-full border-2 border-ink-200 text-ink-700 hover:bg-ink-50 disabled:opacity-30";
 
@@ -94,14 +93,15 @@ export function PayoutSchedule({
         {schedule.map((round, index) => {
           const slot = recipients[index];
           const payout = detail.payouts.find((p) => p.round === round.number);
-          const date = payout ? (
-            PAYOUT_LINE[payout.status](formatPeso(payout.net))
-          ) : (
-            <>
-              Payout {formatDueDate(round.payoutDate)}
-              {round.status === "OPEN" && " · collecting now"}
-            </>
-          );
+          // The heading already says "Payout schedule", so rows show the date in its own column and
+          // use the line under the name for where the payout stands.
+          const parts = formatDateParts(round.payoutDate);
+          const hint = dueHint(round.payoutDate)?.label ?? "";
+          const status = payout
+            ? PAYOUT_LINE[payout.status](formatPeso(payout.net))
+            : round.status === "OPEN"
+              ? "Collecting now"
+              : hint.charAt(0).toUpperCase() + hint.slice(1);
           const body = (
             <>
               <span
@@ -123,22 +123,29 @@ export function PayoutSchedule({
                       {slot.name}
                       {slot.isViewer && <span className="font-semibold text-brand-700"> (you)</span>}
                     </span>
-                    <span className="block text-xs text-ink-500">
-                      {date}
+                    <span className={`block truncate text-xs ${round.status === "OPEN" && !payout ? "font-semibold text-brand-700" : "text-ink-500"}`}>
+                      {status}
                       {slot.kind === "PLACEHOLDER" && ` · ${slotTag(slot).toLowerCase()}`}
                     </span>
                   </>
                 ) : (
-                  // No recipient yet: the date is all there is to say.
-                  <span className="block text-sm font-bold text-ink-900">{date}</span>
+                  // No order yet (the subtitle says so): the countdown is all there is to say.
+                  <span className="block truncate text-sm text-ink-500">{status}</span>
                 )}
               </span>
-              {slot && !draft && <Avatar name={slot.name} placeholder={slot.kind === "PLACEHOLDER"} />}
+              {parts && (
+                <span className="shrink-0 text-right">
+                  <span className="block text-sm font-bold tabular-nums text-ink-900">{parts.day}</span>
+                  <span className="block text-xs text-ink-500">{parts.weekday}</span>
+                </span>
+              )}
             </>
           );
           const opensPayout = !!payout && !!onOpenPayout;
           const tappable = !draft && slot && (opensPayout || (onSelect && slotHasActions(slot, detail)));
-          const rowClass = `flex w-full items-center gap-3 px-4 py-3 text-left ${slot?.isViewer ? "bg-brand-50" : ""}`;
+          // One fixed height for every row, arranging or not: it fits the 44px move buttons, and the
+          // text lines truncate instead of wrapping. Arranging tightens the spacing to leave the name room.
+          const rowClass = `flex h-17 w-full items-center ${draft ? "gap-2 px-3" : "gap-3 px-4"} text-left ${slot?.isViewer ? "bg-brand-50" : ""}`;
           return (
             <li key={round.number}>
               {tappable ? (
@@ -190,12 +197,6 @@ export function PayoutSchedule({
             {pending === "order" ? "Saving…" : "Save order"}
           </button>
         </div>
-      )}
-      {canArrange && group.orderLocked && !draft && (
-        <p className="mt-2 flex items-center gap-1.5 text-xs text-ink-500">
-          <Lock className="h-3.5 w-3.5" aria-hidden />
-          Shuffling or arranging again unlocks it.
-        </p>
       )}
     </section>
   );

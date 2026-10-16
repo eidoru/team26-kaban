@@ -34,13 +34,33 @@ export function formatLocalDate(iso: string | null | undefined): string {
   return Number.isNaN(date.getTime()) ? iso : formatDay(date);
 }
 
-/** Relative hint for a due date: "today", "tomorrow", "in 3 days", "2 days overdue". */
-export function dueHint(value: string | null | undefined): { label: string; overdue: boolean } | null {
+/**
+ * A calendar date split for a date column: `day` "Nov 15" over `weekday` "Sun", which carries the
+ * year outside the current one ("Fri · 2027").
+ */
+export function formatDateParts(value: string | null | undefined): { day: string; weekday: string } | null {
+  const date = parseDateOnly(value);
+  if (!date) return null;
+  const weekday = date.toLocaleDateString(undefined, { weekday: "short" });
+  return {
+    day: date.toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+    weekday: date.getFullYear() === new Date().getFullYear() ? weekday : `${weekday} · ${date.getFullYear()}`,
+  };
+}
+
+/** Whole days from today to a calendar date: 0 today, negative once it's past. */
+export function daysUntil(value: string | null | undefined): number | null {
   const date = parseDateOnly(value);
   if (!date) return null;
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const days = Math.round((date.getTime() - today.getTime()) / DAY_MS);
+  return Math.round((date.getTime() - today.getTime()) / DAY_MS);
+}
+
+/** Relative hint for a due date: "today", "tomorrow", "in 3 days", "2 days overdue". */
+export function dueHint(value: string | null | undefined): { label: string; overdue: boolean } | null {
+  const days = daysUntil(value);
+  if (days === null) return null;
   if (days === 0) return { label: "today", overdue: false };
   if (days === 1) return { label: "tomorrow", overdue: false };
   if (days > 1) return { label: `in ${days} days`, overdue: false };
