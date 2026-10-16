@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Ban,
+  Banknote,
   CalendarClock,
   CircleCheck,
   ClipboardCheck,
@@ -29,9 +30,10 @@ import { GroupDetails } from "./GroupDetails";
 import { InviteSheet, SlotSheet } from "./GroupSheets";
 import { PayoutSchedule } from "./PayoutSchedule";
 import { currentOrder } from "./slots";
-import { PaySheet } from "./active/PaySheet";
-import { reviewQueue, standingOf } from "./active/period";
-import { MyPayments, PeriodCard, PeriodStatusList } from "./active/PeriodSections";
+import { PaySheet, type PayMode } from "./active/PaySheet";
+import { PayoutSheet } from "./active/PayoutSheet";
+import { debtReportable, owedBy, payoutToActOn, reviewQueue, standingOf } from "./active/period";
+import { DebtsList, MyPayments, PeriodCard, PeriodStatusList } from "./active/PeriodSections";
 import { ReviewSheet } from "./active/ReviewSheet";
 import { SlotsList } from "./SlotsList";
 
@@ -100,7 +102,8 @@ function GroupView({ detail }: { detail: GroupDetail }) {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
   const [orderDraft, setOrderDraft] = useState<string[] | null>(null);
-  const [payForSlotId, setPayForSlotId] = useState<string | null>(null);
+  const [payTarget, setPayTarget] = useState<{ slotId: string; mode: PayMode } | null>(null);
+  const [payoutRound, setPayoutRound] = useState<number | null>(null);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [demoTools] = useDemoToolsSetting();
   const selectedSlot = detail.slots.find((s) => s.id === selectedSlotId) ?? null;
@@ -158,8 +161,27 @@ function GroupView({ detail }: { detail: GroupDetail }) {
     await queryClient.invalidateQueries({ queryKey: groupKey(group.id) });
   }
 
+  async function closeRoundNow() {
+    const confirmed = await dialog.confirm({
+      title: "Close this round now? (demo)",
+      description: "Skips to the payout date: shortfalls become debt, the payout is worked out, and the next round opens.",
+      confirmLabel: "Close round",
+    });
+    if (!confirmed) return;
+    await api.closeRoundNow(group.id);
+    await queryClient.invalidateQueries({ queryKey: groupKey(group.id) });
+  }
+
+  const pay = (slotId: string, mode: PayMode) => setPayTarget({ slotId, mode });
+
   /** Submit from the pay sheet; failures surface in the sheet, not behind it. */
-  async function submitPayment(input: { slotId: string; amount: number; proofPath?: string; note?: string }) {
+  async function submitPayment(input: {
+    slotId: string;
+    type: PayMode;
+    amount: number;
+    proofPath?: string;
+    note?: string;
+  }) {
     let message = "";
     const saved = await run("pay", () => api.submitPayment(group.id, input), { onError: (e) => (message = e.message) });
     if (!saved) {
@@ -289,28 +311,27 @@ function GroupView({ detail }: { detail: GroupDetail }) {
         )}
       </NowPanel>
     );
-  } else if (group.state === "ACTIVE" && detail.period) {
+  } else if (group.state === "ACTIVE" || group.state === "COMPLETED" || group.state === "COMPLETED_WITH_OUTSTANDING_DEBT") {
     const period = detail.period;
-    const mine = standingOf(detail, viewer.slotId)!;
+    const mine = period ? standingOf(detail, viewer.slotId) : null;
     const queue = isOrganizer ? reviewQueue(detail) : [];
-    const hint = dueHint(period.payoutDate);
+    const payout = payoutToActOn(detail);
+    const owed = owedBy(detail, viewer.slotId);
+    const debtLeft = debtReportable(detail, viewer.slotId);
+    const hint = period ? dueHint(period.payoutDate) : null;
     // The date itself is on the round card; here, how long is left.
     const due = hint ? `Due ${hint.label}.` : "";
-    const payButton = (
-      <button type="button" onClick={() => setPayForSlotId(viewer.slotId)} className={ui.btnPrimary}>
-        <HandCoins className="h-4 w-4" aria-hidden />
-        {isOrganizer ? "Record your payment" : "Report a payment"}
-      </button>
-    );
+    const owingSlots = detail.slots.filter((s) => s.debt.principal + s.debt.interest > 0);
+
     if (queue.length > 0) {
-      // The organizer's queue comes first: members are waiting on it (R-SUB-03).
+      // Members are waiting on the organizer's reviews (R-SUB-03).
       now = (
         <NowPanel
           tone="sun"
           icon={ClipboardCheck}
           eyebrow="Needs you"
           title={`${queue.length} payment${queue.length === 1 ? "" : "s"} to review`}
-          body="Oldest first. They count toward the pot once you approve them."
+          body="Oldest first. They count once you approve them."
         />
       );
       primary = (
@@ -318,33 +339,91 @@ function GroupView({ detail }: { detail: GroupDetail }) {
           Review payments
         </button>
       );
-    } else if (mine.reportable > 0) {
+    } else if (payout) {
+      const recipient = detail.slots.find((s) => s.id === payout.recipientSlotId);
+      const confirming = payout.status === "HANDED_OVER";
+      // The organizer already holds the pot they collected; taking their own payout is one step.
+      const ownPayout = isOrganizer && !!recipient?.isViewer;
+      now = (
+        <NowPanel
+          tone="sun"
+          icon={Banknote}
+          eyebrow={`Round ${payout.round} payout`}
+          title={
+            confirming
+              ? `Did you get ${formatPeso(payout.net)}?`
+              : ownPayout
+                ? `Take your ${formatPeso(payout.net)} payout`
+                : `Hand ${formatPeso(payout.net)} to ${recipient?.name}`
+          }
+          body={
+            confirming
+              ? "Confirm once it's in your hands, so everyone sees it was paid."
+              : ownPayout
+                ? "You're holding the collected pot. Mark it received so everyone sees the round is paid out."
+                : payout.net < payout.gross
+                  ? `The ${formatPeso(payout.gross)} pot, less what ${recipient?.name} owed.`
+                  : `The full ${formatPeso(payout.gross)} pot.`
+          }
+        />
+      );
+      primary = (
+        <button type="button" onClick={() => setPayoutRound(payout.round)} className={ui.btnPrimary}>
+          {confirming ? "Confirm receipt" : ownPayout ? "Mark as received" : "Mark as handed over"}
+        </button>
+      );
+    } else if (mine && mine.reportable > 0) {
       now = (
         <NowPanel
           tone="brand"
           icon={HandCoins}
-          eyebrow={`Round ${period.number}`}
+          eyebrow={`Round ${period!.number}`}
           title={mine.approved + mine.pending > 0 ? `Pay the remaining ${formatPeso(mine.reportable)}` : `Pay ${formatPeso(mine.due)}`}
           body={
             <>
               {due}
               {mine.pending > 0 && ` ${formatPeso(mine.pending)} is already waiting for review.`}
+              {owed > 0 && ` You also owe ${formatPeso(owed)} from earlier rounds.`}
             </>
           }
         />
       );
-      primary = payButton;
-    } else if (mine.status !== "PAID") {
+      primary = (
+        <button type="button" onClick={() => pay(viewer.slotId, "CONTRIBUTION")} className={ui.btnPrimary}>
+          <HandCoins className="h-4 w-4" aria-hidden />
+          {isOrganizer ? "Record your payment" : "Report a payment"}
+        </button>
+      );
+    } else if (debtLeft > 0) {
+      now = (
+        <NowPanel
+          tone="danger"
+          icon={HandCoins}
+          eyebrow="You owe"
+          title={`${formatPeso(owed)} to ${group.organizerName}`}
+          body={
+            group.interestRate > 0 && group.state === "ACTIVE"
+              ? "Interest is added at every payout date until it's paid. Payments go to interest first."
+              : "Shortfalls the organizer covered for you."
+          }
+        />
+      );
+      primary = (
+        <button type="button" onClick={() => pay(viewer.slotId, "DEBT_PAYMENT")} className={ui.btnPrimary}>
+          Pay toward your debt
+        </button>
+      );
+    } else if (mine && mine.status !== "PAID") {
       now = (
         <NowPanel
           tone="calm"
           icon={Hourglass}
-          eyebrow={`Round ${period.number}`}
+          eyebrow={`Round ${period!.number}`}
           title="Waiting for review"
           body={`Your ${formatPeso(mine.pending)} is with ${group.organizerName}. It counts once approved.`}
         />
       );
-    } else {
+    } else if (group.state === "ACTIVE" && period) {
       const recipientIsMe = period.recipientSlotId === viewer.slotId;
       now = (
         <NowPanel
@@ -361,9 +440,35 @@ function GroupView({ detail }: { detail: GroupDetail }) {
           }
         />
       );
+    } else if (group.state === "COMPLETED_WITH_OUTSTANDING_DEBT") {
+      now = (
+        <NowPanel
+          tone="calm"
+          icon={CircleCheck}
+          eyebrow="Every payout is done"
+          title={isOrganizer ? `${owingSlots.length} still owe you` : "You're all settled"}
+          body={
+            isOrganizer
+              ? "Debt payments still come in for review. It's fully complete once they're paid."
+              : "Some members still owe the organizer, so the paluwagan stays open for their payments."
+          }
+        />
+      );
+    } else {
+      now = <NowPanel tone="calm" icon={CircleCheck} eyebrow="Complete" title="Every payout is done, and nobody owes anything" />;
     }
-  } else if (group.state === "ACTIVE") {
-    now = <NowPanel tone="calm" icon={CircleCheck} eyebrow="Running" title="This paluwagan is running" />;
+    if (group.state === "ACTIVE" && isOrganizer && demoTools) {
+      now = (
+        <>
+          {now}
+          <div className="-mt-4 text-right">
+            <button type="button" onClick={() => void closeRoundNow()} className={ui.btnGhost}>
+              Close this round now (demo)
+            </button>
+          </div>
+        </>
+      );
+    }
   } else if (group.state === "CANCELLED") {
     now = <NowPanel tone="calm" icon={Ban} eyebrow="Cancelled" title="This paluwagan was cancelled" body="The organizer cancelled it before it launched." />;
   }
@@ -389,13 +494,14 @@ function GroupView({ detail }: { detail: GroupDetail }) {
         </p>
       )}
 
-      {group.state === "ACTIVE" && detail.period && (
+      {detail.period && (
         <>
           <PeriodCard detail={detail} />
-          <PeriodStatusList detail={detail} onRecord={isOrganizer ? (slot) => setPayForSlotId(slot.id) : undefined} />
-          <MyPayments detail={detail} pending={pending} onWithdraw={(s) => void withdraw(s)} />
+          <PeriodStatusList detail={detail} onRecord={isOrganizer ? (slot) => pay(slot.id, "CONTRIBUTION") : undefined} />
         </>
       )}
+      <DebtsList detail={detail} onPay={(slot) => pay(slot.id, "DEBT_PAYMENT")} />
+      <MyPayments detail={detail} pending={pending} onWithdraw={(s) => void withdraw(s)} />
       {/* Once everyone has a turn, the schedule lists every member too, so it replaces the member list. */}
       {!ordered && (
         <SlotsList
@@ -415,6 +521,7 @@ function GroupView({ detail }: { detail: GroupDetail }) {
           void run("order", () => api.setOrder(group.id, slotIds)).then((saved) => saved && setOrderDraft(null))
         }
         onSelect={selectSlot}
+        onOpenPayout={setPayoutRound}
       />
       <GroupDetails detail={detail} onCancel={() => void cancelGroup()} />
 
@@ -441,9 +548,25 @@ function GroupView({ detail }: { detail: GroupDetail }) {
       )}
       <PaySheet
         detail={detail}
-        slot={detail.slots.find((s) => s.id === payForSlotId) ?? null}
-        onClose={() => setPayForSlotId(null)}
+        target={
+          payTarget
+            ? { slot: detail.slots.find((s) => s.id === payTarget.slotId)!, mode: payTarget.mode }
+            : null
+        }
+        onClose={() => setPayTarget(null)}
         onSubmit={submitPayment}
+      />
+      <PayoutSheet
+        detail={detail}
+        payout={detail.payouts.find((p) => p.round === payoutRound) ?? null}
+        pending={pending}
+        onClose={() => setPayoutRound(null)}
+        onHandOver={async (round, proofPath) => !!(await run("handover", () => api.markHandedOver(group.id, round, proofPath)))}
+        onConfirm={async (round) => !!(await run("confirm", () => api.confirmReceipt(group.id, round)))}
+        onManageSlot={(slotId) => {
+          setPayoutRound(null);
+          setSelectedSlotId(slotId);
+        }}
       />
       {isOrganizer && (
         <ReviewSheet

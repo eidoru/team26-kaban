@@ -152,6 +152,9 @@ export function MyPayments({
                   <span className="block text-sm font-bold text-ink-900 tabular-nums">
                     {formatPeso(s.amount)}
                     {!slot?.isViewer && <span className="font-semibold text-ink-600"> for {slot?.name}</span>}
+                    {(s.type === "DEBT_PAYMENT" || s.appliedAs === "DEBT_PAYMENT") && (
+                      <span className="font-semibold text-ink-600"> toward debt</span>
+                    )}
                   </span>
                   <span className={`flex items-center gap-1 text-xs font-semibold ${label.tone}`}>
                     {s.status === "PENDING" && <Clock className="h-3 w-3" aria-hidden />}
@@ -180,6 +183,54 @@ export function MyPayments({
             </li>
           );
         })}
+      </ul>
+    </section>
+  );
+}
+
+/**
+ * Who owes the organizer, and how much (§8, R-DEC-06: everyone sees it). Hidden when nobody owes
+ * anything. `onPay` opens a debt payment for the viewer's own row, or a placeholder's (organizer).
+ */
+export function DebtsList({ detail, onPay }: { detail: GroupDetail; onPay: (slot: SlotView) => void }) {
+  const owing = detail.slots
+    .map((slot) => ({ slot, total: slot.debt.principal + slot.debt.interest }))
+    .filter((row) => row.total > 0)
+    .sort((a, b) => b.total - a.total);
+  if (owing.length === 0) return null;
+  const canPay = (slot: SlotView) => slot.isViewer || (detail.viewer.isOrganizer && slot.kind === "PLACEHOLDER");
+  return (
+    <section aria-labelledby="debts-heading">
+      <h2 id="debts-heading" className={ui.sectionHeading}>
+        Debts
+      </h2>
+      <p className={`${ui.sectionSubtitle} mb-3`}>
+        Shortfalls {detail.group.organizerName} covered{detail.group.interestRate > 0 ? ", with interest" : ""}.
+      </p>
+      <ul className="divide-y divide-ink-100 overflow-hidden rounded-3xl border border-ink-200 bg-white">
+        {owing.map(({ slot, total }) => (
+          <li key={slot.id} className="flex min-h-16 items-center gap-3 px-4 py-3">
+            <Avatar name={slot.name} size="md" placeholder={slot.kind === "PLACEHOLDER"} />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-bold text-ink-900">
+                {slot.name}
+                {slot.isViewer && <span className="font-semibold text-brand-700"> (you)</span>}
+              </span>
+              <span className="block text-xs text-ink-500 tabular-nums">
+                {formatPeso(slot.debt.principal)} unpaid
+                {slot.debt.interest > 0 && ` + ${formatPeso(slot.debt.interest)} interest`}
+              </span>
+            </span>
+            <span className="flex shrink-0 flex-col items-end gap-1">
+              <span className="font-heading text-base font-bold tabular-nums text-danger-700">{formatPeso(total)}</span>
+              {canPay(slot) && (
+                <button type="button" onClick={() => onPay(slot)} className={`${ui.btnSecondarySm} min-h-9`}>
+                  {slot.isViewer ? "Pay" : "Record"}
+                </button>
+              )}
+            </span>
+          </li>
+        ))}
       </ul>
     </section>
   );

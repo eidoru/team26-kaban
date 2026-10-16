@@ -1,49 +1,64 @@
 import { useEffect, useId, useMemo, useState } from "react";
 import { Camera, X } from "lucide-react";
 import { NOTE_MAX_LENGTH } from "@domain/constants";
-import { submissionAmountError, submissionCap } from "@domain/submissions";
+import { submissionAmountError } from "@domain/submissions";
 import type { GroupDetail, SlotView } from "../../../api/client";
 import { AmountField } from "../../../components/flow/AmountField";
 import { Sheet } from "../../../components/flow/Sheet";
 import { formatPeso, parsePesoInput, pesoInputValue } from "../../../lib/money";
 import { proofFileError, uploadProof } from "../../../lib/proofUpload";
 import { ui } from "../../../lib/ui";
+import { debtReportable, owedBy, standingOf } from "./period";
+
+export type PayMode = "CONTRIBUTION" | "DEBT_PAYMENT";
+type PayInput = { slotId: string; type: PayMode; amount: number; proofPath?: string; note?: string };
 
 /**
- * Report a contribution for the open period (R-SUB-01). Members report their own; the organizer
- * records for themselves and placeholders (R-SUB-02). The amount defaults to what's left, and can't
- * go over it (R-SUB-06). Proof is optional (R-SUB-08).
+ * Report a payment (R-SUB-01): a contribution for the open period, or a payment toward debt
+ * (R-DBT-04). Members report their own; the organizer records for themselves and placeholders
+ * (R-SUB-02). The amount defaults to what's left and can't go over it (R-SUB-06). Proof is optional.
  */
 export function PaySheet({
   detail,
-  slot,
+  target,
   onClose,
   onSubmit,
 }: {
   detail: GroupDetail;
-  /** Whose payment this is; null when closed. */
-  slot: SlotView | null;
+  /** Whose payment, and what kind; null when closed. */
+  target: { slot: SlotView; mode: PayMode } | null;
   onClose: () => void;
-  onSubmit: (input: { slotId: string; amount: number; proofPath?: string; note?: string }) => Promise<boolean>;
+  onSubmit: (input: PayInput) => Promise<boolean>;
 }) {
-  if (!slot || !detail.period) return null;
-  return <PayForm key={slot.id} detail={detail} slot={slot} onClose={onClose} onSubmit={onSubmit} />;
+  if (!target || (target.mode === "CONTRIBUTION" && !detail.period)) return null;
+  return (
+    <PayForm
+      key={`${target.slot.id}-${target.mode}`}
+      detail={detail}
+      slot={target.slot}
+      mode={target.mode}
+      onClose={onClose}
+      onSubmit={onSubmit}
+    />
+  );
 }
 
 function PayForm({
   detail,
   slot,
+  mode,
   onClose,
   onSubmit,
 }: {
   detail: GroupDetail;
   slot: SlotView;
+  mode: PayMode;
   onClose: () => void;
-  onSubmit: (input: { slotId: string; amount: number; proofPath?: string; note?: string }) => Promise<boolean>;
+  onSubmit: (input: PayInput) => Promise<boolean>;
 }) {
-  const period = detail.period!;
-  const standing = period.slots.find((s) => s.slotId === slot.id)!;
-  const cap = submissionCap(standing.due, standing.approved, standing.pending);
+  const isDebt = mode === "DEBT_PAYMENT";
+  const standing = isDebt ? null : standingOf(detail, slot.id)!;
+  const cap = isDebt ? debtReportable(detail, slot.id) : standing!.reportable;
   const [amountText, setAmountText] = useState(cap > 0 ? pesoInputValue(cap) : "");
   const [note, setNote] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -73,7 +88,7 @@ function PayForm({
         proofPath = await uploadProof(detail.group.id, file);
       }
       setStage("sending");
-      if (await onSubmit({ slotId: slot.id, amount, proofPath, note: note.trim() || undefined })) onClose();
+      if (await onSubmit({ slotId: slot.id, type: mode, amount, proofPath, note: note.trim() || undefined })) onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't send it. Try again.");
     } finally {
@@ -85,8 +100,20 @@ function PayForm({
     <Sheet
       open
       onClose={onClose}
-      title={forSomeoneElse ? `Record a payment for ${slot.name}` : "Report a payment"}
-      subtitle={`Round ${period.number} · ${formatPeso(standing.due - standing.approved - standing.pending)} left to report`}
+      title={
+        isDebt
+          ? forSomeoneElse
+            ? `Record a debt payment for ${slot.name}`
+            : "Pay toward your debt"
+          : forSomeoneElse
+            ? `Record a payment for ${slot.name}`
+            : "Report a payment"
+      }
+      subtitle={
+        isDebt
+          ? `Owes ${formatPeso(owedBy(detail, slot.id))} · ${formatPeso(cap)} left to report`
+          : `Round ${detail.period!.number} · ${formatPeso(cap)} left to report`
+      }
       footer={
         <button
           type="button"
@@ -108,14 +135,18 @@ function PayForm({
         <p className="text-sm text-ink-600">
           {forSomeoneElse
             ? "Record money you received for this slot. It still needs your review, and the audit log shows you approved your own entry."
-            : `Tell ${detail.group.organizerName} what you paid. It counts once they approve it.`}
+            : isDebt
+              ? `Tell ${detail.group.organizerName} what you paid back. Once approved, it pays interest first, then the rest.`
+              : `Tell ${detail.group.organizerName} what you paid. It counts once they approve it.`}
         </p>
         <AmountField
           label="Amount paid"
           value={amountText}
           onChange={setAmountText}
           error={amountError}
-          helper={standing.approved > 0 ? `${formatPeso(standing.approved)} already approved this round.` : undefined}
+          helper={
+            standing && standing.approved > 0 ? `${formatPeso(standing.approved)} already approved this round.` : undefined
+          }
         />
 
         <div>

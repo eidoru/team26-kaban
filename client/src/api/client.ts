@@ -86,6 +86,27 @@ export interface SlotView {
   contact: string | null;
   /** Live claim link, organizer only. */
   claimLink: { url: string; createdAt: string } | null;
+  /** What this slot owes the organizer (§8), in centavos. Everyone sees everyone's (R-DEC-06). */
+  debt: { principal: number; interest: number };
+}
+
+/** A processed payout (§7). Amounts in centavos. */
+export interface PayoutView {
+  round: number;
+  payoutDate: string;
+  recipientSlotId: string;
+  gross: number;
+  ownShortfall: number;
+  interestDeducted: number;
+  principalDeducted: number;
+  net: number;
+  status: "AWAITING_HANDOVER" | "HANDED_OVER" | "CONFIRMED";
+  handedOverAt: string | null;
+  confirmedAt: string | null;
+  autoConfirmed: boolean;
+  proofAttached: boolean;
+  /** Handover photo, for the recipient and the organizer only. */
+  proofUrl: string | null;
 }
 
 export interface ScheduleRound {
@@ -125,6 +146,8 @@ export interface SubmissionView {
   slotId: string;
   round: number | null;
   type: "CONTRIBUTION" | "DEBT_PAYMENT";
+  /** How an approved submission counted; a late contribution counts as a DEBT_PAYMENT. */
+  appliedAs: "CONTRIBUTION" | "DEBT_PAYMENT" | null;
   amount: number;
   effectiveAmount: number | null;
   status: "PENDING" | "APPROVED" | "DENIED" | "CANCELLED";
@@ -149,8 +172,10 @@ export interface GroupDetail {
   schedule: ScheduleRound[];
   /** The open contribution period; null outside ACTIVE. */
   period: PeriodView | null;
-  /** This period's submissions the viewer may see: all for the organizer, their own slot's otherwise. */
+  /** Submissions the viewer may see (this period's, pending, debt payments): all for the organizer, their own slot's otherwise. */
   submissions: SubmissionView[];
+  /** Processed payouts, newest first. */
+  payouts: PayoutView[];
   /** LOBBY only. */
   launch: { blockers: string[]; earliestStartDate: string } | null;
 }
@@ -474,8 +499,13 @@ export const api = {
   // --- Payments (§6.1). Upload a proof first (requestProofUpload, then lib/proofUpload), then submit.
   requestProofUpload: (id: string, contentType: string) =>
     send<{ path: string; token: string }>("POST", `/groups/${id}/proofs`, { contentType }),
-  submitPayment: (id: string, body: { slotId: string; amount: number; proofPath?: string; note?: string }) =>
-    send<GroupDetail>("POST", `/groups/${id}/submissions`, body),
+  submitPayment: (
+    id: string,
+    body: { slotId: string; type: "CONTRIBUTION" | "DEBT_PAYMENT"; amount: number; proofPath?: string; note?: string },
+  ) => send<GroupDetail>("POST", `/groups/${id}/submissions`, body),
+  markHandedOver: (id: string, round: number, proofPath?: string) =>
+    send<GroupDetail>("POST", `/groups/${id}/rounds/${round}/handover`, { proofPath }),
+  confirmReceipt: (id: string, round: number) => send<GroupDetail>("POST", `/groups/${id}/rounds/${round}/confirm-receipt`),
   approveSubmission: (id: string, submissionId: string) =>
     send<GroupDetail>("POST", `/groups/${id}/submissions/${submissionId}/approve`),
   denySubmission: (id: string, submissionId: string, reason: string) =>
@@ -484,6 +514,8 @@ export const api = {
     send<GroupDetail>("POST", `/groups/${id}/submissions/${submissionId}/cancel`),
   /** Demo tools only. */
   activateNow: (id: string) => send<{ ok: true; activated: number }>("POST", `/dev/groups/${id}/activate-now`),
+  /** Demo tools only: close the open period now. */
+  closeRoundNow: (id: string) => send<{ ok: true; closed: number; completed: boolean }>("POST", `/dev/groups/${id}/close-round`),
 
   // --- Link landing pages: public, personalized when signed in.
   getInvite: (token: string) => publicRequest<InviteLanding>(`/invites/${token}`, { withAuth: true }),

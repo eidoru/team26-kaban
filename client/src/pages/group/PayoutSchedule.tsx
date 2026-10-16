@@ -2,8 +2,15 @@ import { ArrowDown, ArrowUp, ChevronRight, Lock, Shuffle } from "lucide-react";
 import type { GroupDetail, SlotView } from "../../api/client";
 import { Avatar } from "../../components/Avatar";
 import { formatDueDate } from "../../lib/dates";
+import { formatPeso } from "../../lib/money";
 import { ui } from "../../lib/ui";
 import { currentOrder, slotHasActions, slotTag } from "./slots";
+
+const PAYOUT_LINE = {
+  AWAITING_HANDOVER: (net: string) => `${net} to hand over`,
+  HANDED_OVER: (net: string) => `${net} handed over · waiting for confirmation`,
+  CONFIRMED: (net: string) => `Got ${net}`,
+} as const;
 
 /**
  * Who gets the pot on which date: the payout order and the schedule in one list (R-ORD, §4.3).
@@ -20,6 +27,7 @@ export function PayoutSchedule({
   onShuffle,
   onSaveOrder,
   onSelect,
+  onOpenPayout,
 }: {
   detail: GroupDetail;
   /** Organizer, in the lobby, with every slot filled (R-ORD-01). */
@@ -31,6 +39,8 @@ export function PayoutSchedule({
   onShuffle?: () => void;
   onSaveOrder?: (slotIds: string[]) => void;
   onSelect?: (slot: SlotView) => void;
+  /** Closed rounds open their payout (breakdown, handover, receipt). */
+  onOpenPayout?: (round: number) => void;
 }) {
   const { schedule, slots, group } = detail;
   const slotById = new Map(slots.map((s) => [s.id, s]));
@@ -83,7 +93,10 @@ export function PayoutSchedule({
       <ol className="divide-y divide-ink-100 overflow-hidden rounded-3xl border border-ink-200 bg-white">
         {schedule.map((round, index) => {
           const slot = recipients[index];
-          const date = (
+          const payout = detail.payouts.find((p) => p.round === round.number);
+          const date = payout ? (
+            PAYOUT_LINE[payout.status](formatPeso(payout.net))
+          ) : (
             <>
               Payout {formatDueDate(round.payoutDate)}
               {round.status === "OPEN" && " · collecting now"}
@@ -93,7 +106,11 @@ export function PayoutSchedule({
             <>
               <span
                 className={`font-heading flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-lg font-bold ${
-                  round.status === "OPEN" ? "bg-brand-700 text-white" : "bg-ink-100 text-ink-700"
+                  round.status === "OPEN"
+                    ? "bg-brand-700 text-white"
+                    : round.status === "CLOSED"
+                      ? "bg-brand-100 text-brand-800"
+                      : "bg-ink-100 text-ink-700"
                 }`}
                 aria-label={`Round ${round.number}`}
               >
@@ -119,12 +136,17 @@ export function PayoutSchedule({
               {slot && !draft && <Avatar name={slot.name} placeholder={slot.kind === "PLACEHOLDER"} />}
             </>
           );
-          const tappable = !draft && slot && onSelect && slotHasActions(slot, detail);
+          const opensPayout = !!payout && !!onOpenPayout;
+          const tappable = !draft && slot && (opensPayout || (onSelect && slotHasActions(slot, detail)));
           const rowClass = `flex w-full items-center gap-3 px-4 py-3 text-left ${slot?.isViewer ? "bg-brand-50" : ""}`;
           return (
             <li key={round.number}>
               {tappable ? (
-                <button type="button" onClick={() => onSelect(slot)} className={`${rowClass} transition-colors hover:bg-ink-50`}>
+                <button
+                  type="button"
+                  onClick={() => (opensPayout ? onOpenPayout!(round.number) : onSelect!(slot))}
+                  className={`${rowClass} transition-colors hover:bg-ink-50`}
+                >
                   {body}
                   <ChevronRight className="h-4 w-4 shrink-0 text-ink-400" aria-hidden />
                 </button>
