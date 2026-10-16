@@ -12,9 +12,11 @@ import { cancelSubmission, reviewSubmission, submitPayment } from "../services/s
 import { confirmReceipt, markHandedOver } from "../services/payouts.js";
 import { cancelDispute, raiseDispute, reviewDispute } from "../services/disputes.js";
 import { cancelSwap, requestSwap, respondToSwap, reviewSwap } from "../services/swaps.js";
+import { buildExport } from "../services/exports.js";
+import { completionSummary } from "../services/records.js";
 import { createProofUpload, PROOF_CONTENT_TYPES } from "../lib/storage.js";
 import { can } from "../domain/lifecycle.js";
-import { conflict } from "../lib/errors.js";
+import { conflict, notFound as notFoundError } from "../lib/errors.js";
 
 const router = Router();
 router.use(requireAuth);
@@ -207,6 +209,38 @@ router.post(
   "/:id/rounds/:number/confirm-receipt",
   ...memberAction((req, id, user) => confirmReceipt(id, user, Number(req.params.number))),
 );
+
+// --- Records (§10, §14): the summary as JSON, and downloadable statements, ledger and summary.
+router.get("/:id/summary", loadGroup, async (req, res, next) => {
+  try {
+    res.json(await completionSummary(req.group!.id));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get("/:id/exports/:kind.:format", loadGroup, async (req, res, next) => {
+  try {
+    const kind = String(req.params.kind);
+    const format = String(req.params.format);
+    if (!["statement", "ledger", "summary"].includes(kind) || !["pdf", "csv"].includes(format)) {
+      throw notFoundError("Export");
+    }
+    const file = await buildExport({
+      groupId: req.group!.id,
+      viewerUserId: req.user!.id,
+      kind: kind as "statement" | "ledger" | "summary",
+      format: format as "pdf" | "csv",
+      slotId: typeof req.query.slot === "string" ? req.query.slot : undefined,
+    });
+    res.setHeader("Content-Type", file.contentType);
+    res.setHeader("Content-Disposition", `attachment; filename="${file.filename}"`);
+    res.setHeader("Cache-Control", "private, no-store");
+    res.send(file.body);
+  } catch (err) {
+    next(err);
+  }
+});
 
 router.post("/:id/leave", loadGroup, async (req, res, next) => {
   try {
