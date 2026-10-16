@@ -16,7 +16,12 @@ export type NotificationKind =
   | "placeholder.claimed"
   | "submission.pending"
   | "submission.approved"
-  | "submission.denied";
+  | "submission.denied"
+  | "payout.ready"
+  | "payout.handed_over"
+  | "debt.created"
+  | "debt.interest"
+  | "group.completed";
 
 /** Send the same notification to several users, skipping duplicates and nulls. */
 export async function notifyUsers(

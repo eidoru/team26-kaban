@@ -8,7 +8,8 @@ import { notifyGroupChangeSafe } from "../lib/realtimeNotify.js";
 import { cancelGroup, createGroup, editGroup, groupDetail, listMyGroups } from "../services/groups.js";
 import { addPlaceholder, createClaimLink, createInviteLink, removeSlot, revokeClaimLink } from "../services/roster.js";
 import { launchGroup, lockOrder, setOrder, shuffleOrder } from "../services/launch.js";
-import { cancelSubmission, reviewSubmission, submitContribution } from "../services/submissions.js";
+import { cancelSubmission, reviewSubmission, submitPayment } from "../services/submissions.js";
+import { confirmReceipt, markHandedOver } from "../services/payouts.js";
 import { createProofUpload, PROOF_CONTENT_TYPES } from "../lib/storage.js";
 import { can } from "../domain/lifecycle.js";
 import { conflict } from "../lib/errors.js";
@@ -32,11 +33,13 @@ const orderSchema = z.object({ slotIds: z.array(z.string()).min(1) });
 const proofSchema = z.object({ contentType: z.enum(PROOF_CONTENT_TYPES as [string, ...string[]]) });
 const submissionSchema = z.object({
   slotId: z.string(),
+  type: z.enum(["CONTRIBUTION", "DEBT_PAYMENT"]).default("CONTRIBUTION"),
   amount: z.number().int(),
   proofPath: z.string().optional(),
   note: z.string().optional(),
 });
 const denySchema = z.object({ reason: z.string() });
+const handoverSchema = z.object({ proofPath: z.string().optional() });
 
 const detail = (req: Request, groupId: string) => groupDetail(groupId, req.user!.id, resolveAppOrigin(req));
 
@@ -118,7 +121,10 @@ router.post("/:id/launch", ...organizerAction((_req, id, user) => launchGroup(id
 // --- Payments (§6.1). The browser uploads a proof photo first, then submits with its path.
 router.post("/:id/proofs", loadGroup, validateBody(proofSchema), async (req, res, next) => {
   try {
-    if (!can.submitContribution(req.group!.state)) throw conflict("Payments open once the paluwagan starts.", "WRONG_STATE");
+    const state = req.group!.state;
+    if (!can.submitContribution(state) && !can.submitDebtPayment(state)) {
+      throw conflict("Payments open once the paluwagan starts.", "WRONG_STATE");
+    }
     res.json(await createProofUpload(req.group!.id, req.body.contentType));
   } catch (err) {
     next(err);
@@ -127,7 +133,7 @@ router.post("/:id/proofs", loadGroup, validateBody(proofSchema), async (req, res
 router.post(
   "/:id/submissions",
   validateBody(submissionSchema),
-  ...memberAction((req, id, user) => submitContribution(id, user, req.body)),
+  ...memberAction((req, id, user) => submitPayment(id, user, req.body)),
 );
 router.post(
   "/:id/submissions/:submissionId/approve",
@@ -143,6 +149,17 @@ router.post(
 router.post(
   "/:id/submissions/:submissionId/cancel",
   ...memberAction((req, id, user) => cancelSubmission(id, user, String(req.params.submissionId))),
+);
+
+// --- Payouts (§7, R-PAY-05). Rounds are addressed by number.
+router.post(
+  "/:id/rounds/:number/handover",
+  validateBody(handoverSchema),
+  ...organizerAction((req, id, user) => markHandedOver(id, user, Number(req.params.number), req.body.proofPath)),
+);
+router.post(
+  "/:id/rounds/:number/confirm-receipt",
+  ...memberAction((req, id, user) => confirmReceipt(id, user, Number(req.params.number))),
 );
 
 router.post("/:id/leave", loadGroup, async (req, res, next) => {

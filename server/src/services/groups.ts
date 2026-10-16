@@ -17,6 +17,7 @@ import { prisma } from "../lib/prisma.js";
 import { fromCalendarDate, todayInManila, toCalendarDate } from "../lib/today.js";
 import { notifyUsers } from "./notifications.js";
 import { openPeriodView, visibleSubmissions } from "./submissions.js";
+import { proofViewUrls } from "../lib/storage.js";
 import { assertState, memberUserIds, resetOrder, settingsOf, slotName, withGroupLock, type Db } from "./common.js";
 
 /** A 400 that carries per-field messages, shown under each form field. */
@@ -229,6 +230,8 @@ export async function groupDetail(groupId: string, viewerUserId: string, appOrig
     isViewer: slot.id === viewer.id,
     position: slot.position,
     claimedAt: slot.claimedAt?.toISOString() ?? null,
+    /** What this slot owes the organizer (§8). Everyone sees everyone's (R-DEC-06). */
+    debt: { principal: Number(slot.debtPrincipal), interest: Number(slot.debtInterest) },
     contact: isOrganizer && !slot.userId ? slot.placeholderContact : null,
     claimLink:
       isOrganizer && !slot.userId && slot.claimLinks[0]
@@ -252,9 +255,15 @@ export async function groupDetail(groupId: string, viewerUserId: string, appOrig
         );
 
   const period = await openPeriodView(prisma, groupId, settings.contribution);
-  const submissions = period
-    ? await visibleSubmissions(prisma, groupId, period.roundId, { userId: viewerUserId, slotId: viewer.id, isOrganizer })
-    : [];
+  const submissions =
+    group.state === "LOBBY" || group.state === "LAUNCHED" || group.state === "CANCELLED"
+      ? []
+      : await visibleSubmissions(prisma, groupId, period?.roundId ?? null, {
+          userId: viewerUserId,
+          slotId: viewer.id,
+          isOrganizer,
+        });
+  const payouts = await payoutsView(groupId, viewer.id, isOrganizer);
 
   return {
     group: { ...summary(group), organizerName: group.organizer.displayName },
@@ -269,6 +278,7 @@ export async function groupDetail(groupId: string, viewerUserId: string, appOrig
     /** The open contribution period and each slot's standing in it (R-SUB-07); null outside ACTIVE. */
     period,
     submissions,
+    payouts,
     launch:
       group.state === "LOBBY"
         ? {
@@ -283,4 +293,39 @@ export async function groupDetail(groupId: string, viewerUserId: string, appOrig
           }
         : null,
   };
+}
+
+/**
+ * Every processed payout (§7), newest first, with its breakdown. Handover proof photos follow the
+ * R-DEC-17 rule: the recipient and the organizer only.
+ */
+async function payoutsView(groupId: string, viewerSlotId: string, isOrganizer: boolean) {
+  const rounds = await prisma.round.findMany({
+    where: { groupId, payout: { isNot: null } },
+    include: { payout: true },
+    orderBy: { number: "desc" },
+  });
+  const visibleProofs = rounds
+    .filter((r) => r.payout!.proofPath && (isOrganizer || r.recipientSlotId === viewerSlotId))
+    .map((r) => r.payout!.proofPath!);
+  const urls = await proofViewUrls(visibleProofs).catch(() => new Map<string, string>());
+  return rounds.map((r) => {
+    const p = r.payout!;
+    return {
+      round: r.number,
+      payoutDate: toCalendarDate(r.payoutDate),
+      recipientSlotId: r.recipientSlotId,
+      gross: Number(p.gross),
+      ownShortfall: Number(p.ownShortfall),
+      interestDeducted: Number(p.interestDeducted),
+      principalDeducted: Number(p.principalDeducted),
+      net: Number(p.net),
+      status: p.status,
+      handedOverAt: p.handedOverAt?.toISOString() ?? null,
+      confirmedAt: p.confirmedAt?.toISOString() ?? null,
+      autoConfirmed: p.autoConfirmed,
+      proofAttached: !!p.proofPath,
+      proofUrl: p.proofPath ? (urls.get(p.proofPath) ?? null) : null,
+    };
+  });
 }

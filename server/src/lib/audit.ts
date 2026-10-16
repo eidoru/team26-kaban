@@ -25,7 +25,17 @@ export type AuditAction =
   | "submission.created"
   | "submission.approved"
   | "submission.denied"
-  | "submission.cancelled";
+  | "submission.cancelled"
+  | "round.closed"
+  | "round.opened"
+  | "payout.processed"
+  | "payout.handed_over"
+  | "payout.confirmed"
+  | "debt.created"
+  | "debt.interest_charged"
+  | "debt.deducted"
+  | "debt.repaid"
+  | "group.completed";
 
 /**
  * Append one immutable entry (R-AUD-02, R-AUD-04). Amounts are centavos. `actorUserId` is null for

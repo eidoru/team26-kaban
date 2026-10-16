@@ -1,11 +1,15 @@
+import type { SubmissionType } from "@prisma/client";
 import { NOTE_MAX_LENGTH } from "../domain/constants.js";
+import { outstanding } from "../domain/debt.js";
 import { can } from "../domain/lifecycle.js";
 import { formatPeso } from "../domain/money.js";
 import { periodStatus, submissionAmountError, submissionCap } from "../domain/submissions.js";
 import { audit } from "../lib/audit.js";
 import { AppError, badRequest, conflict, forbidden, notFound } from "../lib/errors.js";
 import { isProofPathFor, proofExists, proofViewUrls } from "../lib/storage.js";
+import { debtOf, groupHasDebt, repayDebt } from "./debts.js";
 import { notifyUsers } from "./notifications.js";
+import { memberUserIds } from "./common.js";
 import { slotName, withGroupLock, type Db } from "./common.js";
 
 const sum = (rows: { amount: bigint; effectiveAmount: bigint | null }[]) =>
@@ -22,6 +26,22 @@ export async function periodTotals(db: Db, slotId: string, roundId: string) {
   return { approved: sum(approved), pending: sum(pending), pendingCount: pending.length };
 }
 
+/**
+ * Pending money that will go to a slot's debt once approved: debt payments, and contributions for
+ * periods that have already closed (R-DBT-06, R-DEC-04). Counts against the debt-payment cap.
+ */
+async function pendingAgainstDebt(db: Db, slotId: string) {
+  const rows = await db.submission.findMany({
+    where: {
+      slotId,
+      status: "PENDING",
+      OR: [{ type: "DEBT_PAYMENT" }, { type: "CONTRIBUTION", round: { status: "CLOSED" } }],
+    },
+    select: { amount: true, effectiveAmount: true },
+  });
+  return sum(rows);
+}
+
 async function openRound(db: Db, groupId: string) {
   const round = await db.round.findFirst({ where: { groupId, status: "OPEN" } });
   if (!round) throw conflict("No contribution period is open right now.", "NO_OPEN_PERIOD");
@@ -35,13 +55,14 @@ function trimmedNote(note: string | undefined, label: string) {
 }
 
 /**
- * R-SUB-01 / R-SUB-02 / R-SUB-06: report a contribution for the open period. Members report their
- * own; the organizer reports for themselves and for placeholders. Everything starts PENDING.
+ * R-SUB-01 / R-SUB-02 / R-SUB-06: report a payment. A CONTRIBUTION is for the open period; a
+ * DEBT_PAYMENT pays down what the slot owes (R-DBT-04), also after completion (R-DBT-11). Members
+ * report their own; the organizer reports for themselves and for placeholders. All start PENDING.
  */
-export async function submitContribution(
+export async function submitPayment(
   groupId: string,
   actorUserId: string,
-  input: { slotId: string; amount: number; proofPath?: string; note?: string },
+  input: { slotId: string; type: SubmissionType; amount: number; proofPath?: string; note?: string },
 ) {
   const note = trimmedNote(input.note, "Notes");
   if (input.proofPath) {
@@ -50,8 +71,11 @@ export async function submitContribution(
   }
 
   return withGroupLock(groupId, async (tx, group) => {
-    if (!can.submitContribution(group.state)) throw conflict("Payments open once the paluwagan starts.", "WRONG_STATE");
-    const round = await openRound(tx, groupId);
+    const isDebt = input.type === "DEBT_PAYMENT";
+    if (isDebt ? !can.submitDebtPayment(group.state) : !can.submitContribution(group.state)) {
+      throw conflict(isDebt ? "There's no debt to pay in this paluwagan." : "Payments open once the paluwagan starts.", "WRONG_STATE");
+    }
+    const round = isDebt ? null : await openRound(tx, groupId);
     const [actor, slot] = await Promise.all([
       tx.slot.findFirstOrThrow({ where: { groupId, userId: actorUserId } }),
       tx.slot.findFirst({ where: { id: input.slotId, groupId }, include: { user: true } }),
@@ -62,8 +86,12 @@ export async function submitContribution(
       throw forbidden("You can report payments for your own slot only.");
     }
 
-    const totals = await periodTotals(tx, slot.id, round.id);
-    const cap = submissionCap(Number(group.contribution), totals.approved, totals.pending);
+    const cap = round
+      ? await (async () => {
+          const totals = await periodTotals(tx, slot.id, round.id);
+          return submissionCap(Number(group.contribution), totals.approved, totals.pending);
+        })()
+      : submissionCap(outstanding(debtOf(slot)), 0, await pendingAgainstDebt(tx, slot.id));
     const error = submissionAmountError(input.amount, cap);
     if (error) throw new AppError(400, error, "BAD_AMOUNT", { amount: error });
 
@@ -71,8 +99,8 @@ export async function submitContribution(
       data: {
         groupId,
         slotId: slot.id,
-        roundId: round.id,
-        type: "CONTRIBUTION",
+        roundId: round?.id ?? null,
+        type: input.type,
         amount: BigInt(input.amount),
         proofPath: input.proofPath ?? null,
         note,
@@ -86,7 +114,7 @@ export async function submitContribution(
       targetSlotId: slot.id,
       targetName: slotName(slot),
       amounts: { amount: input.amount },
-      after: { type: "CONTRIBUTION", round: round.number },
+      after: { type: input.type, round: round?.number ?? null },
       proofAttached: !!input.proofPath,
     });
     // The organizer reviews everything (R-SUB-03); they don't need telling about their own reports.
@@ -94,8 +122,8 @@ export async function submitContribution(
       await notifyUsers(tx, [group.organizerId], {
         groupId,
         kind: "submission.pending",
-        title: `${slotName(slot)} reported ${formatPeso(input.amount)}`,
-        body: `${group.name}, round ${round.number}. ${input.proofPath ? "Proof attached." : "No proof attached."}`,
+        title: `${slotName(slot)} reported ${formatPeso(input.amount)}${isDebt ? " toward their debt" : ""}`,
+        body: `${group.name}${round ? `, round ${round.number}` : ""}. ${input.proofPath ? "Proof attached." : "No proof attached."}`,
       });
     }
     return submission;
@@ -136,13 +164,32 @@ export async function reviewSubmission(
       throw conflict(`Review ${slotName(submission.slot)}'s earlier submission first.`, "REVIEW_IN_ORDER");
     }
 
+    const amount = Number(submission.amount);
+    // Debt payments, and contributions for a period that already closed, pay down debt (R-DBT-06,
+    // R-DEC-04): interest first, then principal (R-DBT-05).
+    const toDebt = submission.type === "DEBT_PAYMENT" || submission.round?.status === "CLOSED";
+    let repayment: Awaited<ReturnType<typeof repayDebt>> = null;
+    if (decision.approve && toDebt) {
+      repayment = await repayDebt(tx, submission.slot, amount, submission.id);
+      if (!repayment) {
+        // R-DEC-19
+        const owed = outstanding(debtOf(submission.slot));
+        throw conflict(
+          owed > 0
+            ? `${slotName(submission.slot)} only owes ${formatPeso(owed)} now, so this can't be approved. Deny it instead.`
+            : `${slotName(submission.slot)} doesn't owe anything now, so this can't be approved. Deny it instead.`,
+          "MORE_THAN_OWED",
+        );
+      }
+    }
+
     const selfApproved = decision.approve && submission.submittedById === reviewerUserId;
     const updated = await tx.submission.update({
       where: { id: submission.id },
       data: decision.approve
         ? {
             status: "APPROVED",
-            appliedAs: submission.type,
+            appliedAs: toDebt ? "DEBT_PAYMENT" : "CONTRIBUTION",
             effectiveAmount: submission.amount,
             reviewedById: reviewerUserId,
             reviewedAt: new Date(),
@@ -151,15 +198,18 @@ export async function reviewSubmission(
         : { status: "DENIED", denialReason: reason, reviewedById: reviewerUserId, reviewedAt: new Date() },
     });
 
-    const amount = Number(submission.amount);
     await audit(tx, {
       groupId,
       actorUserId: reviewerUserId,
       action: decision.approve ? "submission.approved" : "submission.denied",
       targetSlotId: submission.slotId,
       targetName: slotName(submission.slot),
-      amounts: { amount },
-      after: decision.approve ? { round: submission.round?.number } : { reason },
+      amounts: repayment
+        ? { amount, toInterest: repayment.toInterest, toPrincipal: repayment.toPrincipal }
+        : { amount },
+      after: decision.approve
+        ? { round: submission.round?.number ?? null, appliedAs: toDebt ? "DEBT_PAYMENT" : "CONTRIBUTION" }
+        : { reason },
       proofAttached: !!submission.proofPath,
       selfApproved,
     });
@@ -171,7 +221,24 @@ export async function reviewSubmission(
         title: decision.approve
           ? `Your ${formatPeso(amount)} payment was approved`
           : `Your ${formatPeso(amount)} payment wasn't approved`,
-        body: decision.approve ? `${group.name}, round ${submission.round?.number}.` : `Reason: ${reason}`,
+        body: !decision.approve
+          ? `Reason: ${reason}`
+          : repayment
+            ? repayment.remaining > 0
+              ? `It went toward your debt. You still owe ${formatPeso(repayment.remaining)}.`
+              : "Your debt is fully paid."
+            : `${group.name}, round ${submission.round?.number}.`,
+      });
+    }
+    // R-CMP-03: the last debt settled after completion closes the books.
+    if (repayment && group.state === "COMPLETED_WITH_OUTSTANDING_DEBT" && !(await groupHasDebt(tx, groupId))) {
+      await tx.group.update({ where: { id: groupId }, data: { state: "COMPLETED" } });
+      await audit(tx, { groupId, actorUserId: null, action: "group.completed", after: { outstandingDebt: false } });
+      await notifyUsers(tx, await memberUserIds(tx, groupId), {
+        groupId,
+        kind: "group.completed",
+        title: `${group.name} is fully settled`,
+        body: "Every debt has been paid.",
       });
     }
     return updated;
@@ -237,19 +304,29 @@ export async function openPeriodView(db: Db, groupId: string, contribution: numb
 }
 
 /**
- * Submissions for the open period that this viewer may see: all of them for the organizer, their
- * own slot's for a member. Others' amounts and statuses are public through the period view and the
+ * Submissions this viewer may see (the open period's, anything pending, and debt payments): all of
+ * them for the organizer, their own slot's for a member. Others' amounts and statuses are public through the period view and the
  * audit log; proof photos stay with the submitter and the organizer, since screenshots can carry
  * account details.
  */
 export async function visibleSubmissions(
   db: Db,
   groupId: string,
-  roundId: string,
+  openRoundId: string | null,
   viewer: { userId: string; slotId: string; isOrganizer: boolean },
 ) {
   const rows = await db.submission.findMany({
-    where: { groupId, roundId, ...(viewer.isOrganizer ? {} : { slotId: viewer.slotId }) },
+    where: {
+      groupId,
+      ...(viewer.isOrganizer ? {} : { slotId: viewer.slotId }),
+      // This period's, anything still waiting, and everything that went toward debt.
+      OR: [
+        ...(openRoundId ? [{ roundId: openRoundId }] : []),
+        { status: "PENDING" },
+        { type: "DEBT_PAYMENT" },
+        { appliedAs: "DEBT_PAYMENT" },
+      ],
+    },
     include: { round: { select: { number: true } } },
     orderBy: { submittedAt: "asc" },
   });
@@ -261,6 +338,8 @@ export async function visibleSubmissions(
     slotId: r.slotId,
     round: r.round?.number ?? null,
     type: r.type,
+    /** How an approved submission counted: a late contribution counts as a DEBT_PAYMENT. */
+    appliedAs: r.appliedAs,
     amount: Number(r.amount),
     effectiveAmount: r.effectiveAmount == null ? null : Number(r.effectiveAmount),
     status: r.status,

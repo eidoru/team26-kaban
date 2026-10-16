@@ -16,6 +16,6 @@
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ],
   "crons": [
-    { "path": "/api/v1/cron/activate-groups", "schedule": "5 16 * * *" }
+    { "path": "/api/v1/cron/daily", "schedule": "5 16 * * *" }
   ]
 }

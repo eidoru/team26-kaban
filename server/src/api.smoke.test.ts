@@ -60,14 +60,14 @@ describe("API smoke", () => {
 });
 
 describe("Cron security", () => {
-  it("rejects activate-groups without cron secret", async () => {
-    const res = await request(app).get("/api/v1/cron/activate-groups");
+  it("rejects the daily job without cron secret", async () => {
+    const res = await request(app).get("/api/v1/cron/daily");
     expect(res.status).toBe(403);
   });
 
-  it("rejects activate-groups with the wrong secret", async () => {
+  it("rejects the daily job with the wrong secret", async () => {
     const res = await request(app)
-      .get("/api/v1/cron/activate-groups")
+      .get("/api/v1/cron/daily")
       .set("Authorization", "Bearer wrong-secret");
     expect(res.status).toBe(403);
   });
