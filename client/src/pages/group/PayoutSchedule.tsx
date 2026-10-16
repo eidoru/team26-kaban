@@ -1,6 +1,6 @@
 import { ArrowDown, ArrowLeftRight, ArrowUp, ChevronRight, Shuffle } from "lucide-react";
-import type { GroupDetail, SlotView } from "../../api/client";
-import { dueHint, formatShortDate } from "../../lib/dates";
+import type { GroupDetail, ScheduleRound, SlotView } from "../../api/client";
+import { dueHint, formatMonthDay } from "../../lib/dates";
 import { formatPeso } from "../../lib/money";
 import { ui } from "../../lib/ui";
 import { currentOrder, slotHasActions } from "./slots";
@@ -11,6 +11,11 @@ const PAYOUT_LINE = {
   HANDED_OVER: (net: string) => `Handed over ${net}`,
   CONFIRMED: (net: string) => `Paid out ${net}`,
 } as const;
+
+/** One half of the rail, leading into `round`: solid once that round has started, dashed before. */
+function railClass(round: ScheduleRound): string {
+  return round.status === "UPCOMING" ? "border-l-2 border-dashed border-ink-200" : "w-0.5 bg-brand-600";
+}
 
 /**
  * Who gets the pot on which date: the payout order and the schedule in one list (R-ORD, §4.3).
@@ -94,49 +99,51 @@ export function PayoutSchedule({
         )}
       </div>
 
-      <ol className="divide-y divide-ink-100 overflow-hidden rounded-3xl border border-ink-200 bg-white">
+      <ol className="overflow-hidden rounded-3xl border border-ink-200 bg-white">
         {schedule.map((round, index) => {
           const slot = recipients[index];
           const payout = detail.payouts.find((p) => p.round === round.number);
-          // One idea per row: who, and when. A second line appears only when there's news: a payout
-          // made or pending, or the round collecting now. Upcoming turns need nothing beyond the date.
-          const status = payout
-            ? PAYOUT_LINE[payout.status](formatPeso(payout.net))
-            : null;
+          // A second line only when there's news: a payout made or pending. The ringed dot marks the round
+          // collecting now, and upcoming turns need nothing beyond the date in the left column.
+          const status = payout ? PAYOUT_LINE[payout.status](formatPeso(payout.net)) : null;
           const hint = dueHint(round.payoutDate)?.label ?? "";
+          const next = schedule[index + 1];
           const body = (
             <>
-              <span
-                className={`font-heading flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-lg font-bold ${
-                  round.status === "OPEN"
-                    ? "bg-brand-700 text-white"
-                    : round.status === "CLOSED"
-                      ? "bg-brand-100 text-brand-800"
-                      : "bg-ink-100 text-ink-700"
-                }`}
-                aria-label={`Round ${round.number}`}
-              >
-                {round.number}
+              {/* The date leads: this is a calendar. The year sits underneath when the list crosses years. */}
+              <span className="w-12 shrink-0 tabular-nums leading-tight">
+                <span className="block text-sm font-bold text-ink-900">{formatMonthDay(round.payoutDate)}</span>
+                {withYear && <span className="block text-xs text-ink-500">{round.payoutDate.slice(0, 4)}</span>}
               </span>
-              {/* Who on top, when underneath (with the payout's status once there is one), so every
-                  date starts in the same place whatever the row's action on the right. */}
+              {/* The rail: solid up to the round collecting now, dashed after it, so progress reads at a
+                  glance. Paid-out rounds are filled, the open one is ringed, upcoming ones are hollow. */}
+              <span className="relative flex w-7 shrink-0 items-center justify-center self-stretch" aria-hidden>
+                {index > 0 && <span className={`absolute top-0 h-1/2 ${railClass(round)}`} />}
+                {next && <span className={`absolute bottom-0 h-1/2 ${railClass(next)}`} />}
+                <span
+                  className={`relative flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${
+                    round.status === "CLOSED"
+                      ? "bg-brand-600 text-white"
+                      : round.status === "OPEN"
+                        ? "border-2 border-brand-600 bg-white text-brand-700"
+                        : "border-2 border-ink-200 bg-white text-ink-500"
+                  }`}
+                >
+                  {round.number}
+                </span>
+              </span>
+              <span className="sr-only">Round {round.number}</span>
               <span className="min-w-0 flex-1">
                 {slot ? (
                   <>
                     <span className="block truncate text-sm font-bold text-ink-900">{slot.name}</span>
-                    <span className="block truncate text-xs tabular-nums text-ink-500">
-                      {formatShortDate(round.payoutDate, withYear)}
-                      {status && ` · ${status}`}
-                    </span>
+                    {status && (
+                      <span className="block truncate text-xs tabular-nums text-ink-500">{status}</span>
+                    )}
                   </>
                 ) : (
-                  // No order yet: the date, and how far off it is.
-                  <>
-                    <span className="block truncate text-sm font-bold tabular-nums text-ink-700">
-                      {formatShortDate(round.payoutDate, withYear)}
-                    </span>
-                    <span className="block truncate text-xs text-ink-500">{hint.charAt(0).toUpperCase() + hint.slice(1)}</span>
-                  </>
+                  // No order yet: how far off the date is.
+                  <span className="block truncate text-sm text-ink-500">{hint.charAt(0).toUpperCase() + hint.slice(1)}</span>
                 )}
               </span>
             </>
@@ -149,7 +156,7 @@ export function PayoutSchedule({
           // One fixed height for every row, arranging or not: it fits the 44px move buttons, and the
           // text lines truncate instead of wrapping. Arranging tightens the spacing to leave the name room.
           // 64px, like the Members rows (a 40px avatar plus padding), so the two lists read alike.
-          const rowClass = `flex h-16 w-full items-center ${draft ? "gap-2 px-3" : "gap-3 px-4"} text-left ${slot?.isViewer ? "bg-brand-50" : ""}`;
+          const rowClass = `flex h-16 w-full items-center ${draft ? "gap-2 px-3" : "gap-3 px-4"} text-left`;
           return (
             <li key={round.number}>
               {tappable ? (
