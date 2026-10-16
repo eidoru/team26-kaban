@@ -51,7 +51,7 @@ export function NotificationsPage() {
     <div>
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className={ui.pageTitle}>Notifications</h1>
+          <h1 className={ui.pageTitle}>Alerts</h1>
           <p className={ui.pageSubtitle}>
             {data?.unreadCount ? `${data.unreadCount} unread` : "You're all caught up"}
           </p>

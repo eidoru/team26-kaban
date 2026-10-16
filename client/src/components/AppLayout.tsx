@@ -129,16 +129,19 @@ export function AppLayout() {
   const unreadCount = notificationsData?.unreadCount ?? 0;
   const navItems: NavItem[] = [
     { to: "/home", label: "Home", shortLabel: "Home", icon: House },
-    { to: "/notifications", label: "Notifications", shortLabel: "Alerts", icon: Bell, badge: unreadCount },
     { to: "/money", label: "Money", shortLabel: "Money", icon: Wallet },
+    { to: "/notifications", label: "Alerts", shortLabel: "Alerts", icon: Bell, badge: unreadCount },
     { to: "/profile", label: "Profile", shortLabel: "Profile", icon: UserRound },
   ];
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-cream">
       <header className="sticky top-0 z-40 border-b border-ink-200 bg-cream/90 backdrop-blur">
-        <div className={`mx-auto flex h-16 w-full min-w-0 ${ui.page} items-center justify-between gap-4 px-4 sm:px-6`}>
-          <KabanLogo to="/home" />
+        {/* Equal side columns keep the nav centered whatever the logo and account name widths. */}
+        <div className={`mx-auto grid h-16 w-full min-w-0 ${ui.page} grid-cols-[1fr_auto_1fr] items-center gap-4 px-4 sm:px-6`}>
+          <div className="justify-self-start">
+            <KabanLogo to="/home" />
+          </div>
           <nav aria-label="Main" className="hidden items-center gap-1 md:flex">
             {navItems
               .filter((item) => item.to !== "/profile")
@@ -150,7 +153,9 @@ export function AppLayout() {
                 </NavLink>
               ))}
           </nav>
-          <AccountMenu name={user?.displayName} onLogout={() => void handleLogout()} />
+          <div className="col-start-3 min-w-0 justify-self-end">
+            <AccountMenu name={user?.displayName} onLogout={() => void handleLogout()} />
+          </div>
         </div>
       </header>
 
