@@ -25,7 +25,13 @@ export type NotificationKind =
   | "dispute.raised"
   | "dispute.approved"
   | "dispute.denied"
-  | "dispute.expired";
+  | "dispute.expired"
+  | "swap.requested"
+  | "swap.awaiting_approval"
+  | "swap.declined"
+  | "swap.approved"
+  | "swap.denied"
+  | "swap.expired";
 
 /** Send the same notification to several users, skipping duplicates and nulls. */
 export async function notifyUsers(

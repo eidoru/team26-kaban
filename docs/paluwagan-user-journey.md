@@ -386,3 +386,7 @@ Test cases worth covering: the first recipient (all debt is post-payout), the la
 | R-DEC-19 | A late contribution or debt payment can't be approved for more than the debt it would pay off (for example, the recipient's own shortfall was already taken out of their payout). The organizer denies it instead. |
 | R-DEC-20 | A payout with a net amount of zero has nothing to hand over, so it is marked received straight away. |
 | R-DEC-21 | (R-DSP-04) A dispute still pending when its period closes expires: the approved amount stands, the member is notified, and any missing amount can still be paid as a debt payment (R-DSP-05). One unreviewed dispute never delays a payout. |
+| R-DEC-22 | *(assumption, to confirm)* (§9) The organizer acts for placeholders in swaps, as with payments (R-SUB-02). When the organizer is a party to a swap, or acts for one, their agreement is the approval: there is no separate organizer step. |
+| R-DEC-23 | *(assumption, to confirm)* (§9) A slot can be in only one swap at a time (requested or awaiting approval), so two pending swaps never conflict over the same turn. |
+| R-DEC-24 | *(assumption, to confirm)* (R-SWP-01, R-SWP-03) A pending swap expires when either party's payout happens. The lock window and "already paid out" are re-checked when the swap is accepted and approved. |
+| R-DEC-25 | (R-SWP-04, R-DEC-12) Until `SWAP_REQUEST_EXPIRY_DAYS` has a value, pending swaps don't expire with time. |

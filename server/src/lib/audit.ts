@@ -41,7 +41,14 @@ export type AuditAction =
   | "dispute.denied"
   | "dispute.cancelled"
   | "dispute.expired"
-  | "refund.recorded";
+  | "refund.recorded"
+  | "swap.requested"
+  | "swap.accepted"
+  | "swap.declined"
+  | "swap.approved"
+  | "swap.denied"
+  | "swap.cancelled"
+  | "swap.expired";
 
 /**
  * Append one immutable entry (R-AUD-02, R-AUD-04). Amounts are centavos. `actorUserId` is null for

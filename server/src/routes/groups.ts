@@ -11,6 +11,7 @@ import { launchGroup, lockOrder, setOrder, shuffleOrder } from "../services/laun
 import { cancelSubmission, reviewSubmission, submitPayment } from "../services/submissions.js";
 import { confirmReceipt, markHandedOver } from "../services/payouts.js";
 import { cancelDispute, raiseDispute, reviewDispute } from "../services/disputes.js";
+import { cancelSwap, requestSwap, respondToSwap, reviewSwap } from "../services/swaps.js";
 import { createProofUpload, PROOF_CONTENT_TYPES } from "../lib/storage.js";
 import { can } from "../domain/lifecycle.js";
 import { conflict } from "../lib/errors.js";
@@ -43,6 +44,7 @@ const denySchema = z.object({ reason: z.string() });
 const handoverSchema = z.object({ proofPath: z.string().optional() });
 const disputeSchema = z.object({ submissionId: z.string(), proposedAmount: z.number().int(), reason: z.string() });
 const denyDisputeSchema = z.object({ note: z.string() });
+const swapSchema = z.object({ targetSlotId: z.string(), requesterSlotId: z.string().optional() });
 
 const detail = (req: Request, groupId: string) => groupDetail(groupId, req.user!.id, resolveAppOrigin(req));
 
@@ -171,6 +173,29 @@ router.post(
   "/:id/disputes/:disputeId/cancel",
   ...memberAction((req, id, user) => cancelDispute(id, user, String(req.params.disputeId))),
 );
+
+// --- Swaps (§9): ask, the other side answers, then the organizer approves (unless already a party).
+router.post("/:id/swaps", validateBody(swapSchema), ...memberAction((req, id, user) => requestSwap(id, user, req.body)));
+router.post(
+  "/:id/swaps/:swapId/accept",
+  ...memberAction((req, id, user) => respondToSwap(id, user, String(req.params.swapId), true)),
+);
+router.post(
+  "/:id/swaps/:swapId/decline",
+  ...memberAction((req, id, user) => respondToSwap(id, user, String(req.params.swapId), false)),
+);
+router.post(
+  "/:id/swaps/:swapId/approve",
+  ...organizerAction((req, id, user) => reviewSwap(id, user, String(req.params.swapId), { approve: true })),
+);
+router.post(
+  "/:id/swaps/:swapId/deny",
+  validateBody(denyDisputeSchema),
+  ...organizerAction((req, id, user) =>
+    reviewSwap(id, user, String(req.params.swapId), { approve: false, note: req.body.note }),
+  ),
+);
+router.post("/:id/swaps/:swapId/cancel", ...memberAction((req, id, user) => cancelSwap(id, user, String(req.params.swapId))));
 
 // --- Payouts (§7, R-PAY-05). Rounds are addressed by number.
 router.post(

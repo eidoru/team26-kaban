@@ -18,6 +18,7 @@ import { fromCalendarDate, todayInManila, toCalendarDate } from "../lib/today.js
 import { notifyUsers } from "./notifications.js";
 import { openPeriodView, visibleSubmissions } from "./submissions.js";
 import { visibleDisputes } from "./disputes.js";
+import { visibleSwaps } from "./swaps.js";
 import { proofViewUrls } from "../lib/storage.js";
 import { assertState, memberUserIds, resetOrder, settingsOf, slotName, withGroupLock, type Db } from "./common.js";
 
@@ -267,6 +268,7 @@ export async function groupDetail(groupId: string, viewerUserId: string, appOrig
         });
   const payouts = await payoutsView(groupId, viewer.id, isOrganizer);
   const disputes = started ? await visibleDisputes(prisma, groupId, viewerScope) : [];
+  const swaps = started ? await visibleSwaps(prisma, groupId, viewerScope) : [];
 
   return {
     group: { ...summary(group), organizerName: group.organizer.displayName },
@@ -283,6 +285,8 @@ export async function groupDetail(groupId: string, viewerUserId: string, appOrig
     submissions,
     /** Disputes the viewer may see (§6.2), oldest first, with any refund they created. */
     disputes,
+    /** Turn swaps the viewer may see (§9): all for the organizer, their own for a member. Newest first. */
+    swaps,
     payouts,
     launch:
       group.state === "LOBBY"
