@@ -29,6 +29,7 @@ import { ActionBar } from "../../components/flow/ActionBar";
 import { NowPanel } from "../../components/flow/NowPanel";
 import { TodoBarButton, TodoPanel, type Todo } from "../../components/flow/TodoPanel";
 import { REMINDER_DAYS_BEFORE } from "@domain/constants";
+import { can } from "@domain/lifecycle";
 import { useDialog } from "../../context/useDialog";
 import { daysUntil, dueHint, formatDueDate } from "../../lib/dates";
 import { useDemoToolsSetting } from "../../lib/devTools";
@@ -51,7 +52,7 @@ import { Recap } from "./records/RecordsSections";
 import { MyStanding, YourTurn } from "./dashboard/StatsSections";
 import { swapToActOn } from "./swaps/swaps";
 import { ReviewSheet } from "./active/ReviewSheet";
-import { SlotsList } from "./SlotsList";
+import { PlaceholderInvites, SlotsList } from "./SlotsList";
 
 /** Only end states get a label; while it's being set up or runs, the page itself shows the state. */
 const STATE_LABELS: Partial<Record<GroupDetail["group"]["state"], string>> = {
@@ -726,6 +727,10 @@ function GroupView({ detail }: { detail: GroupDetail }) {
             onSelect={selectSlot}
             onOpenPayout={setPayoutRound}
           />
+          {/* After launch, claim links are how the organizer brings someone in (R-CLM-03). */}
+          {isOrganizer && !inLobby && can.claimPlaceholder(group.state) && (
+            <PlaceholderInvites detail={detail} onInvite={(slot) => setSelectedSlotId(slot.id)} />
+          )}
           <GroupDetails detail={detail} onCancel={() => void cancelGroup()} />
 
           {inLobby && !isOrganizer && (

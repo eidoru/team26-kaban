@@ -76,3 +76,37 @@ export function SlotsList({
     </section>
   );
 }
+
+/**
+ * After launch, the way to bring someone in: a placeholder's claim link (R-CLM-01, R-CLM-03). The
+ * invite link closes at launch (R-INV-06), so this is the organizer's "invite" from then on. Lists
+ * unclaimed placeholders; Invite opens the seat's sheet to create, share or revoke its link.
+ */
+export function PlaceholderInvites({ detail, onInvite }: { detail: GroupDetail; onInvite: (slot: SlotView) => void }) {
+  const placeholders = detail.slots.filter((s) => s.kind === "PLACEHOLDER");
+  if (placeholders.length === 0) return null;
+  return (
+    <section aria-labelledby="placeholder-invites-heading">
+      <h2 id="placeholder-invites-heading" className={`${ui.sectionHeading} mb-3`}>
+        Invite to a placeholder seat
+      </h2>
+      <ul className="divide-y divide-ink-100 overflow-hidden rounded-3xl border border-ink-200 bg-white">
+        {placeholders.map((slot) => (
+          <li key={slot.id} className="flex min-h-16 items-center gap-3 px-4 py-3">
+            <Avatar name={slot.name} size="md" placeholder />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-bold text-ink-900">{slot.name}</span>
+              <span className="flex items-center gap-1 text-xs text-ink-500">
+                {slot.claimLink && <Link2 className="h-3 w-3" aria-hidden />}
+                {slot.claimLink ? "Claim link sent" : "No link yet"}
+              </span>
+            </span>
+            <button type="button" onClick={() => onInvite(slot)} className={`${ui.btnSecondarySm} shrink-0`}>
+              Invite
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
