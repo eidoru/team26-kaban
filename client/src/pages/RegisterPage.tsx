@@ -1,7 +1,7 @@
 import { type FormEvent, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ApiError } from "../api/client";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/useAuth";
 import { prefetchHomeData } from "../lib/homeQueries";
 import { ui } from "../lib/ui";
 import { AuthShell } from "../components/AuthShell";
@@ -143,7 +143,7 @@ export function RegisterPage() {
               placeholder="Phone or messenger handle"
               className={ui.input}
             />
-            <p className={ui.helperText}>Shared with group managers and members.</p>
+            <p className={ui.helperText}>Shown to the organizer and members of your paluwagans.</p>
           </div>
 
           <div>

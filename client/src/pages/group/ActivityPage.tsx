@@ -25,7 +25,7 @@ const FILTERS: { value: ActivityCategory | null; label: string }[] = [
   { value: "payments", label: "Payments" },
   { value: "payouts", label: "Payouts" },
   { value: "debts", label: "Debts" },
-  { value: "disputes", label: "Disputes" },
+  { value: "disputes", label: "Problems" },
   { value: "swaps", label: "Order and swaps" },
   { value: "members", label: "Members" },
   { value: "settings", label: "Settings" },

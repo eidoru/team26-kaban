@@ -3,7 +3,7 @@ import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-r
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, api } from "../../api/client";
 import { Spinner } from "../../components/Splash";
-import { useAuth } from "../../context/AuthContext";
+import { useAuth } from "../../context/useAuth";
 import { invalidateHomeLists } from "../../lib/homeQueries";
 import { clearPendingLink, stashPendingLink } from "../../lib/pendingInvite";
 import { ui } from "../../lib/ui";

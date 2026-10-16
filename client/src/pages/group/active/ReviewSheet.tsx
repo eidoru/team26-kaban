@@ -58,7 +58,7 @@ export function ReviewSheet({
   }
 
   const title = isDispute
-    ? `${slot?.name ?? "Member"} disputes a ${formatPeso(current.item.previousAmount)} payment`
+    ? `${slot?.name ?? "Member"} reports a problem with a ${formatPeso(current.item.previousAmount)} payment`
     : `${slot?.name ?? "Member"} paid ${formatPeso(current.item.amount)}`;
   const subtitle = `${queue.length} waiting · ${current.item.round ? `round ${current.item.round} · ` : ""}sent ${sentAt(
     isDispute ? current.item.createdAt : current.item.submittedAt,
@@ -82,7 +82,7 @@ export function ReviewSheet({
               disabled={!reason.trim() || !!reasonError || busy}
               className="min-h-11 flex-1 rounded-full bg-danger-600 px-5 text-sm font-bold text-white hover:bg-danger-700 disabled:opacity-50"
             >
-              {pending === "deny" ? "Denying…" : isDispute ? "Deny dispute" : "Deny payment"}
+              {pending === "deny" ? "Denying…" : isDispute ? "Deny report" : "Deny payment"}
             </button>
           </div>
         ) : (

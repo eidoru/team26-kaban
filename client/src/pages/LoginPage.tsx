@@ -1,7 +1,7 @@
 import { type FormEvent, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ApiError } from "../api/client";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/useAuth";
 import { prefetchHomeData } from "../lib/homeQueries";
 import { ui } from "../lib/ui";
 import { AuthShell } from "../components/AuthShell";

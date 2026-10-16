@@ -5,7 +5,6 @@ import { queryClient } from "./queryClient";
 
 type NotificationsData = { notifications: NotificationItem[]; unreadCount: number };
 
-export const myGroupsKey = ["groups"] as const;
 /** The home dashboard (§15.2), shared by Home and Money. */
 export const homeKey = ["home"] as const;
 
@@ -26,7 +25,6 @@ export function prefetchHomeData() {
 }
 
 export function invalidateHomeLists(client: QueryClient) {
-  void client.invalidateQueries({ queryKey: myGroupsKey });
   void client.invalidateQueries({ queryKey: homeKey });
 }
 

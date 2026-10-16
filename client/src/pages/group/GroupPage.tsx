@@ -27,7 +27,7 @@ import {
 } from "../../api/client";
 import { ActionBar } from "../../components/flow/ActionBar";
 import { NowPanel } from "../../components/flow/NowPanel";
-import { useDialog } from "../../context/DialogContext";
+import { useDialog } from "../../context/useDialog";
 import { dueHint, formatDueDate } from "../../lib/dates";
 import { useDemoToolsSetting } from "../../lib/devTools";
 import { groupKey, useGroup, useGroupActions } from "../../lib/groupQueries";
@@ -220,8 +220,8 @@ function GroupView({ detail }: { detail: GroupDetail }) {
 
   async function withdrawDispute(dispute: DisputeView) {
     const confirmed = await dialog.confirm({
-      title: "Withdraw this dispute?",
-      description: `The payment stays at ${formatPeso(dispute.previousAmount)}. You can dispute it again before the payout.`,
+      title: "Withdraw this report?",
+      description: `The payment stays at ${formatPeso(dispute.previousAmount)}. You can report it again before the payout.`,
       confirmLabel: "Withdraw",
       variant: "danger",
     });
@@ -429,7 +429,7 @@ function GroupView({ detail }: { detail: GroupDetail }) {
       const disputes = queue.filter((q) => q.kind === "dispute").length;
       const payments = queue.length - disputes;
       const parts = [
-        disputes > 0 && `${disputes} dispute${disputes === 1 ? "" : "s"}`,
+        disputes > 0 && `${disputes} problem report${disputes === 1 ? "" : "s"}`,
         payments > 0 && `${payments} payment${payments === 1 ? "" : "s"}`,
       ].filter(Boolean);
       now = (
@@ -440,7 +440,7 @@ function GroupView({ detail }: { detail: GroupDetail }) {
           title={`${parts.join(" and ")} to review`}
           body={
             disputes > 0
-              ? "Disputes first: they expire at the payout if you don't decide."
+              ? "Problem reports first: they expire at the payout if you don't decide."
               : "Oldest first. They count once you approve them."
           }
         />

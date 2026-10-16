@@ -242,7 +242,7 @@ export function MyPayments({
                 )}
                 {disputable && (
                   <button type="button" onClick={() => onDispute(s)} className={ui.btnGhost}>
-                    Dispute
+                    Report a problem
                   </button>
                 )}
               </div>
@@ -357,7 +357,7 @@ export function RefundsOwed({ detail }: { detail: GroupDetail }) {
       <h2 id="refunds-heading" className={ui.sectionHeading}>
         Refunds you owe
       </h2>
-      <p className={`${ui.sectionSubtitle} mb-3`}>From approved disputes. Hand these back outside the app.</p>
+      <p className={`${ui.sectionSubtitle} mb-3`}>From approved problem reports. Hand these back outside the app.</p>
       <ul className="divide-y divide-ink-100 overflow-hidden rounded-3xl border border-ink-200 bg-white">
         {refunds.map((d) => {
           const slot = detail.slots.find((s) => s.id === d.slotId);

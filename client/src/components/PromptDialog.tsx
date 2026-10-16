@@ -1,4 +1,4 @@
-import { type ChangeEvent, type FormEvent, useEffect, useState } from "react";
+import { type ChangeEvent, type FormEvent, useState } from "react";
 import { ui } from "../lib/ui";
 import { Modal } from "./Modal";
 
@@ -38,13 +38,7 @@ export function PromptDialog({
   const [value, setValue] = useState(defaultValue);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (open) {
-      setValue(defaultValue);
-      setError(null);
-    }
-  }, [open, defaultValue]);
-
+  // DialogProvider mounts a fresh PromptDialog for every prompt, so state starts clean each time.
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     const trimmed = value.trim();

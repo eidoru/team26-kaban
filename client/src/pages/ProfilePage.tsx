@@ -1,6 +1,6 @@
 import { type FormEvent, type ReactNode, useId, useState } from "react";
 import { api, ApiError, patchSession, storeAuth } from "../api/client";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/useAuth";
 import { Avatar } from "../components/Avatar";
 import { ToggleSwitch } from "../components/ToggleSwitch";
 import { demoToolsAvailable, useDemoToolsSetting } from "../lib/devTools";

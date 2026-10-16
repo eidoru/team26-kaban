@@ -2,7 +2,7 @@ import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { api } from "../../api/client";
 import { ActionBar } from "../../components/flow/ActionBar";
-import { useDialog } from "../../context/DialogContext";
+import { useDialog } from "../../context/useDialog";
 import { formatDueDate } from "../../lib/dates";
 import { useGroup, useGroupActions } from "../../lib/groupQueries";
 import { formatPeso } from "../../lib/money";

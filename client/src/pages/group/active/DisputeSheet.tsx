@@ -73,7 +73,7 @@ function DisputeForm({
     <Sheet
       open
       onClose={onClose}
-      title="Dispute this payment"
+      title="Report a problem with this payment"
       subtitle={`Recorded as ${formatPeso(current)} · round ${submission.round}`}
       footer={
         <button

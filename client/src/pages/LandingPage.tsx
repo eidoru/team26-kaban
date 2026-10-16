@@ -19,7 +19,7 @@ const FEATURES: { icon: LucideIcon; title: string; description: string }[] = [
   {
     icon: BookOpenCheck,
     title: "Shared contribution ledger",
-    description: "Members report payments and managers confirm them, so partial amounts and shortfalls stay visible to the whole group.",
+    description: "Members report what they paid and the organizer reviews it, so partial payments and shortfalls stay visible to the whole group.",
   },
   {
     icon: CalendarRange,
@@ -33,13 +33,13 @@ const FEATURES: { icon: LucideIcon; title: string; description: string }[] = [
   },
   {
     icon: Link2,
-    title: "Invite links & open seats",
-    description: "Share a join link, or hold a seat for someone with a placeholder they can claim later.",
+    title: "Invite links & placeholders",
+    description: "Share an invite link, or hold a slot for someone with a placeholder they can claim later.",
   },
   {
     icon: ShieldAlert,
     title: "Shortfall tracking",
-    description: "Underpayments are recorded, and managers see what's still owed across all their groups.",
+    description: "If someone pays short, the organizer covers the pot and it becomes a debt, with optional interest, that everyone can see.",
   },
   {
     icon: Bell,
@@ -51,7 +51,7 @@ const FEATURES: { icon: LucideIcon; title: string; description: string }[] = [
 const STEPS = [
   {
     title: "Create your paluwagan",
-    description: "Name it, set the contribution and schedule, and choose how many seats.",
+    description: "Name it, set the contribution and schedule, and choose how many slots.",
   },
   {
     title: "Fill the roster",
@@ -59,24 +59,24 @@ const STEPS = [
   },
   {
     title: "Lock the order & start",
-    description: "Once every seat is taken, lock in the payout order and open Round 1.",
+    description: "Once every slot is filled, lock the payout order and launch. Round 1 opens on the start date.",
   },
   {
     title: "Run each round together",
-    description: "Report and confirm contributions until every member has received the pot.",
+    description: "Report and review payments, and hand over each payout, until every member has received the pot.",
   },
 ] as const;
 
 const ROLES: { icon: LucideIcon; who: string; what: string }[] = [
   {
     icon: UserRound,
-    who: "Managers",
-    what: "create groups, invite members, set the payout order, confirm payments and track shortfalls.",
+    who: "Organizers",
+    what: "set up the paluwagan, invite members, lock the payout order, review payments and hand over each pot.",
   },
   {
     icon: UsersRound,
     who: "Members",
-    what: "see their turn, report contributions and follow progress through each round.",
+    what: "see their turn, report what they paid, and follow every round, payout and debt in the shared record.",
   },
   {
     icon: Bell,

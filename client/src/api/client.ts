@@ -66,12 +66,6 @@ export interface GroupSummary {
   cancelledAt: string | null;
 }
 
-export interface MyGroup extends GroupSummary {
-  organizerName: string;
-  occupied: number;
-  isOrganizer: boolean;
-  myPosition: number | null;
-}
 
 export interface SlotView {
   id: string;
@@ -621,7 +615,6 @@ export const api = {
     request<{ marked: number }>("/notifications/read-all", { method: "PATCH", body: JSON.stringify({}) }),
 
   // --- Groups. Every change returns the fresh GroupDetail.
-  myGroups: () => request<{ groups: MyGroup[] }>("/groups"),
   createGroup: (body: SetupInput) => send<GroupDetail>("POST", "/groups", body),
   getGroup: (id: string, signal?: AbortSignal) => request<GroupDetail>(`/groups/${id}`, { signal }),
   editGroup: (id: string, body: SetupInput) => send<GroupDetail>("PATCH", `/groups/${id}`, body),
