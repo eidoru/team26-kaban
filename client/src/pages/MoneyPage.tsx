@@ -38,14 +38,17 @@ export function MoneyPage() {
     <div className="space-y-8">
       <h1 className={ui.pageTitle}>Money</h1>
       {nothingYet && <p className={ui.emptyState}>Nothing yet. Money you pay in and receive shows here once a paluwagan starts.</p>}
-      <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        {tiles.map((t) => (
-          <div key={t.label} className="rounded-2xl border border-ink-200 bg-white p-4">
-            <dt className="text-xs text-ink-500">{t.label}</dt>
-            <dd className={`font-heading mt-0.5 text-xl font-bold tabular-nums ${t.tone ?? "text-ink-900"}`}>{formatPeso(t.value)}</dd>
-          </div>
-        ))}
-      </dl>
+      {/* An empty grid would still take a gap of its own, doubling the space under the title. */}
+      {tiles.length > 0 && (
+        <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {tiles.map((t) => (
+            <div key={t.label} className="rounded-2xl border border-ink-200 bg-white p-4">
+              <dt className="text-xs text-ink-500">{t.label}</dt>
+              <dd className={`font-heading mt-0.5 text-xl font-bold tabular-nums ${t.tone ?? "text-ink-900"}`}>{formatPeso(t.value)}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
 
       {data.payouts.length > 0 && (
         <section aria-labelledby="payouts-heading">

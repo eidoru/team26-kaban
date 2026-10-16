@@ -50,12 +50,8 @@ export function NotificationsPage() {
   return (
     <div>
       <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className={ui.pageTitle}>Alerts</h1>
-          <p className={ui.pageSubtitle}>
-            {data?.unreadCount ? `${data.unreadCount} unread` : "You're all caught up"}
-          </p>
-        </div>
+        {/* No count under the title: the nav badge has it, and unread alerts are bold in the list. */}
+        <h1 className={ui.pageTitle}>Alerts</h1>
         {(data?.unreadCount ?? 0) > 0 && (
           <button
             type="button"
