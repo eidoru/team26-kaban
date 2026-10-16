@@ -1,3 +1,4 @@
+import { RECEIPT_AUTO_CONFIRM_DAYS } from "../domain/constants.js";
 import { outstanding } from "../domain/debt.js";
 import { formatPeso } from "../domain/money.js";
 import { processPayout } from "../domain/payout.js";
@@ -339,4 +340,59 @@ export async function confirmReceipt(groupId: string, userId: string, roundNumbe
       after: { round: roundNumber },
     });
   });
+}
+
+/**
+ * R-DEC-07: a payout handed over but not yet confirmed. Once a day the recipient is reminded to
+ * confirm it; after `RECEIPT_AUTO_CONFIRM_DAYS` it's marked received automatically, and the log
+ * says so. Until that constant has a value (R-DEC-12), only the reminders run.
+ */
+export async function nudgeUnconfirmedPayouts(now = new Date()) {
+  const waiting = await prisma.payout.findMany({
+    where: { status: "HANDED_OVER", handedOverAt: { lt: new Date(now.getTime() - 86_400_000) } },
+    include: { round: { include: { group: true, recipient: { include: { user: true } } } } },
+  });
+  let reminded = 0;
+  let autoConfirmed = 0;
+  for (const payout of waiting) {
+    const { round } = payout;
+    const due =
+      RECEIPT_AUTO_CONFIRM_DAYS !== null &&
+      payout.handedOverAt!.getTime() <= now.getTime() - RECEIPT_AUTO_CONFIRM_DAYS * 86_400_000;
+    if (due) {
+      await withGroupLock(round.groupId, async (tx) => {
+        const fresh = await tx.payout.findUniqueOrThrow({ where: { id: payout.id } });
+        if (fresh.status !== "HANDED_OVER") return;
+        await tx.payout.update({ where: { id: payout.id }, data: { status: "CONFIRMED", confirmedAt: now, autoConfirmed: true } });
+        await audit(tx, {
+          groupId: round.groupId,
+          actorUserId: null,
+          action: "payout.confirmed",
+          targetSlotId: round.recipientSlotId,
+          targetName: slotName(round.recipient),
+          amounts: { net: Number(payout.net) },
+          after: { round: round.number, automatic: true },
+        });
+        autoConfirmed++;
+      });
+      continue;
+    }
+    const recipientUser = round.recipient.userId;
+    if (!recipientUser) continue;
+    const recent = await prisma.reminderSent.findFirst({
+      where: { roundId: round.id, slotId: round.recipientSlotId, kind: "RECEIPT", sentAt: { gt: new Date(now.getTime() - 86_400_000) } },
+    });
+    if (recent) continue;
+    await prisma.$transaction(async (tx) => {
+      await tx.reminderSent.create({ data: { roundId: round.id, slotId: round.recipientSlotId, kind: "RECEIPT", sentAt: now } });
+      await notifyUsers(tx, [recipientUser], {
+        groupId: round.groupId,
+        kind: "payout.handed_over",
+        title: `Did you get ${formatPeso(Number(payout.net))}?`,
+        body: `${round.group.name}, round ${round.number}. Confirm it so everyone sees the payout is done.`,
+      });
+    });
+    reminded++;
+  }
+  return { receiptReminders: reminded, autoConfirmed };
 }

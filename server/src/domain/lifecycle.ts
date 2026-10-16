@@ -24,10 +24,6 @@ export function canTransition(from: GroupState, to: GroupState): boolean {
   return TRANSITIONS[from].includes(to);
 }
 
-export function isCompleted(state: GroupState): boolean {
-  return state === "COMPLETED" || state === "COMPLETED_WITH_OUTSTANDING_DEBT";
-}
-
 /** What each state allows. Settings, roster and order are only editable in LOBBY (R-LCH-03, §11). */
 export const can = {
   editSettings: (s: GroupState) => s === "LOBBY",

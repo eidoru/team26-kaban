@@ -2,8 +2,6 @@ import { formatPeso, type Centavos } from "./money.js";
 
 /** R-SUB-01 */
 export type SubmissionType = "CONTRIBUTION" | "DEBT_PAYMENT";
-/** R-SUB-03 / R-SUB-04 */
-export type SubmissionStatus = "PENDING" | "APPROVED" | "DENIED" | "CANCELLED";
 /** R-SUB-07 */
 export type PeriodStatus = "PAID" | "PARTIAL" | "UNPAID";
 

@@ -120,10 +120,6 @@ export function toSettings(input: SetupInput): GroupSettings {
   };
 }
 
-/** Case-insensitive name key for R-SET-01 / R-DEC-15. */
-export function nameKey(name: string): string {
-  return name.trim().toLocaleLowerCase("en-US");
-}
 
 const FREQUENCY_LABELS: Record<Frequency, string> = {
   WEEKLY: "Weekly",

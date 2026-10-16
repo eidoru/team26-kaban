@@ -34,13 +34,13 @@ export async function raiseDispute(
     const actor = await tx.slot.findFirstOrThrow({ where: { groupId, userId: actorUserId } });
     const ownSlot = submission.slotId === actor.id;
     if (!ownSlot && !(actor.isOrganizer && !submission.slot.userId)) {
-      throw forbidden("You can dispute payments for your own slot only.");
+      throw forbidden("You can report problems with your own slot's payments only.");
     }
     if (submission.status !== "APPROVED" || submission.appliedAs !== "CONTRIBUTION") {
-      throw conflict("Only approved contributions can be disputed.", "NOT_DISPUTABLE");
+      throw conflict("Only approved contributions can be reported.", "NOT_DISPUTABLE");
     }
     if (submission.round?.status !== "OPEN") {
-      throw conflict("Disputes close when the period's payout happens.", "PERIOD_CLOSED");
+      throw conflict("Problem reports close when the period's payout happens.", "PERIOD_CLOSED");
     }
     if (submission.disputes.length > 0) throw conflict("This payment already has an open dispute.", "ALREADY_DISPUTED");
 
@@ -73,7 +73,7 @@ export async function raiseDispute(
       await notifyUsers(tx, [group.organizerId], {
         groupId,
         kind: "dispute.raised",
-        title: `${slotName(submission.slot)} disputes a ${formatPeso(current)} payment`,
+        title: `${slotName(submission.slot)} reports a problem with a ${formatPeso(current)} payment`,
         body: `They ask to change it to ${formatPeso(input.proposedAmount)}. Resolve it before the payout date.`,
       });
     }
@@ -99,8 +99,8 @@ export async function reviewDispute(
       where: { id: disputeId, groupId },
       include: { submission: { include: { round: true } }, slot: { include: { user: true } } },
     });
-    if (!dispute) throw notFound("Dispute");
-    if (dispute.status !== "PENDING") throw conflict("This dispute was already handled.", "ALREADY_REVIEWED");
+    if (!dispute) throw notFound("Problem report");
+    if (dispute.status !== "PENDING") throw conflict("This report was already handled.", "ALREADY_REVIEWED");
     const previous = Number(dispute.previousAmount);
     const proposed = Number(dispute.proposedAmount);
     let refund = 0;
@@ -110,7 +110,7 @@ export async function reviewDispute(
       const { approved } = await periodTotals(tx, dispute.slotId, dispute.submission.roundId!);
       const current = Number(dispute.submission.effectiveAmount ?? dispute.submission.amount);
       const error = disputeAmountError(proposed, current, approved, Number(group.contribution));
-      if (error) throw conflict(`${error} Deny this dispute instead.`, "BAD_AMOUNT");
+      if (error) throw conflict(`${error} Deny this report instead.`, "BAD_AMOUNT");
       await tx.submission.update({ where: { id: dispute.submissionId }, data: { effectiveAmount: BigInt(proposed) } });
       refund = refundFor(current, proposed);
       if (refund > 0) {
@@ -153,7 +153,7 @@ export async function reviewDispute(
         kind: decision.approve ? "dispute.approved" : "dispute.denied",
         title: decision.approve
           ? `Your payment is now ${formatPeso(proposed)}`
-          : `Your dispute about ${formatPeso(previous)} wasn't accepted`,
+          : `Your report about ${formatPeso(previous)} wasn't accepted`,
         body: decision.approve
           ? refund > 0
             ? `The organizer owes you a ${formatPeso(refund)} refund.`
@@ -168,9 +168,9 @@ export async function reviewDispute(
 export async function cancelDispute(groupId: string, userId: string, disputeId: string) {
   return withGroupLock(groupId, async (tx) => {
     const dispute = await tx.dispute.findFirst({ where: { id: disputeId, groupId }, include: { slot: { include: { user: true } } } });
-    if (!dispute) throw notFound("Dispute");
+    if (!dispute) throw notFound("Problem report");
     if (dispute.raisedById !== userId) throw forbidden("Only whoever raised it can withdraw it.");
-    if (dispute.status !== "PENDING") throw conflict("Only pending disputes can be withdrawn.", "ALREADY_REVIEWED");
+    if (dispute.status !== "PENDING") throw conflict("Only pending reports can be withdrawn.", "ALREADY_REVIEWED");
     await tx.dispute.update({ where: { id: dispute.id }, data: { status: "CANCELLED", reviewedAt: new Date() } });
     await audit(tx, {
       groupId,
@@ -202,7 +202,7 @@ export async function expireDisputes(db: Db, groupId: string, roundId: string, r
     await notifyUsers(db, [dispute.raisedById], {
       groupId,
       kind: "dispute.expired",
-      title: `Your dispute expired with round ${roundNumber}`,
+      title: `Your problem report expired with round ${roundNumber}`,
       body: `It wasn't resolved before the payout, so ${formatPeso(Number(dispute.previousAmount))} stands. You can still pay anything missing toward your debt.`,
     });
   }

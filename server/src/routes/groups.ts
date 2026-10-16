@@ -5,7 +5,7 @@ import { loadGroup, requireOrganizer } from "../middleware/groupAccess.js";
 import { validateBody } from "../middleware/validate.js";
 import { resolveAppOrigin } from "../lib/origin.js";
 import { notifyGroupChangeSafe } from "../lib/realtimeNotify.js";
-import { cancelGroup, createGroup, editGroup, groupDetail, listMyGroups } from "../services/groups.js";
+import { cancelGroup, createGroup, editGroup, groupDetail } from "../services/groups.js";
 import { addPlaceholder, createClaimLink, createInviteLink, removeSlot, revokeClaimLink } from "../services/roster.js";
 import { launchGroup, lockOrder, setOrder, shuffleOrder } from "../services/launch.js";
 import { cancelSubmission, reviewSubmission, submitPayment } from "../services/submissions.js";
@@ -72,7 +72,7 @@ function answerWithDetail(action: GroupAction) {
     try {
       const groupId = req.group!.id;
       await action(req, groupId, req.user!.id);
-      notifyGroupChangeSafe(groupId, "memberships");
+      notifyGroupChangeSafe(groupId);
       res.json(await detail(req, groupId));
     } catch (err) {
       next(err);
@@ -89,13 +89,6 @@ router.get("/home", async (req, res, next) => {
   }
 });
 
-router.get("/", async (req, res, next) => {
-  try {
-    res.json({ groups: await listMyGroups(req.user!.id) });
-  } catch (err) {
-    next(err);
-  }
-});
 
 router.post("/", validateBody(setupSchema), async (req, res, next) => {
   try {
@@ -297,7 +290,7 @@ router.get("/:id/exports/:kind.:format", loadGroup, async (req, res, next) => {
 router.post("/:id/leave", loadGroup, async (req, res, next) => {
   try {
     await removeSlot(req.group!.id, req.user!.id, req.slot!.id);
-    notifyGroupChangeSafe(req.group!.id, "memberships");
+    notifyGroupChangeSafe(req.group!.id);
     res.json({ ok: true });
   } catch (err) {
     next(err);

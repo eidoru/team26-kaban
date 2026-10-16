@@ -14,7 +14,7 @@ describe("notifyGroupChange", () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 202 }));
     vi.stubGlobal("fetch", fetchMock);
 
-    await notifyGroupChange("g1", "contributions");
+    await notifyGroupChange("g1");
 
     expect(fetchMock).toHaveBeenCalledOnce();
     const [url, init] = fetchMock.mock.calls[0];
@@ -23,7 +23,7 @@ describe("notifyGroupChange", () => {
     expect(init.headers.apikey).toBe("sb_secret_test");
     expect(init.headers.Authorization).toBeUndefined();
     expect(JSON.parse(init.body)).toEqual({
-      messages: [{ topic: "group:g1", event: "group_update", payload: { scope: "contributions" } }],
+      messages: [{ topic: "group:g1", event: "group_update", payload: {} }],
     });
   });
 
@@ -33,7 +33,7 @@ describe("notifyGroupChange", () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
 
-    await notifyGroupChange("g1", "rounds");
+    await notifyGroupChange("g1");
 
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -46,7 +46,7 @@ describe("notifyGroupChangeSafe", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("nope", { status: 500 })));
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    expect(() => notifyGroupChangeSafe("g1", "memberships")).not.toThrow();
+    expect(() => notifyGroupChangeSafe("g1")).not.toThrow();
     await vi.waitFor(() => expect(errorSpy).toHaveBeenCalledOnce());
   });
 });

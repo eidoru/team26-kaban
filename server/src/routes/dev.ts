@@ -15,7 +15,7 @@ router.use(requireDemoTools, requireAuth);
 router.post("/groups/:id/activate-now", loadGroup, requireOrganizer, async (req, res, next) => {
   try {
     const result = await activateDueGroups(toCalendarDate(req.group!.startDate), req.group!.id);
-    notifyGroupChangeSafe(req.group!.id, "rounds");
+    notifyGroupChangeSafe(req.group!.id);
     res.json({ ok: true, ...result });
   } catch (err) {
     next(err);
@@ -26,7 +26,7 @@ router.post("/groups/:id/activate-now", loadGroup, requireOrganizer, async (req,
 router.post("/groups/:id/close-round", loadGroup, requireOrganizer, async (req, res, next) => {
   try {
     const result = await closeOpenRound(req.group!.id, req.user!.id);
-    notifyGroupChangeSafe(req.group!.id, "rounds");
+    notifyGroupChangeSafe(req.group!.id);
     res.json({ ok: true, ...result });
   } catch (err) {
     next(err);

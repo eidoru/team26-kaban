@@ -24,14 +24,3 @@ export function computeAmounts(mode: AmountMode, entered: Centavos, slots: numbe
   return { contribution, pot, potAdjustedFrom: pot === entered ? null : entered };
 }
 
-/**
- * R-LOB-10: what changes when the slot count changes. Contribution mode keeps the contribution (the
- * pot moves); pot mode keeps the pot the organizer entered (the contribution moves).
- */
-export function recomputeForSlots(
-  mode: AmountMode,
-  current: { contribution: Centavos; enteredPot: Centavos },
-  slots: number,
-): GroupAmounts {
-  return computeAmounts(mode, mode === "CONTRIBUTION" ? current.contribution : current.enteredPot, slots);
-}

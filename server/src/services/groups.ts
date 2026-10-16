@@ -146,27 +146,6 @@ export async function cancelGroup(groupId: string, actorUserId: string) {
   });
 }
 
-/** The viewer's paluwagans, newest first. */
-export async function listMyGroups(userId: string) {
-  const groups = await prisma.group.findMany({
-    where: { slots: { some: { userId } } },
-    include: {
-      organizer: { select: { displayName: true } },
-      slots: { select: { id: true, userId: true, isOrganizer: true, position: true } },
-    },
-    orderBy: { createdAt: "desc" },
-  });
-  return groups.map((g) => {
-    const mine = g.slots.find((s) => s.userId === userId)!;
-    return {
-      ...summary(g),
-      organizerName: g.organizer.displayName,
-      occupied: g.slots.length,
-      isOrganizer: mine.isOrganizer,
-      myPosition: mine.position,
-    };
-  });
-}
 
 function summary(group: Group) {
   const settings = settingsOf(group);

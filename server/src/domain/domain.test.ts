@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeAmounts, recomputeForSlots } from "./amounts.js";
+import { computeAmounts } from "./amounts.js";
 import { addDebt, applyRepayment, NO_DEBT, outstanding, type DebtState } from "./debt.js";
 import { canTransition, can } from "./lifecycle.js";
 import { formatPeso, interestOn, pesos, rateFromPercent } from "./money.js";
@@ -23,7 +23,7 @@ describe("money", () => {
   });
 });
 
-describe("amounts (R-AMT-01, R-AMT-02, R-LOB-10)", () => {
+describe("amounts (R-AMT-01, R-AMT-02)", () => {
   it("multiplies in contribution mode", () => {
     expect(computeAmounts("CONTRIBUTION", pesos(2_000), 5)).toEqual({
       contribution: pesos(2_000),
@@ -41,12 +41,6 @@ describe("amounts (R-AMT-01, R-AMT-02, R-LOB-10)", () => {
     expect(computeAmounts("POT", pesos(10_000), 5).potAdjustedFrom).toBeNull();
   });
 
-  it("keeps the entered amount fixed when the slot count changes", () => {
-    expect(recomputeForSlots("CONTRIBUTION", { contribution: pesos(2_000), enteredPot: 0 }, 6).pot).toBe(pesos(12_000));
-    expect(
-      recomputeForSlots("POT", { contribution: pesos(2_000), enteredPot: pesos(10_000) }, 4).contribution,
-    ).toBe(pesos(2_500));
-  });
 });
 
 describe("schedule (§4.3)", () => {

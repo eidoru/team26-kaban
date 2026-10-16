@@ -17,7 +17,7 @@ suite("activity sentences (R-AUD-03)", () => {
   it("writes amounts and before/after values in pesos", () => {
     expect(
       describe({ action: "dispute.raised", actor: "Mia", target: "Mia", amounts: {}, before: { amount: 200_000 }, after: { amount: 150_000, reason: "Refund" } }),
-    ).toEqual({ title: "Mia disputed their payment: ₱2,000 → ₱1,500", detail: "Refund" });
+    ).toEqual({ title: "Mia reported a problem with their payment: ₱2,000 → ₱1,500", detail: "Refund" });
     expect(
       describe({ action: "submission.approved", actor: "Ana", target: "Ana", amounts: { amount: 200_000 }, before: {}, after: { round: 2 } }).title,
     ).toBe("Ana approved their own ₱2,000 in round 2");

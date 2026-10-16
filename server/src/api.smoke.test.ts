@@ -9,8 +9,8 @@ describe("API smoke", () => {
     expect(res.body).toMatchObject({ status: "ok", service: "kaban-api" });
   });
 
-  it("GET /api/v1/groups requires authentication", async () => {
-    const res = await request(app).get("/api/v1/groups");
+  it("GET /api/v1/groups/home requires authentication", async () => {
+    const res = await request(app).get("/api/v1/groups/home");
     expect(res.status).toBe(401);
   });
 

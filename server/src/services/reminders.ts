@@ -10,7 +10,7 @@ import { periodTotals } from "./submissions.js";
 import { slotName, withGroupLock } from "./common.js";
 import { formatDisplayDate } from "../lib/dates.js";
 
-type ReminderKind = "BEFORE_PAYOUT" | "PAYOUT_DAY" | "MANUAL";
+type ReminderKind = "BEFORE_PAYOUT" | "PAYOUT_DAY" | "MANUAL" | "RECEIPT";
 
 /**
  * §12: remind everyone not fully paid, `REMINDER_DAYS_BEFORE` days before the payout date and on

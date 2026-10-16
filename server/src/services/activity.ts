@@ -126,7 +126,9 @@ export function describe(entry: {
         f.round ? `Round ${f.round}.` : null,
       );
     case "payout.confirmed":
-      return T(`${target} confirmed receiving ${peso(a.net)}`, f.round ? `Round ${f.round}.` : null);
+      return f.automatic
+        ? T(`${target}'s ${peso(a.net)} payout was marked received automatically`, `Round ${f.round}: not confirmed in time.`)
+        : T(`${target} confirmed receiving ${peso(a.net)}`, f.round ? `Round ${f.round}.` : null);
     case "debt.created":
       return T(
         `${target} was ${peso(a.shortfall)} short${round}`,
@@ -142,15 +144,15 @@ export function describe(entry: {
     case "debt.repaid":
       return T(`${target} paid down their debt`);
     case "dispute.raised":
-      return T(`${actor} disputed ${self ? "their" : `${target}'s`} payment: ${peso(b.amount)} → ${peso(f.amount)}`, typeof f.reason === "string" ? f.reason : null);
+      return T(`${actor} reported a problem with ${self ? "their" : `${target}'s`} payment: ${peso(b.amount)} → ${peso(f.amount)}`, typeof f.reason === "string" ? f.reason : null);
     case "dispute.approved":
       return T(`${actor} approved changing ${target}'s payment to ${peso(f.amount)}`, `It was ${peso(b.amount)}.`);
     case "dispute.denied":
       return T(`${actor} kept ${target}'s payment at ${peso(b.amount)}`, typeof f.reason === "string" ? `Reason: ${f.reason}` : null);
     case "dispute.cancelled":
-      return T(`${actor} withdrew a dispute`);
+      return T(`${actor} withdrew a problem report`);
     case "dispute.expired":
-      return T(`${target}'s dispute expired at the payout`, `${peso(b.amount)} stands.`);
+      return T(`${target}'s problem report expired at the payout`, `${peso(b.amount)} stands.`);
     case "refund.recorded":
       return T(`The organizer owes ${target} a ${peso(a.refund)} refund`);
     case "swap.requested": {

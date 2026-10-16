@@ -1,7 +1,5 @@
 import { runAfterResponse } from "./background.js";
 
-export type GroupChangeScope = "contributions" | "rounds" | "memberships";
-
 const BROADCAST_TIMEOUT_MS = 1500;
 
 /**
@@ -9,7 +7,7 @@ const BROADCAST_TIMEOUT_MS = 1500;
  * broadcast endpoint: one request, no websocket handshake. Use notifyGroupChangeSafe from request
  * handlers, which keeps it alive past the response on Vercel.
  */
-export async function notifyGroupChange(groupId: string, scope: GroupChangeScope): Promise<void> {
+export async function notifyGroupChange(groupId: string): Promise<void> {
   const url = process.env.SUPABASE_URL;
   const secretKey = process.env.SUPABASE_SECRET_KEY;
   if (!url || !secretKey) return;
@@ -22,7 +20,7 @@ export async function notifyGroupChange(groupId: string, scope: GroupChangeScope
       apikey: secretKey,
     },
     body: JSON.stringify({
-      messages: [{ topic: `group:${groupId}`, event: "group_update", payload: { scope } }],
+      messages: [{ topic: `group:${groupId}`, event: "group_update", payload: {} }],
     }),
     signal: AbortSignal.timeout(BROADCAST_TIMEOUT_MS),
   });
@@ -35,10 +33,7 @@ export async function notifyGroupChange(groupId: string, scope: GroupChangeScope
  * Broadcast after the response is sent (reliably, via waitUntil) so it never adds latency or fails
  * the caller's request; clients also have a polling fallback.
  */
-export function notifyGroupChangeSafe(groupId: string, scope: GroupChangeScope): void {
-  runAfterResponse(`broadcast ${scope} for group ${groupId}`, notifyGroupChange(groupId, scope));
+export function notifyGroupChangeSafe(groupId: string): void {
+  runAfterResponse(`broadcast for group ${groupId}`, notifyGroupChange(groupId));
 }
 
-export function isGroupBroadcastConfigured(): boolean {
-  return Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SECRET_KEY);
-}

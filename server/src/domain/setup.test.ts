@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { pesos } from "./money.js";
-import { launchBlockers, nameKey, settingChanges, setupErrors, toSettings, type SetupInput } from "./setup.js";
+import { launchBlockers, settingChanges, setupErrors, toSettings, type SetupInput } from "./setup.js";
 
 const TODAY = "2026-10-16";
 
@@ -94,11 +94,5 @@ describe("launchBlockers (R-LCH-02)", () => {
 
   it("flags a start date that has become too soon", () => {
     expect(launchBlockers({ ...ready, today: "2026-10-30" })).toHaveLength(1);
-  });
-});
-
-describe("nameKey (R-DEC-15)", () => {
-  it("ignores case and surrounding space", () => {
-    expect(nameKey("  Barkada ")).toBe(nameKey("barkada"));
   });
 });

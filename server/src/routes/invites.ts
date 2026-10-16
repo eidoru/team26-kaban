@@ -20,7 +20,7 @@ router.get("/invites/:token", optionalAuth, async (req, res, next) => {
 router.post("/invites/:token/join", requireAuth, async (req, res, next) => {
   try {
     const result = await joinViaInvite(String(req.params.token), req.user!.id);
-    if (!result.alreadyMember) notifyGroupChangeSafe(result.groupId, "memberships");
+    if (!result.alreadyMember) notifyGroupChangeSafe(result.groupId);
     res.json(result);
   } catch (err) {
     next(err);
@@ -38,7 +38,7 @@ router.get("/claims/:token", optionalAuth, async (req, res, next) => {
 router.post("/claims/:token/claim", requireAuth, async (req, res, next) => {
   try {
     const result = await claimPlaceholder(String(req.params.token), req.user!.id);
-    notifyGroupChangeSafe(result.groupId, "memberships");
+    notifyGroupChangeSafe(result.groupId);
     res.json(result);
   } catch (err) {
     next(err);
