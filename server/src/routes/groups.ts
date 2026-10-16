@@ -14,6 +14,8 @@ import { cancelDispute, raiseDispute, reviewDispute } from "../services/disputes
 import { cancelSwap, requestSwap, respondToSwap, reviewSwap } from "../services/swaps.js";
 import { buildExport } from "../services/exports.js";
 import { completionSummary } from "../services/records.js";
+import { activityLog, type ActivityCategory } from "../services/activity.js";
+import { sendManualReminder } from "../services/reminders.js";
 import { createProofUpload, PROOF_CONTENT_TYPES } from "../lib/storage.js";
 import { can } from "../domain/lifecycle.js";
 import { conflict, notFound as notFoundError } from "../lib/errors.js";
@@ -218,6 +220,28 @@ router.get("/:id/summary", loadGroup, async (req, res, next) => {
     next(err);
   }
 });
+
+/** R-AUD-03: the audit log, for every member. `?before=<entry id>` for older; `?category=` to filter. */
+router.get("/:id/activity", loadGroup, async (req, res, next) => {
+  try {
+    const categories = ["payments", "debts", "payouts", "disputes", "swaps", "members", "settings"];
+    const category = typeof req.query.category === "string" && categories.includes(req.query.category) ? req.query.category : undefined;
+    res.json(
+      await activityLog(req.group!.id, {
+        before: typeof req.query.before === "string" ? req.query.before : undefined,
+        category: category as ActivityCategory | undefined,
+      }),
+    );
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** §15.1: the organizer reminds a member who hasn't fully paid this round. */
+router.post(
+  "/:id/slots/:slotId/remind",
+  ...organizerAction((req, id, user) => sendManualReminder(id, user, String(req.params.slotId))),
+);
 
 router.get("/:id/exports/:kind.:format", loadGroup, async (req, res, next) => {
   try {

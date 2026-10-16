@@ -12,6 +12,7 @@ import { expireSwapsFor } from "./swaps.js";
 import { notifyUsers } from "./notifications.js";
 import { periodTotals } from "./submissions.js";
 import { memberUserIds, slotName, withGroupLock, type Db } from "./common.js";
+import { formatDisplayDate } from "../lib/dates.js";
 
 /**
  * §7 on payout date k, for the open round of one group:
@@ -210,7 +211,7 @@ export async function closeOpenRound(groupId: string, actorUserId: string | null
         groupId,
         kind: "period.opened",
         title: `${group.name}: round ${next.number} is open`,
-        body: `Contributions of ${formatPeso(contribution)} are due by ${next.payoutDate.toISOString().slice(0, 10)}.`,
+        body: `Contributions of ${formatPeso(contribution)} are due by ${formatDisplayDate(next.payoutDate)}.`,
       });
       return { closed: round.number, completed: false };
     }

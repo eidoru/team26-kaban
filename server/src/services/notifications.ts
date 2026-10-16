@@ -31,7 +31,10 @@ export type NotificationKind =
   | "swap.declined"
   | "swap.approved"
   | "swap.denied"
-  | "swap.expired";
+  | "swap.expired"
+  | "reminder.due"
+  | "reminder.payout_day"
+  | "reminder.manual";
 
 /** Send the same notification to several users, skipping duplicates and nulls. */
 export async function notifyUsers(

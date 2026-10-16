@@ -48,7 +48,8 @@ export type AuditAction =
   | "swap.approved"
   | "swap.denied"
   | "swap.cancelled"
-  | "swap.expired";
+  | "swap.expired"
+  | "reminder.sent";
 
 /**
  * Append one immutable entry (R-AUD-02, R-AUD-04). Amounts are centavos. `actorUserId` is null for

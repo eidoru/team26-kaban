@@ -8,6 +8,7 @@ import { prisma } from "../lib/prisma.js";
 import { fromCalendarDate, todayInManila } from "../lib/today.js";
 import { notifyUsers } from "./notifications.js";
 import { assertState, memberUserIds, settingsOf, withGroupLock, type Db } from "./common.js";
+import { formatDisplayDate } from "../lib/dates.js";
 
 /** Positions 1…N in the given slot order. Clears first, since positions are unique per group. */
 async function writeOrder(tx: Db, groupId: string, slotIds: string[]) {
@@ -115,7 +116,7 @@ export async function launchGroup(groupId: string, actorUserId: string) {
         groupId,
         kind: "group.launched",
         title: `${group.name} has launched`,
-        body: `Everything is set. Contributions open on ${settings.startDate}.`,
+        body: `Everything is set. Contributions open on ${formatDisplayDate(settings.startDate)}.`,
       },
     );
     return updated;

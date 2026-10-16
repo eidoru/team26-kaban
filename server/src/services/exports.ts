@@ -3,9 +3,10 @@ import { frequencyLabel } from "../domain/setup.js";
 import { csvMoney, Report, toCsv, type Column } from "../lib/documents.js";
 import { forbidden, notFound } from "../lib/errors.js";
 import { prisma } from "../lib/prisma.js";
-import { APP_TIME_ZONE, toCalendarDate } from "../lib/today.js";
+import { APP_TIME_ZONE } from "../lib/today.js";
 import { slotName } from "./common.js";
 import { completionSummary, recordEvents, type MemberTotals, type RecordEvent } from "./records.js";
+import { formatDisplayDate } from "../lib/dates.js";
 
 export type ExportKind = "statement" | "ledger" | "summary";
 export type ExportFormat = "pdf" | "csv";
@@ -125,7 +126,7 @@ export async function buildExport(input: {
     }
     const lines = [
       `${group.name} · ${terms}`,
-      round ? `Payout turn: round ${round.number}, ${toCalendarDate(round.payoutDate)}` : "Payout turn not set yet",
+      round ? `Payout turn: round ${round.number}, ${formatDisplayDate(round.payoutDate)}` : "Payout turn not set yet",
       ...(slot.claimedAt ? [`Claimed from a placeholder on ${when(slot.claimedAt)}. Earlier records are marked inherited.`] : []),
       generated,
     ];

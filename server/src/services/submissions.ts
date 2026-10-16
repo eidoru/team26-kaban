@@ -8,6 +8,7 @@ import { audit } from "../lib/audit.js";
 import { AppError, badRequest, conflict, forbidden, notFound } from "../lib/errors.js";
 import { isProofPathFor, proofExists, proofViewUrls } from "../lib/storage.js";
 import { debtOf, groupHasDebt, repayDebt } from "./debts.js";
+import { lastRemindedAt } from "./reminders.js";
 import { notifyUsers } from "./notifications.js";
 import { memberUserIds } from "./common.js";
 import { slotName, withGroupLock, type Db } from "./common.js";
@@ -278,6 +279,7 @@ export async function openPeriodView(db: Db, groupId: string, contribution: numb
       select: { slotId: true, status: true, amount: true, effectiveAmount: true, appliedAs: true },
     }),
   ]);
+  const reminded = await lastRemindedAt(round.id);
   const bySlot = slots.map(({ id }) => {
     const mine = submissions.filter((s) => s.slotId === id);
     const approved = sum(mine.filter((s) => s.status === "APPROVED" && s.appliedAs !== "DEBT_PAYMENT"));
@@ -288,6 +290,10 @@ export async function openPeriodView(db: Db, groupId: string, contribution: numb
       approved,
       pending: sum(pendingRows),
       ...periodStatus(contribution, approved, pendingRows.length),
+      /** Last time the organizer sent this slot a reminder this round. */
+      remindedAt: reminded.get(id) ?? null,
+      /** Reminded within the last day, so another reminder isn't allowed yet (§15.1). */
+      remindedRecently: !!reminded.get(id) && Date.now() - Date.parse(reminded.get(id)!) < 24 * 3_600_000,
     };
   });
   return {

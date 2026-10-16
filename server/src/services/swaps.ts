@@ -8,6 +8,7 @@ import { prisma } from "../lib/prisma.js";
 import { todayInManila, toCalendarDate } from "../lib/today.js";
 import { notifyUsers } from "./notifications.js";
 import { slotName, withGroupLock, type Db } from "./common.js";
+import { formatDisplayDate } from "../lib/dates.js";
 
 const OPEN_STATUSES = ["AWAITING_TARGET", "AWAITING_ORGANIZER"] as const;
 type SlotWithUser = Slot & { user: { displayName: string } | null };
@@ -74,7 +75,7 @@ async function applySwap(db: Db, groupId: string, swap: Swap & { requester: Slot
       groupId,
       kind: "swap.approved",
       title: `Your turn moved to round ${round}`,
-      body: `${group.name}: you now get the pot on ${date}.`,
+      body: `${group.name}: you now get the pot on ${formatDisplayDate(date)}.`,
     });
   }
 }
@@ -131,7 +132,7 @@ export async function requestSwap(
         groupId,
         kind: "swap.requested",
         title: `${slotName(requester)} asks to swap turns${target.userId ? "" : ` with ${slotName(target)}`}`,
-        body: `Round ${theirs.roundNumber} (${theirs.payoutDate}) for round ${mine.roundNumber} (${mine.payoutDate}).`,
+        body: `Round ${theirs.roundNumber} (${formatDisplayDate(theirs.payoutDate)}) for round ${mine.roundNumber} (${formatDisplayDate(mine.payoutDate)}).`,
       });
     }
     return swap;
