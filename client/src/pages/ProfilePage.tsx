@@ -1,31 +1,11 @@
 import { type FormEvent, type ReactNode, useId, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { api, ApiError, patchSession, storeAuth } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { Avatar } from "../components/Avatar";
-import { StatCard } from "../components/StatCard";
 import { ToggleSwitch } from "../components/ToggleSwitch";
 import { demoToolsAvailable, useDemoToolsSetting } from "../lib/devTools";
 import { ui } from "../lib/ui";
 import { LIMITS, isValidEmail } from "../lib/validation";
-
-function formatPeso(amount: string | number): string {
-  return `₱${Number(amount).toLocaleString()}`;
-}
-
-function paluwaganBreakdown(stats: {
-  total: number;
-  active: number;
-  forming: number;
-  completed: number;
-}): string {
-  if (stats.total === 0) return "Join or create one to get started";
-  const parts: string[] = [];
-  if (stats.active > 0) parts.push(`${stats.active} active`);
-  if (stats.forming > 0) parts.push(`${stats.forming} forming`);
-  if (stats.completed > 0) parts.push(`${stats.completed} done`);
-  return parts.join(" · ");
-}
 
 function FormAlerts({ success, error }: { success?: string; error?: string }) {
   if (!success && !error) return null;
@@ -115,11 +95,6 @@ export function ProfilePage() {
   const [passwordMessage, setPasswordMessage] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [passwordSubmitting, setPasswordSubmitting] = useState(false);
-
-  const { data: activityData, isLoading: activityLoading } = useQuery({
-    queryKey: ["profile-activity"],
-    queryFn: () => api.getProfileActivity(),
-  });
 
 
   function resetEmailForm() {
@@ -433,54 +408,6 @@ export function ProfilePage() {
         </div>
       </section>
 
-      <section>
-        <div className="mb-4">
-          <h2 className={ui.sectionHeading}>Your activity</h2>
-          <p className={`mt-1 text-sm ${ui.muted}`}>
-            Self-scoped — never an aggregated profile others can see
-          </p>
-        </div>
-
-        {activityLoading ? (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-hidden>
-            {[0, 1, 2, 3].map((i) => (
-              <div key={i} className={`${ui.skeleton} h-32`} />
-            ))}
-          </div>
-        ) : activityData ? (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <StatCard
-              label="Paluwagans"
-              value={String(activityData.activity.paluwagans.total)}
-              hint={paluwaganBreakdown(activityData.activity.paluwagans)}
-              icon="users"
-            />
-            <StatCard
-              label="Total contributed"
-              value={formatPeso(activityData.activity.totalContributed)}
-              hint="across all groups"
-              icon="wallet"
-            />
-            <StatCard
-              label="Total received"
-              value={formatPeso(activityData.activity.totalReceived)}
-              hint="payouts collected"
-              tone="success"
-              icon="check"
-            />
-            <StatCard
-              label="Outstanding"
-              value={formatPeso(activityData.activity.outstanding)}
-              hint={
-                Number(activityData.activity.outstanding) > 0 ? "you carry" : "all settled"
-              }
-              tone={Number(activityData.activity.outstanding) > 0 ? "danger" : "neutral"}
-              icon="alert"
-            />
-          </div>
-        ) : null}
-      </section>
-
       {demoToolsAvailable && (
         <section>
           <div className="mb-4">
@@ -495,8 +422,8 @@ export function ProfilePage() {
               label="Show demo tools"
             />
             <p className="text-xs text-ink-500">
-              Adds an &ldquo;Advance round&rdquo; card to active groups you organize, to close rounds without waiting
-              for the due date. Saved in this browser only.
+              Adds a &ldquo;Start now&rdquo; button to launched paluwagans you organize, so they start without waiting
+              for the start date. Saved in this browser only.
             </p>
           </div>
         </section>

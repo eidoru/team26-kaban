@@ -19,7 +19,9 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "erasableSyntaxOnly": true,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+
+    "paths": { "@domain/*": ["../server/src/domain/*"] }
   },
   "include": ["src"]
 }

@@ -1,3 +1,7 @@
+import type { AmountMode } from "@domain/amounts";
+import type { Frequency } from "@domain/schedule";
+import type { SetupErrors, SetupInput } from "@domain/setup";
+
 function resolveApiBase(): string {
   const configured = import.meta.env.VITE_API_URL as string | undefined;
   if (!configured) return "/api/v1";
@@ -27,438 +31,127 @@ export interface RealtimeTokenResponse {
   supabaseUrl: string;
 }
 
-export interface UserActivityStats {
-  paluwagans: {
-    total: number;
-    active: number;
-    forming: number;
-    completed: number;
-  };
-  totalContributed: string;
-  totalReceived: string;
-  outstanding: string;
-}
-
 export interface AuthResponse {
   user: User;
   accessToken: string;
   refreshToken: string;
 }
 
-export interface GroupSettingsInput {
-  name: string;
-  contributionAmount: number;
-  frequency: "weekly" | "biweekly" | "monthly" | "custom";
-  frequencyDays?: number;
-  slotCount: number;
-  startDate: string;
-  shortfallInterestRatePercent?: number;
-}
+export type GroupState = "LOBBY" | "LAUNCHED" | "ACTIVE" | "COMPLETED" | "COMPLETED_WITH_OUTSTANDING_DEBT" | "CANCELLED";
+export type { AmountMode, Frequency, SetupErrors, SetupInput };
 
+/** A paluwagan's settings. Money is integer centavos; dates are YYYY-MM-DD Manila calendar days. */
 export interface GroupSummary {
   id: string;
   name: string;
-  status: "forming" | "active" | "completed";
-  contributionAmount: string;
-  frequency: string;
-  frequencyDays?: number | null;
+  state: GroupState;
   slotCount: number;
-  startDate: string | null;
-  shortfallInterestRatePercent: string;
-  filledCount?: number;
-  openSlots?: number;
-  role: "manager" | "member";
-  membershipId: string;
-  totalCollected?: string;
-  outstandingDebt?: string;
-  /** Active groups only. */
-  currentRoundNumber?: number | null;
-  /** Active groups only: the round whose pot goes to the viewer. */
-  myPayoutRoundNumber?: number | null;
-  /** Active groups only: the current round's due date (YYYY-MM-DD). */
-  currentRoundDueDate?: string | null;
-  /** Active groups only: the viewer's standing in the current round. */
-  myRoundStatus?: "due" | "reported" | "paid" | null;
-  /** Active groups only: what the viewer still owes this round, when due. */
-  myRoundDue?: string | null;
-}
-
-export interface GroupMember {
-  id: string;
-  displayName: string;
-  contact: string | null;
-  isManager: boolean;
-  isPlaceholder: boolean;
-  userId: string | null;
-  turnNumber: number | null;
-}
-
-export interface MemberReliability {
-  membershipId: string;
-  displayName: string;
-  isPlaceholder: boolean;
-  totalRounds: number;
-  confirmedFull: number;
-  partial: number;
-  missed: number;
-  openDisputes: number;
-  reliabilitySummary: string;
-}
-
-export interface DisputeEntry {
-  id: string;
-  /** What the dispute is about: a round payment, or a settlement claim the organizer rejected. */
-  subject: "payment" | "settlement_claim";
-  contributionId: string | null;
-  settlementClaimId: string | null;
-  raisedById: string;
-  status: "open" | "resolved";
-  note: string | null;
-  proofUrl: string | null;
-  resolution: string | null;
-  resolvedAt: string | null;
+  amountMode: AmountMode;
+  contribution: number;
+  pot: number;
+  enteredPot: number | null;
+  /** Pot mode: the pot was rounded up from this (R-AMT-02). */
+  potAdjustedFrom: number | null;
+  frequency: Frequency;
+  intervalDays: number | null;
+  frequencyLabel: string;
+  startDate: string;
+  /** Hundredths of a percent: 125 is 1.25%. */
+  interestRate: number;
+  orderLocked: boolean;
   createdAt: string;
-  raisedByName: string;
-  memberDisplayName: string;
-  /** Whose payment the dispute is about. */
-  memberMembershipId: string;
-  /** Null for settlement-claim disputes. */
-  roundNumber: number | null;
-  contributionStatus: string | null;
-  /** The disputed amount: the round payment or the rejected claim. */
-  contributionAmount: string;
-  /** Settlement-claim disputes: the organizer's reason for rejecting the claim. */
-  claimReviewNote: string | null;
-}
-
-export interface GroupDashboard {
-  groupStatus: string;
-  memberCount: number;
-  currentRound: {
-    number: number;
-    dueDate: string;
-    recipientName: string;
-    confirmedContributions: number;
-    pendingContributions: number;
-    overdueContributions: number;
-    isOverdue: boolean;
-  } | null;
-  pendingConfirmations: number;
-  openDisputes: number;
-  outstandingObligations: number;
-  totalOutstanding: string;
-  contributionAmount: string;
-}
-
-export type MemberRoundStatus = "paid" | "partial" | "awaiting" | "unpaid" | "missed" | "upcoming";
-
-/** The viewer's own standing in a started group (GET /groups/:id/me). */
-export interface MemberSummary {
-  contributionAmount: string;
-  /** Null once the cycle is complete. `remaining` is what the viewer still owes for it. */
-  currentRound: { number: number; dueDate: string; remaining: string } | null;
-  payout: {
-    roundNumber: number;
-    dueDate: string;
-    potAmount: string;
-    status: "upcoming" | "current" | "received";
-    roundsAway: number | null;
-    receivedAt: string | null;
-  } | null;
-  payments: {
-    paid: string;
-    expectedSoFar: string;
-    expectedTotal: string;
-    roundsPaidInFull: number;
-    roundsStarted: number;
-    totalRounds: number;
-    /** Contributions left this cycle (current round's balance plus upcoming rounds). */
-    stillToPay: string;
-    roundsLeftToPay: number;
-    paymentsMade: number;
-    paymentsOnTime: number;
-  };
-  /** Shortfall interest paid (members) or collected (organizers). */
-  interestSettled: string;
-  /** The group's shortfall interest rate; "0" when the group charges none. */
-  interestRatePercent: string;
-  /** Open disputes about the viewer's payments. */
-  openDisputes: number;
-  debt: { remaining: string; interest: string; obligationCount: number };
-  /** Organizers only: what members still owe them, interest included. */
-  receivable: { remaining: string; obligationCount: number } | null;
-  rounds: {
-    number: number;
-    dueDate: string;
-    status: MemberRoundStatus;
-    amount: string;
-    isPayout: boolean;
-  }[];
-}
-
-export interface CompletionSummary {
-  groupName: string;
+  launchedAt: string | null;
+  activatedAt: string | null;
   completedAt: string | null;
-  startDate: string | null;
-  contributionAmount: string;
-  frequency: string;
-  frequencyDays?: number | null;
-  shortfallInterestRatePercent: string;
-  memberCount: number;
-  roundsCompleted: number;
-  totalContributions: number;
-  confirmedContributions: number;
-  collectionRate: number;
-  potPerRound: string;
-  totalExpected: string;
-  totalCollected: string;
-  cycleDurationDays: number | null;
-  openDisputes: number;
-  resolvedDisputes: number;
-  unsettledObligations: number;
-  outstandingDebt: string;
-  payoutRecipients: {
-    roundNumber: number;
-    recipientName: string;
-    dueDate: string;
-    potAmount: string;
-  }[];
-  memberReliability: MemberReliability[];
+  cancelledAt: string | null;
+}
+
+export interface MyGroup extends GroupSummary {
+  organizerName: string;
+  occupied: number;
+  isOrganizer: boolean;
+  myPosition: number | null;
+}
+
+export interface SlotView {
+  id: string;
+  kind: "MEMBER" | "PLACEHOLDER";
+  name: string;
+  isOrganizer: boolean;
+  isViewer: boolean;
+  position: number | null;
+  /** When a user claimed this placeholder; earlier records are inherited. */
+  claimedAt: string | null;
+  /** Placeholder contact, organizer only. */
+  contact: string | null;
+  /** Live claim link, organizer only. */
+  claimLink: { url: string; createdAt: string } | null;
+}
+
+export interface ScheduleRound {
+  number: number;
+  periodStart: string;
+  payoutDate: string;
+  recipientSlotId: string | null;
+  status: "UPCOMING" | "OPEN" | "CLOSED";
+}
+
+export interface GroupDetail {
+  group: GroupSummary & { organizerName: string };
+  viewer: { slotId: string; isOrganizer: boolean };
+  slots: SlotView[];
+  openSlots: number;
+  inviteLink: { url: string; createdAt: string } | null;
+  schedule: ScheduleRound[];
+  /** LOBBY only. */
+  launch: { blockers: string[]; earliestStartDate: string } | null;
+}
+
+export type PublicGroup = GroupSummary & { organizerName: string; occupied: number };
+
+export interface InviteLanding {
+  status: "OPEN" | "FULL" | "CLOSED" | "ALREADY_MEMBER";
+  group: PublicGroup;
+}
+
+export interface ClaimLanding {
+  status: "OPEN" | "CLAIMED" | "CLOSED" | "ALREADY_MEMBER";
+  group: PublicGroup;
+  placeholder: { slotId: string; name: string | null; position: number | null };
 }
 
 export interface NotificationItem {
   id: string;
   groupId: string | null;
   groupName: string | null;
-  type: string;
+  kind: string;
   title: string;
   body: string;
   link: string | null;
+  data: unknown;
   readAt: string | null;
   createdAt: string;
   isUnread: boolean;
 }
 
-export interface HomeAttentionItem {
-  id: string;
-  kind:
-    | "forming_ready"
-    | "forming_slots"
-    | "confirm_payments"
-    | "payment_due"
-    | "owed_outstanding"
-    | "you_owe"
-    | "claims_to_review"
-    | "disputes_open";
-  title: string;
-  body: string;
-  link: string;
-  priority: "high" | "normal";
-}
-
-export interface HomeOverview {
-  stats: {
-    activeGroups: number;
-    formingGroups: number;
-    completedGroups: number;
-    unreadNotifications: number;
-    totalOwed: string | null;
-    pendingConfirmations: number;
-    paymentsDue: number;
-  };
-  attention: HomeAttentionItem[];
-}
-
-/** What the viewer owes in one group (GET /groups/me/debts). */
-export interface GroupDebt {
-  groupId: string;
-  groupName: string;
-  groupStatus: string;
-  remaining: string;
-  interest: string;
-  obligationCount: number;
-  hasPendingClaim: boolean;
-}
-
-export interface ManagerObligationsOverview {
-  totalOutstanding: string;
-  groups: {
-    groupId: string;
-    groupName: string;
-    groupStatus: string;
-    count: number;
-    totalOutstanding: string;
-    items: {
-      id: string;
-      debtorMembershipId: string;
-      displayName: string;
-      isPlaceholder: boolean;
-      roundNumber: number;
-      remaining: string;
-    }[];
-  }[];
-}
-
-export interface RoundContribution {
-  id: string;
-  membershipId: string;
-  displayName?: string;
-  amount: string;
-  status: "pending" | "reported" | "confirmed";
-  source?: "member" | "organizer";
-  note?: string | null;
-  reportedAt?: string | null;
-  confirmedAt?: string | null;
-  isPlaceholder?: boolean;
-  canReport?: boolean;
-  canConfirm?: boolean;
-  canRecord?: boolean;
-  canDispute?: boolean;
-  expectedAmount?: string;
-  isPartial?: boolean;
-}
-
-export interface ObligationSettlement {
-  id: string;
-  amount: string;
-  note: string | null;
-  createdAt: string;
-}
-
-export interface ObligationEntry {
-  id: string;
-  debtorMembershipId: string;
-  sourceRoundId: string;
-  amount: string;
-  settledAmount: string;
-  interestSettledAmount: string;
-  principalRemaining: string;
-  accruedInterest: string;
-  remaining: string;
-  status: "unsettled" | "partially_settled" | "settled";
-  externalCoverageNote: string | null;
-  createdAt: string;
-  displayName: string;
-  isPlaceholder: boolean;
-  roundNumber: number;
-  roundDueDate: string;
-  hasPendingClaim: boolean;
-  settlements: ObligationSettlement[];
-}
-
-export interface SettlementClaimEntry {
-  id: string;
-  debtorMembershipId: string;
-  amount: string;
-  note: string | null;
-  proofUrl: string | null;
-  status: "pending" | "confirmed" | "rejected";
-  reviewNote: string | null;
-  reviewedAt: string | null;
-  createdAt: string;
-  memberDisplayName: string;
-  isPlaceholder: boolean;
-}
-
-export interface LedgerEntry extends RoundContribution {
-  displayName: string;
-  isPlaceholder: boolean;
-  roundNumber: number;
-  roundStatus: string;
-  roundDueDate: string;
-}
-
-export interface AuditLogEntry {
-  id: string;
-  action: string;
-  entityType: string;
-  entityId: string;
-  actorName: string;
-  createdAt: string;
-  title: string;
-  summary: string;
-  details: string[];
-  category: string;
-  categoryLabel: string;
-}
-
-export interface RoundSummary {
-  id: string;
-  number: number;
-  dueDate: string;
-  status: "scheduled" | "current" | "closed";
-  closedAt: string | null;
-  recipientMembershipId: string;
-  recipientName?: string;
-  contributions?: RoundContribution[];
-}
-
-export interface GroupDetail {
-  /** Organizers only: each unclaimed seat's active claim link, keyed by membership id. */
-  claimLinks?: Record<string, string>;
-  group: GroupSummary;
-  members: GroupMember[];
-  pending: {
-    payoutOrder: boolean;
-    startDateMissing: boolean;
-    openSlots: number;
-    unclaimedSeats: number;
-    cycleStarted: boolean;
-    canActivate: boolean;
-  };
-  currentRound: RoundSummary | null;
-  schedule: RoundSummary[];
-  issueCounts?: {
-    openDisputes: number;
-    unsettledObligations: number;
-    /** Items the viewer can act on: claims and disputes (organizer), own debts and disputes (member). */
-    actionable?: number;
-  };
-  reliability?: MemberReliability[];
-}
-
-export interface InvitePreview {
-  invite: {
-    type: "group_invite" | "membership_claim";
-    token: string;
-    canJoin: boolean;
-    reason?: string;
-    /** The signed-in viewer already has a seat in this group. */
-    alreadyMember?: boolean;
-    expiresAt: string | null;
-  };
-  group: Omit<GroupSummary, "role" | "membershipId">;
-  manager: { displayName: string };
-  members: {
-    displayName: string;
-    isManager: boolean;
-    isPlaceholder: boolean;
-    turnNumber: number | null;
-  }[];
-  placeholder: {
-    displayName: string;
-    turnNumber: number | null;
-    contact: string | null;
-  } | null;
-}
-
-export interface InviteLink {
-  id: string;
-  type: "group_invite" | "membership_claim";
-  token: string;
-  expiresAt: string;
-  url: string;
-}
-
 class ApiError extends Error {
   status: number;
-  details?: unknown;
+  /** The server's machine-readable reason, e.g. "FULL" or "NOT_READY". */
+  code?: string;
+  /** Per-field messages for forms. */
+  fields?: Record<string, string>;
 
-  constructor(status: number, message: string, details?: unknown) {
+  constructor(status: number, message: string, code?: string, fields?: Record<string, string>) {
     super(message);
     this.status = status;
-    this.details = details;
+    this.code = code;
+    this.fields = fields;
   }
+}
+
+async function errorFrom(res: Response): Promise<ApiError> {
+  const body = (await res.json().catch(() => ({}))) as { error?: string; code?: string; fields?: Record<string, string> };
+  return new ApiError(res.status, body.error ?? `Request failed (${res.status})`, body.code, body.fields);
 }
 
 const AUTH_KEY = "kaban_auth";
@@ -611,19 +304,7 @@ async function publicPost<T>(path: string, body: unknown): Promise<T> {
     body: JSON.stringify(body),
   });
 
-  if (!res.ok) {
-    const text = await res.text();
-    let message = `Request failed (${res.status})`;
-    try {
-      const err = JSON.parse(text) as { error?: string; details?: unknown };
-      message = err.error ?? message;
-      throw new ApiError(res.status, message, err.details);
-    } catch (e) {
-      if (e instanceof ApiError) throw e;
-      throw new ApiError(res.status, message);
-    }
-  }
-
+  if (!res.ok) throw await errorFrom(res);
   return res.json() as Promise<T>;
 }
 
@@ -644,27 +325,13 @@ async function request<T>(path: string, options: RequestInit = {}, retry = true)
     if (newToken) {
       headers.set("Authorization", `Bearer ${newToken}`);
       const retryRes = await fetch(`${API_BASE}${path}`, { ...options, headers });
-      if (!retryRes.ok) {
-        const err = await retryRes.json().catch(() => ({}));
-        throw new ApiError(retryRes.status, err.error ?? "Request failed", err.details);
-      }
+      if (!retryRes.ok) throw await errorFrom(retryRes);
       if (retryRes.status === 204) return undefined as T;
       return retryRes.json() as Promise<T>;
     }
   }
 
-  if (!res.ok) {
-    const text = await res.text();
-    let message = `Request failed (${res.status})`;
-    try {
-      const err = JSON.parse(text) as { error?: string; details?: unknown };
-      message = err.error ?? message;
-      throw new ApiError(res.status, message, err.details);
-    } catch (e) {
-      if (e instanceof ApiError) throw e;
-      throw new ApiError(res.status, message);
-    }
-  }
+  if (!res.ok) throw await errorFrom(res);
 
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
@@ -677,10 +344,7 @@ async function publicRequest<T>(path: string, { withAuth = false }: { withAuth?:
   const res = await fetch(`${API_BASE}${path}`, {
     headers: tokens ? { Authorization: `Bearer ${tokens.accessToken}` } : undefined,
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new ApiError(res.status, err.error ?? "Request failed");
-  }
+  if (!res.ok) throw await errorFrom(res);
   return res.json() as Promise<T>;
 }
 
@@ -714,8 +378,6 @@ export const api = {
 
   getRealtimeToken: () => request<RealtimeTokenResponse>("/auth/realtime-token"),
 
-  getProfileActivity: () => request<{ activity: UserActivityStats }>("/auth/me/activity"),
-
   updateProfile: (body: { displayName?: string; contact?: string | null }) =>
     request<{ user: User }>("/auth/me", { method: "PATCH", body: JSON.stringify(body) }),
 
@@ -731,204 +393,49 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
-  groups: () => request<{ groups: GroupSummary[] }>("/groups"),
-
-  getHomeOverview: () => request<HomeOverview>("/home/overview"),
-
-  createGroup: (body: GroupSettingsInput) =>
-    request<{ group: GroupSummary; membershipId: string }>("/groups", {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
-
-  /** Pass TanStack Query's `signal` so `cancelQueries()` actually aborts an in-flight fetch
-   * instead of letting a stale response land on top of a fresher optimistic update. */
-  getGroup: (id: string, signal?: AbortSignal) => request<GroupDetail>(`/groups/${id}`, { signal }),
-
-
-  addPlaceholder: (groupId: string, body: { displayName: string; contact?: string }) =>
-    request<{ member: GroupMember }>(`/groups/${groupId}/members`, {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
-
-  updateMember: (groupId: string, memberId: string, body: { displayName?: string; contact?: string | null }) =>
-    request<{ member: GroupMember }>(`/groups/${groupId}/members/${memberId}`, {
-      method: "PATCH",
-      body: JSON.stringify(body),
-    }),
-
-  removeMember: (groupId: string, memberId: string) =>
-    request<void>(`/groups/${groupId}/members/${memberId}`, { method: "DELETE" }),
-
-  revokeClaimLink: (groupId: string, membershipId: string) =>
-    request<void>(`/groups/${groupId}/members/${membershipId}/claim-link`, { method: "DELETE" }),
-
-  createInvite: (
-    groupId: string,
-    body: { type: "group_invite" | "membership_claim"; membershipId?: string },
-  ) =>
-    request<{ invite: InviteLink }>(`/groups/${groupId}/invites`, {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
-
-  leaveGroup: (groupId: string) =>
-    request<void>(`/groups/${groupId}/leave`, { method: "POST", body: JSON.stringify({}) }),
-
-  deleteGroup: (groupId: string) =>
-    request<void>(`/groups/${groupId}`, { method: "DELETE" }),
-
-  setPayoutOrder: (
-    groupId: string,
-    body:
-      | { method: "random" }
-      | { method: "manual"; order: { membershipId: string; turnNumber: number }[] },
-  ) =>
-    request<{ members: GroupMember[] }>(`/groups/${groupId}/payout-order`, {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
-
-  setStartDate: (groupId: string, startDate: string) =>
-    request<{ group: GroupSummary }>(`/groups/${groupId}/start-date`, {
-      method: "PATCH",
-      body: JSON.stringify({ startDate }),
-    }),
-
-  activateGroup: (groupId: string, body?: { startDate?: string }) =>
-    request<GroupDetail>(`/groups/${groupId}/activate`, {
-      method: "POST",
-      body: JSON.stringify(body ?? {}),
-    }),
-
-  /** Dev/demo only — closes the current round immediately (unavailable on Vercel production). */
-  advanceRound: (groupId: string) =>
-    request<{
-      ok: true;
-      closedRound: number;
-      openedRound: number | null;
-      completed: boolean;
-      group: GroupDetail;
-    }>(`/groups/${groupId}/advance-round`, { method: "POST", body: JSON.stringify({}) }),
-
-  getCurrentRound: (groupId: string) =>
-    request<{ currentRound: RoundSummary | null }>(`/groups/${groupId}/rounds/current`),
-
-  getSchedule: (groupId: string) =>
-    request<{ schedule: RoundSummary[] }>(`/groups/${groupId}/rounds`),
-
-  reportContribution: (groupId: string, contributionId: string, body?: { note?: string; amount?: number }) =>
-    request<{ contribution: RoundContribution }>(`/groups/${groupId}/contributions/${contributionId}/report`, {
-      method: "POST",
-      body: JSON.stringify(body ?? {}),
-    }),
-
-  confirmContribution: (groupId: string, contributionId: string) =>
-    request<{ contribution: RoundContribution }>(
-      `/groups/${groupId}/contributions/${contributionId}/confirm`,
-      { method: "POST", body: JSON.stringify({}) },
-    ),
-
-  recordContribution: (groupId: string, contributionId: string, body?: { note?: string; amount?: number }) =>
-    request<{ contribution: RoundContribution }>(`/groups/${groupId}/contributions/${contributionId}/record`, {
-      method: "POST",
-      body: JSON.stringify(body ?? {}),
-    }),
-
-  getObligations: (groupId: string) =>
-    request<{ obligations: ObligationEntry[] }>(`/groups/${groupId}/obligations`),
-
-  settleMemberDebts: (groupId: string, memberId: string, body: { amount: number; note?: string }) =>
-    request<{ applied: string; unapplied: string; slices: unknown[] }>(
-      `/groups/${groupId}/members/${memberId}/settle`,
-      { method: "POST", body: JSON.stringify(body) },
-    ),
-
-  coverObligationExternally: (groupId: string, obligationId: string, body: { note: string }) =>
-    request<{ obligationId: string; externalCoverageNote: string }>(
-      `/groups/${groupId}/obligations/${obligationId}/cover-externally`,
-      { method: "POST", body: JSON.stringify(body) },
-    ),
-
-  getSettlementClaims: (groupId: string) =>
-    request<{ claims: SettlementClaimEntry[] }>(`/groups/${groupId}/settlement-claims`),
-
-  submitSettlementClaim: (groupId: string, body: { amount: number; note?: string; proofUrl?: string }) =>
-    request<{ claim: SettlementClaimEntry }>(`/groups/${groupId}/settlement-claims`, {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
-
-  reviewSettlementClaim: (
-    groupId: string,
-    claimId: string,
-    body: { decision: "confirm" | "reject"; reviewNote?: string },
-  ) =>
-    request<{ claim: SettlementClaimEntry; settlement: { applied: string; unapplied: string } | null }>(
-      `/groups/${groupId}/settlement-claims/${claimId}/review`,
-      { method: "PATCH", body: JSON.stringify(body) },
-    ),
-
-  getLedger: (groupId: string) => request<{ entries: LedgerEntry[] }>(`/groups/${groupId}/ledger`),
-
-  getAuditLog: (groupId: string, before?: string) =>
-    request<{ entries: AuditLogEntry[]; hasMore: boolean }>(
-      `/groups/${groupId}/audit-log${before ? `?before=${encodeURIComponent(before)}` : ""}`,
-    ),
-
-  getDashboard: (groupId: string) =>
-    request<{ dashboard: GroupDashboard }>(`/groups/${groupId}/dashboard`),
-
-  getCompletionSummary: (groupId: string) =>
-    request<{ summary: CompletionSummary }>(`/groups/${groupId}/completion-summary`),
-
-  getMemberSummary: (groupId: string) => request<{ summary: MemberSummary }>(`/groups/${groupId}/me`),
-
-  getDisputes: (groupId: string) => request<{ disputes: DisputeEntry[] }>(`/groups/${groupId}/disputes`),
-
-  raiseSettlementClaimDispute: (groupId: string, claimId: string, body: { note: string }) =>
-    request<{ dispute: { id: string; status: string } }>(`/groups/${groupId}/settlement-claims/${claimId}/disputes`, {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
-
-  raiseDispute: (groupId: string, contributionId: string, body: { note: string; proofUrl?: string }) =>
-    request<{ dispute: { id: string; status: string } }>(
-      `/groups/${groupId}/contributions/${contributionId}/disputes`,
-      { method: "POST", body: JSON.stringify(body) },
-    ),
-
-  resolveDispute: (groupId: string, disputeId: string, resolution: string) =>
-    request<{ dispute: { id: string; status: string } }>(
-      `/groups/${groupId}/disputes/${disputeId}/resolve`,
-      { method: "PATCH", body: JSON.stringify({ resolution }) },
-    ),
-
-  getMyDebts: () => request<{ debts: GroupDebt[] }>("/groups/me/debts"),
-
-  getManagerObligations: () =>
-    request<ManagerObligationsOverview>("/groups/manager/obligations"),
-
   getNotifications: () =>
     request<{ notifications: NotificationItem[]; unreadCount: number }>("/notifications"),
 
   markNotificationRead: (notificationId: string) =>
-    request<{ notification: { id: string; readAt: string | null } }>(
-      `/notifications/${notificationId}`,
-      { method: "PATCH", body: JSON.stringify({}) },
-    ),
+    request<{ notification: { id: string; readAt: string | null } }>(`/notifications/${notificationId}`, {
+      method: "PATCH",
+      body: JSON.stringify({}),
+    }),
 
   markAllNotificationsRead: () =>
     request<{ marked: number }>("/notifications/read-all", { method: "PATCH", body: JSON.stringify({}) }),
 
-  previewInvite: (token: string) => publicRequest<InvitePreview>(`/invites/${token}`, { withAuth: true }),
+  // --- Groups. Every change returns the fresh GroupDetail.
+  myGroups: () => request<{ groups: MyGroup[] }>("/groups"),
+  createGroup: (body: SetupInput) => send<GroupDetail>("POST", "/groups", body),
+  getGroup: (id: string, signal?: AbortSignal) => request<GroupDetail>(`/groups/${id}`, { signal }),
+  editGroup: (id: string, body: SetupInput) => send<GroupDetail>("PATCH", `/groups/${id}`, body),
+  cancelGroup: (id: string) => send<GroupDetail>("POST", `/groups/${id}/cancel`),
+  createInviteLink: (id: string) => send<GroupDetail>("POST", `/groups/${id}/invite-link`),
+  addPlaceholder: (id: string, body: { name: string; contact?: string }) =>
+    send<GroupDetail>("POST", `/groups/${id}/placeholders`, body),
+  removeSlot: (id: string, slotId: string) => send<GroupDetail>("DELETE", `/groups/${id}/slots/${slotId}`),
+  createClaimLink: (id: string, slotId: string) => send<GroupDetail>("POST", `/groups/${id}/slots/${slotId}/claim-link`),
+  revokeClaimLink: (id: string, slotId: string) =>
+    send<GroupDetail>("DELETE", `/groups/${id}/slots/${slotId}/claim-link`),
+  setOrder: (id: string, slotIds: string[]) => send<GroupDetail>("PUT", `/groups/${id}/order`, { slotIds }),
+  shuffleOrder: (id: string) => send<GroupDetail>("POST", `/groups/${id}/order/shuffle`),
+  lockOrder: (id: string) => send<GroupDetail>("POST", `/groups/${id}/order/lock`),
+  launch: (id: string) => send<GroupDetail>("POST", `/groups/${id}/launch`),
+  leaveGroup: (id: string) => send<{ ok: true }>("POST", `/groups/${id}/leave`),
+  /** Demo tools only. */
+  activateNow: (id: string) => send<{ ok: true; activated: number }>("POST", `/dev/groups/${id}/activate-now`),
 
-  resolveInvite: (token: string) =>
-    request<{ groupId: string; membershipId: string; alreadyMember?: boolean }>(
-      `/invites/${token}/resolve`,
-      { method: "POST", body: JSON.stringify({}) },
-    ),
+  // --- Link landing pages: public, personalized when signed in.
+  getInvite: (token: string) => publicRequest<InviteLanding>(`/invites/${token}`, { withAuth: true }),
+  joinViaInvite: (token: string) =>
+    send<{ groupId: string; alreadyMember: boolean }>("POST", `/invites/${token}/join`),
+  getClaim: (token: string) => publicRequest<ClaimLanding>(`/claims/${token}`, { withAuth: true }),
+  claimPlaceholder: (token: string) => send<{ groupId: string }>("POST", `/claims/${token}/claim`),
 };
+
+function send<T>(method: string, path: string, body?: unknown): Promise<T> {
+  return request<T>(path, { method, body: JSON.stringify(body ?? {}) });
+}
 
 export { ApiError };

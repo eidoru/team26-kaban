@@ -5,7 +5,7 @@ import { useAuth } from "../context/AuthContext";
 import { prefetchHomeData } from "../lib/homeQueries";
 import { ui } from "../lib/ui";
 import { AuthShell } from "../components/AuthShell";
-import { resolvePendingInvite } from "../lib/pendingInvite";
+import { pendingDestination } from "../lib/pendingInvite";
 
 export function LoginPage() {
   const { login } = useAuth();
@@ -23,8 +23,7 @@ export function LoginPage() {
     try {
       await login(email, password, remember);
       prefetchHomeData();
-      const handled = await resolvePendingInvite(navigate);
-      if (!handled) navigate("/home");
+      navigate(pendingDestination() ?? "/home");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Login failed");
     } finally {

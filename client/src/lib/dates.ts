@@ -57,3 +57,8 @@ export function formatDayHeading(date: Date): string {
   if (diffDays === 1) return "Yesterday";
   return formatDay(date);
 }
+
+/** Today in the Philippines as YYYY-MM-DD: the day the server's date rules use. */
+export function todayInManila(now: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(now);
+}

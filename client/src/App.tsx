@@ -10,24 +10,21 @@ const HomePage = lazy(() => import("./pages/HomePage").then((m) => ({ default: m
 const LoginPage = lazy(() => import("./pages/LoginPage").then((m) => ({ default: m.LoginPage })));
 const RegisterPage = lazy(() => import("./pages/RegisterPage").then((m) => ({ default: m.RegisterPage })));
 const ProfilePage = lazy(() => import("./pages/ProfilePage").then((m) => ({ default: m.ProfilePage })));
-const CreateGroupPage = lazy(() =>
-  import("./pages/CreateGroupPage").then((m) => ({ default: m.CreateGroupPage })),
-);
-const GroupLobbyPage = lazy(() =>
-  import("./pages/GroupLobbyPage").then((m) => ({ default: m.GroupLobbyPage })),
-);
 const NotificationsPage = lazy(() =>
   import("./pages/NotificationsPage").then((m) => ({ default: m.NotificationsPage })),
 );
-const MoneyPage = lazy(() =>
-  import("./pages/MoneyPage").then((m) => ({ default: m.MoneyPage })),
+const CreateGroupPage = lazy(() =>
+  import("./pages/create/CreateGroupPage").then((m) => ({ default: m.CreateGroupPage })),
 );
-const InviteLandingPage = lazy(() =>
-  import("./pages/InvitePages").then((m) => ({ default: m.InviteLandingPage })),
+const GroupPage = lazy(() => import("./pages/group/GroupPage").then((m) => ({ default: m.GroupPage })));
+const EditGroupPage = lazy(() =>
+  import("./pages/group/EditGroupPage").then((m) => ({ default: m.EditGroupPage })),
 );
-const ClaimLandingPage = lazy(() =>
-  import("./pages/InvitePages").then((m) => ({ default: m.ClaimLandingPage })),
+const LaunchReviewPage = lazy(() =>
+  import("./pages/group/LaunchReviewPage").then((m) => ({ default: m.LaunchReviewPage })),
 );
+const InvitePage = lazy(() => import("./pages/join/InvitePage").then((m) => ({ default: m.InvitePage })));
+const ClaimPage = lazy(() => import("./pages/join/ClaimPage").then((m) => ({ default: m.ClaimPage })));
 
 export function App() {
   return (
@@ -39,19 +36,18 @@ export function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
           </Route>
-          <Route path="/invite/:token" element={<InviteLandingPage />} />
-          <Route path="/claim/:token" element={<ClaimLandingPage />} />
+          <Route path="/invite/:token" element={<InvitePage />} />
+          <Route path="/claim/:token" element={<ClaimPage />} />
 
           <Route element={<ProtectedRoute />}>
             <Route element={<AppLayout />}>
               <Route path="/home" element={<HomePage />} />
               <Route path="/profile" element={<ProfilePage />} />
-              <Route path="/groups/new" element={<CreateGroupPage />} />
-              <Route path="/groups/:id" element={<GroupLobbyPage />} />
               <Route path="/notifications" element={<NotificationsPage />} />
-              <Route path="/money" element={<MoneyPage />} />
-              {/* Old "Owed to you" address, kept for bookmarks and older notifications. */}
-              <Route path="/manager/obligations" element={<Navigate to="/money" replace />} />
+              <Route path="/groups/new" element={<CreateGroupPage />} />
+              <Route path="/groups/:id" element={<GroupPage />} />
+              <Route path="/groups/:id/edit" element={<EditGroupPage />} />
+              <Route path="/groups/:id/launch" element={<LaunchReviewPage />} />
             </Route>
           </Route>
 

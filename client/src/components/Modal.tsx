@@ -1,5 +1,6 @@
-import { type ReactNode, useEffect, useId, useRef } from "react";
+import { type ReactNode, useId, useRef } from "react";
 import { ui } from "../lib/ui";
+import { useDialogBehavior } from "../lib/useDialogBehavior";
 
 export function Modal({
   open,
@@ -20,33 +21,7 @@ export function Modal({
   const descriptionId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prevOverflow;
-    };
-  }, [open]);
-
-  useEffect(() => {
-    if (!open || !cancelable || !onClose) return;
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose!();
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open, cancelable, onClose]);
-
-  useEffect(() => {
-    if (!open) return;
-    const panel = panelRef.current;
-    if (!panel) return;
-    const focusable = panel.querySelector<HTMLElement>(
-      'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled])',
-    );
-    focusable?.focus();
-  }, [open]);
+  useDialogBehavior(open, panelRef, onClose, cancelable);
 
   if (!open) return null;
 

@@ -5,7 +5,7 @@ import { useAuth } from "../context/AuthContext";
 import { prefetchHomeData } from "../lib/homeQueries";
 import { ui } from "../lib/ui";
 import { AuthShell } from "../components/AuthShell";
-import { resolvePendingInvite } from "../lib/pendingInvite";
+import { pendingDestination } from "../lib/pendingInvite";
 import { LIMITS, isValidEmail } from "../lib/validation";
 import { FieldError } from "../components/FieldError";
 
@@ -53,8 +53,7 @@ export function RegisterPage() {
         contact: contact.trim() || undefined,
       });
       prefetchHomeData();
-      const handled = await resolvePendingInvite(navigate);
-      if (!handled) navigate("/home");
+      navigate(pendingDestination() ?? "/home");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Registration failed");
     } finally {

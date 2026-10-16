@@ -125,13 +125,13 @@ function NotificationRow({
   const time = new Date(n.createdAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
   const content = (
     <>
-      <NotificationIcon type={n.type} size="responsive" />
+      <NotificationIcon kind={n.kind} size="responsive" />
       <span className="min-w-0 flex-1">
         <span className={`block text-ink-900 ${n.isUnread ? "font-bold" : "font-semibold"}`}>
           {n.isUnread && <span className="sr-only">Unread: </span>}
           {n.title}
         </span>
-        <span className="mt-0.5 line-clamp-2 block text-sm text-ink-600">{n.body}</span>
+        <span className="mt-0.5 line-clamp-3 block whitespace-pre-line text-sm text-ink-600">{n.body}</span>
         <span className="mt-1 block text-xs text-ink-500">
           {time}
           {n.groupName && <> · {n.groupName}</>}

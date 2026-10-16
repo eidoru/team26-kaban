@@ -1,5 +1,6 @@
 import { Navigate, Outlet } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { pendingDestination } from "../lib/pendingInvite";
 import { Splash } from "./Splash";
 
 export function GuestRoute() {
@@ -8,7 +9,8 @@ export function GuestRoute() {
   if (loading) return <Splash />;
 
   if (user) {
-    return <Navigate to="/home" replace />;
+    // Someone who just signed in from an invite or claim link goes back to it, not home.
+    return <Navigate to={pendingDestination() ?? "/home"} replace />;
   }
 
   return <Outlet />;

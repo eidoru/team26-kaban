@@ -9,7 +9,6 @@ import {
 import { AlertDialog } from "../components/AlertDialog";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { PromptDialog } from "../components/PromptDialog";
-import { SettleDebtDialog } from "../components/SettleDebtDialog";
 
 export interface ConfirmOptions {
   title: string;
@@ -41,29 +40,16 @@ export interface AlertOptions {
   okLabel?: string;
 }
 
-export interface SettleDebtOptions {
-  title: string;
-  description?: string;
-  submitLabel?: string;
-  cancelLabel?: string;
-}
-
 interface DialogContextValue {
   confirm: (opts: ConfirmOptions) => Promise<boolean>;
   prompt: (opts: PromptOptions) => Promise<string | null>;
   alert: (opts: AlertOptions) => Promise<void>;
-  settleDebt: (opts: SettleDebtOptions) => Promise<{ amount: number; note?: string } | null>;
 }
 
 type ActiveDialog =
   | { type: "confirm"; opts: ConfirmOptions; resolve: (value: boolean) => void }
   | { type: "prompt"; opts: PromptOptions; resolve: (value: string | null) => void }
-  | { type: "alert"; opts: AlertOptions; resolve: () => void }
-  | {
-      type: "settle-debt";
-      opts: SettleDebtOptions;
-      resolve: (value: { amount: number; note?: string } | null) => void;
-    };
+  | { type: "alert"; opts: AlertOptions; resolve: () => void };
 
 const DialogContext = createContext<DialogContextValue | null>(null);
 
@@ -116,23 +102,9 @@ export function DialogProvider({ children }: { children: ReactNode }) {
     });
   }, [close]);
 
-  const settleDebt = useCallback((opts: SettleDebtOptions) => {
-    return new Promise<{ amount: number; note?: string } | null>((resolve) => {
-      const entry: ActiveDialog = {
-        type: "settle-debt",
-        opts,
-        resolve: (value) => {
-          resolve(value);
-          close();
-        },
-      };
-      setActive(entry);
-    });
-  }, [close]);
-
   const value = useMemo(
-    () => ({ confirm, prompt, alert, settleDebt }),
-    [confirm, prompt, alert, settleDebt],
+    () => ({ confirm, prompt, alert }),
+    [confirm, prompt, alert],
   );
 
   return (
@@ -176,17 +148,6 @@ export function DialogProvider({ children }: { children: ReactNode }) {
           description={active.opts.description}
           okLabel={active.opts.okLabel}
           onClose={() => active.resolve()}
-        />
-      )}
-      {active?.type === "settle-debt" && (
-        <SettleDebtDialog
-          open
-          title={active.opts.title}
-          description={active.opts.description}
-          submitLabel={active.opts.submitLabel}
-          cancelLabel={active.opts.cancelLabel}
-          onSubmit={(result) => active.resolve(result)}
-          onCancel={() => active.resolve(null)}
         />
       )}
     </DialogContext.Provider>

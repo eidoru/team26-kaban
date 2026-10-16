@@ -1,7 +1,7 @@
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bell, ChevronDown, House, LogOut, UserRound, Wallet, type LucideIcon } from "lucide-react";
+import { Bell, ChevronDown, House, LogOut, UserRound, type LucideIcon } from "lucide-react";
 import { api } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { prefetchRealtimeToken } from "../lib/homeQueries";
@@ -130,7 +130,7 @@ export function AppLayout() {
   const navItems: NavItem[] = [
     { to: "/home", label: "Home", shortLabel: "Home", icon: House },
     { to: "/notifications", label: "Notifications", shortLabel: "Alerts", icon: Bell, badge: unreadCount },
-    { to: "/money", label: "Money", shortLabel: "Money", icon: Wallet },
+    // Money returns with the dashboards (rewrite phase 8).
     { to: "/profile", label: "Profile", shortLabel: "Profile", icon: UserRound },
   ];
 
@@ -162,7 +162,7 @@ export function AppLayout() {
         aria-label="Main"
         className="fixed inset-x-0 bottom-0 z-40 border-t border-ink-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
       >
-        <ul className="grid grid-cols-4">
+        <ul className="grid grid-cols-3">
           {navItems.map((item) => (
             <li key={item.to}>
               <NavLink

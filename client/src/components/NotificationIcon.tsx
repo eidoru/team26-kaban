@@ -1,23 +1,25 @@
 import {
-  BadgeCheck,
+  Ban,
   Bell,
-  CircleCheck,
-  Clock,
-  HandCoins,
-  TriangleAlert,
+  CalendarClock,
+  PencilLine,
+  Rocket,
   UserCheck,
   UserMinus,
+  UserPlus,
   type LucideIcon,
 } from "lucide-react";
 
+/** Icons by notification kind (server/src/services/notifications.ts). Unknown kinds get a bell. */
 const KINDS: Record<string, { icon: LucideIcon; tone: string }> = {
-  member_left: { icon: UserMinus, tone: "bg-ink-100 text-ink-600" },
-  chair_claimed: { icon: UserCheck, tone: "bg-sky-100 text-sky-800" },
-  contribution_confirmed: { icon: BadgeCheck, tone: "bg-brand-100 text-brand-700" },
-  contribution_due: { icon: Clock, tone: "bg-warn-50 text-warn-700" },
-  turn_to_receive: { icon: HandCoins, tone: "bg-sun-100 text-sun-800" },
-  dispute_raised: { icon: TriangleAlert, tone: "bg-danger-50 text-danger-600" },
-  dispute_resolved: { icon: CircleCheck, tone: "bg-brand-100 text-brand-700" },
+  "group.edited": { icon: PencilLine, tone: "bg-sun-100 text-sun-800" },
+  "group.cancelled": { icon: Ban, tone: "bg-ink-100 text-ink-600" },
+  "group.launched": { icon: Rocket, tone: "bg-brand-100 text-brand-700" },
+  "period.opened": { icon: CalendarClock, tone: "bg-brand-100 text-brand-700" },
+  "member.joined": { icon: UserPlus, tone: "bg-brand-100 text-brand-700" },
+  "member.left": { icon: UserMinus, tone: "bg-ink-100 text-ink-600" },
+  "member.kicked": { icon: UserMinus, tone: "bg-ink-100 text-ink-600" },
+  "placeholder.claimed": { icon: UserCheck, tone: "bg-sky-100 text-sky-800" },
 };
 
 const FALLBACK = { icon: Bell, tone: "bg-ink-100 text-ink-600" };
@@ -29,8 +31,8 @@ const SIZES = {
   responsive: { box: "h-8 w-8 sm:h-10 sm:w-10", icon: "h-4 w-4 sm:h-5 sm:w-5" },
 } as const;
 
-export function NotificationIcon({ type, size = "md" }: { type: string; size?: keyof typeof SIZES }) {
-  const { icon: Icon, tone } = KINDS[type] ?? FALLBACK;
+export function NotificationIcon({ kind, size = "md" }: { kind: string; size?: keyof typeof SIZES }) {
+  const { icon: Icon, tone } = KINDS[kind] ?? FALLBACK;
   return (
     <span aria-hidden className={`flex shrink-0 items-center justify-center rounded-full ${tone} ${SIZES[size].box}`}>
       <Icon className={SIZES[size].icon} />

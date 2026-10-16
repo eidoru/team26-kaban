@@ -1,0 +1,180 @@
+import { ArrowDown, ArrowUp, ChevronRight, Lock, Shuffle } from "lucide-react";
+import type { GroupDetail, SlotView } from "../../api/client";
+import { Avatar } from "../../components/Avatar";
+import { formatDueDate } from "../../lib/dates";
+import { ui } from "../../lib/ui";
+import { currentOrder, slotHasActions, slotTag } from "./slots";
+
+/**
+ * Who gets the pot on which date: the payout order and the schedule in one list (R-ORD, §4.3).
+ * Once everyone has a turn this is also the member list, so organizers tap a row for that slot's
+ * actions. In the lobby the organizer arranges it here; the page owns the draft so it can hide
+ * other actions while one is open.
+ */
+export function PayoutSchedule({
+  detail,
+  canArrange = false,
+  draft = null,
+  pending = null,
+  onDraftChange,
+  onShuffle,
+  onSaveOrder,
+  onSelect,
+}: {
+  detail: GroupDetail;
+  /** Organizer, in the lobby, with every slot filled (R-ORD-01). */
+  canArrange?: boolean;
+  /** The order being arranged, or null when not arranging. */
+  draft?: string[] | null;
+  pending?: string | null;
+  onDraftChange?: (draft: string[] | null) => void;
+  onShuffle?: () => void;
+  onSaveOrder?: (slotIds: string[]) => void;
+  onSelect?: (slot: SlotView) => void;
+}) {
+  const { schedule, slots, group } = detail;
+  const slotById = new Map(slots.map((s) => [s.id, s]));
+  const order = currentOrder(detail);
+  // While arranging, the rows follow the draft; dates stay fixed to round numbers.
+  const recipients: (SlotView | undefined)[] = (draft ?? order ?? []).map((id) => slotById.get(id));
+
+  function startArranging() {
+    onDraftChange?.(order ?? [...slots].sort((a, b) => Number(b.isOrganizer) - Number(a.isOrganizer)).map((s) => s.id));
+  }
+
+  function move(index: number, by: -1 | 1) {
+    if (!draft) return;
+    const next = [...draft];
+    [next[index], next[index + by]] = [next[index + by], next[index]];
+    onDraftChange?.(next);
+  }
+
+  const subtitle =
+    group.state === "LOBBY" && !order
+      ? "Who gets each payout is set once every slot is filled."
+      : group.orderLocked || group.state !== "LOBBY"
+        ? "The order is locked."
+        : "Not locked yet. Lock it when everyone agrees.";
+  const moveButton =
+    "flex h-11 w-11 items-center justify-center rounded-full border-2 border-ink-200 text-ink-700 hover:bg-ink-50 disabled:opacity-30";
+
+  return (
+    <section aria-labelledby="schedule-heading">
+      <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <h2 id="schedule-heading" className={ui.sectionHeading}>
+            Payout schedule
+          </h2>
+          <p className={ui.sectionSubtitle}>{subtitle}</p>
+        </div>
+        {canArrange && !draft && (
+          <div className="flex gap-2">
+            <button type="button" onClick={onShuffle} disabled={pending === "shuffle"} className={ui.btnSecondarySm}>
+              <Shuffle className="h-4 w-4" aria-hidden />
+              {pending === "shuffle" ? "Shuffling…" : order ? "Shuffle again" : "Shuffle"}
+            </button>
+            <button type="button" onClick={startArranging} className={ui.btnSecondarySm}>
+              Arrange
+            </button>
+          </div>
+        )}
+      </div>
+
+      <ol className="divide-y divide-ink-100 overflow-hidden rounded-3xl border border-ink-200 bg-white">
+        {schedule.map((round, index) => {
+          const slot = recipients[index];
+          const date = (
+            <>
+              Payout {formatDueDate(round.payoutDate)}
+              {round.status === "OPEN" && " · collecting now"}
+            </>
+          );
+          const body = (
+            <>
+              <span
+                className={`font-heading flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-lg font-bold ${
+                  round.status === "OPEN" ? "bg-brand-700 text-white" : "bg-ink-100 text-ink-700"
+                }`}
+                aria-label={`Round ${round.number}`}
+              >
+                {round.number}
+              </span>
+              <span className="min-w-0 flex-1">
+                {slot ? (
+                  <>
+                    <span className="block truncate text-sm font-bold text-ink-900">
+                      {slot.name}
+                      {slot.isViewer && <span className="font-semibold text-brand-700"> (you)</span>}
+                    </span>
+                    <span className="block text-xs text-ink-500">
+                      {date}
+                      {slot.kind === "PLACEHOLDER" && ` · ${slotTag(slot).toLowerCase()}`}
+                    </span>
+                  </>
+                ) : (
+                  // No recipient yet: the date is all there is to say.
+                  <span className="block text-sm font-bold text-ink-900">{date}</span>
+                )}
+              </span>
+              {slot && !draft && <Avatar name={slot.name} placeholder={slot.kind === "PLACEHOLDER"} />}
+            </>
+          );
+          const tappable = !draft && slot && onSelect && slotHasActions(slot, detail);
+          const rowClass = `flex w-full items-center gap-3 px-4 py-3 text-left ${slot?.isViewer ? "bg-brand-50" : ""}`;
+          return (
+            <li key={round.number}>
+              {tappable ? (
+                <button type="button" onClick={() => onSelect(slot)} className={`${rowClass} transition-colors hover:bg-ink-50`}>
+                  {body}
+                  <ChevronRight className="h-4 w-4 shrink-0 text-ink-400" aria-hidden />
+                </button>
+              ) : (
+                <div className={rowClass}>
+                  {body}
+                  {draft && (
+                    <span className="flex shrink-0 gap-1">
+                      <button type="button" onClick={() => move(index, -1)} disabled={index === 0} aria-label={`Move ${slot?.name} earlier`} className={moveButton}>
+                        <ArrowUp className="h-4 w-4" aria-hidden />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => move(index, 1)}
+                        disabled={index === schedule.length - 1}
+                        aria-label={`Move ${slot?.name} later`}
+                        className={moveButton}
+                      >
+                        <ArrowDown className="h-4 w-4" aria-hidden />
+                      </button>
+                    </span>
+                  )}
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+
+      {draft && (
+        <div className="mt-3 flex gap-2">
+          <button type="button" onClick={() => onDraftChange?.(null)} className={`${ui.btnSecondary} min-h-11 flex-1 sm:flex-none`}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => onSaveOrder?.(draft)}
+            disabled={pending === "order"}
+            className={`${ui.btnPrimary} min-h-11 flex-1 sm:flex-none`}
+          >
+            {pending === "order" ? "Saving…" : "Save order"}
+          </button>
+        </div>
+      )}
+      {canArrange && group.orderLocked && !draft && (
+        <p className="mt-2 flex items-center gap-1.5 text-xs text-ink-500">
+          <Lock className="h-3.5 w-3.5" aria-hidden />
+          Shuffling or arranging again unlocks it.
+        </p>
+      )}
+    </section>
+  );
+}
