@@ -167,7 +167,7 @@ export function HomePage() {
               >
                 <div className="min-w-0 flex-1">
                   <p className="text-xs font-bold uppercase tracking-wide text-ink-500">
-                    {g.isOrganizer ? "You organize" : "Member"} · {formatPeso(g.contribution)} {g.frequencyLabel.toLowerCase()}
+                    {formatPeso(g.contribution)} {g.frequencyLabel.toLowerCase()}
                   </p>
                   <p className="font-heading mt-0.5 truncate text-lg font-bold text-ink-900">{g.name}</p>
                   <p className="mt-0.5 text-sm text-ink-700">{standingLine(g)}</p>
