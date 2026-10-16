@@ -16,6 +16,7 @@ import { buildExport } from "../services/exports.js";
 import { completionSummary } from "../services/records.js";
 import { activityLog, type ActivityCategory } from "../services/activity.js";
 import { sendManualReminder } from "../services/reminders.js";
+import { groupStats, homeDashboard, slotHistory } from "../services/dashboard.js";
 import { createProofUpload, PROOF_CONTENT_TYPES } from "../lib/storage.js";
 import { can } from "../domain/lifecycle.js";
 import { conflict, notFound as notFoundError } from "../lib/errors.js";
@@ -78,6 +79,15 @@ function answerWithDetail(action: GroupAction) {
     }
   };
 }
+
+/** §15.2: the member's home across every paluwagan (and the Money page). Must sit above "/:id". */
+router.get("/home", async (req, res, next) => {
+  try {
+    res.json(await homeDashboard(req.user!.id));
+  } catch (err) {
+    next(err);
+  }
+});
 
 router.get("/", async (req, res, next) => {
   try {
@@ -216,6 +226,24 @@ router.post(
 router.get("/:id/summary", loadGroup, async (req, res, next) => {
   try {
     res.json(await completionSummary(req.group!.id));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** §15.1 / §15.3: health, projections, money overview, collection rate and reliability. */
+router.get("/:id/stats", loadGroup, async (req, res, next) => {
+  try {
+    res.json(await groupStats(req.group!.id, req.user!.id));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** §15.3: one slot's history (own, or any for the organizer with ?slot=). */
+router.get("/:id/history", loadGroup, async (req, res, next) => {
+  try {
+    res.json(await slotHistory(req.group!.id, req.user!.id, typeof req.query.slot === "string" ? req.query.slot : undefined));
   } catch (err) {
     next(err);
   }

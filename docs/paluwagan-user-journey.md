@@ -390,3 +390,4 @@ Test cases worth covering: the first recipient (all debt is post-payout), the la
 | R-DEC-23 | (§9) A slot can be in only one swap at a time (requested or awaiting approval), so two pending swaps never conflict over the same turn. |
 | R-DEC-24 | (R-SWP-01, R-SWP-03) A pending swap expires when either party's payout happens. The lock window and "already paid out" are re-checked when the swap is accepted and approved. |
 | R-DEC-25 | (R-SWP-04, R-DEC-12) Until `SWAP_REQUEST_EXPIRY_DAYS` has a value, pending swaps don't expire with time. |
+| R-DEC-26 | *(assumption, to confirm)* (§15.1) Round health compares the share of the pot collected (approved money) with the share of the period that has passed: **at risk** when collection is more than 10 points behind the calendar, **short** when the reminder window (`REMINDER_DAYS_BEFORE`) has started and the pot isn't full, otherwise **on track**. |
