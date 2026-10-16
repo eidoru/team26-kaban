@@ -34,18 +34,21 @@ export function formatLocalDate(iso: string | null | undefined): string {
   return Number.isNaN(date.getTime()) ? iso : formatDay(date);
 }
 
-/**
- * A calendar date split for a date column: `day` "Nov 15" over `weekday` "Sun", which carries the
- * year outside the current one ("Fri · 2027").
- */
-export function formatDateParts(value: string | null | undefined): { day: string; weekday: string } | null {
+/** Month and day only ("Jan 1"), where the year is already on screen. */
+export function formatMonthDay(value: string | null | undefined): string {
   const date = parseDateOnly(value);
-  if (!date) return null;
-  const weekday = date.toLocaleDateString(undefined, { weekday: "short" });
-  return {
-    day: date.toLocaleDateString(undefined, { month: "short", day: "numeric" }),
-    weekday: date.getFullYear() === new Date().getFullYear() ? weekday : `${weekday} · ${date.getFullYear()}`,
-  };
+  return date ? date.toLocaleDateString(undefined, { month: "short", day: "numeric" }) : (value ?? "");
+}
+
+/**
+ * A compact date for a date column: "Nov 15", or "Jan 1, 2027" outside the current year. Pass
+ * `withYear` to show the year anyway, so a column that crosses years reads the same on every row.
+ */
+export function formatShortDate(value: string | null | undefined, withYear = false): string {
+  const date = parseDateOnly(value);
+  if (!date) return value ?? "";
+  const showYear = withYear || date.getFullYear() !== new Date().getFullYear();
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric", ...(showYear ? { year: "numeric" } : {}) });
 }
 
 /** Whole days from today to a calendar date: 0 today, negative once it's past. */

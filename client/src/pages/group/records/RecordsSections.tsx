@@ -42,12 +42,11 @@ export function Recap({ detail }: { detail: GroupDetail }) {
         {members.map((m) => {
           const slot = detail.slots.find((s) => s.id === m.slotId);
           return (
-            <li key={m.slotId} className="flex items-center gap-3 px-4 py-3">
+            <li key={m.slotId} className={`flex items-center gap-3 px-4 py-3 ${slot?.isViewer ? "bg-brand-50" : ""}`}>
               <Avatar name={m.name} size="md" placeholder={slot?.kind === "PLACEHOLDER"} />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-bold text-ink-900">
                   {m.name}
-                  {slot?.isViewer && <span className="font-semibold text-brand-700"> (you)</span>}
                 </span>
                 <span className="block text-xs text-ink-500 tabular-nums">
                   Paid in {formatPeso(m.contributed)} · got {formatPeso(m.received)}

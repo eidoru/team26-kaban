@@ -25,7 +25,8 @@ export function NowPanel({
 }: {
   tone: NowTone;
   icon: LucideIcon;
-  eyebrow: string;
+  /** Optional: left out when the title already says it. */
+  eyebrow?: string;
   title: ReactNode;
   body?: ReactNode;
   children?: ReactNode;
@@ -38,7 +39,7 @@ export function NowPanel({
           <Icon className="h-5 w-5" />
         </span>
         <div className="min-w-0 flex-1">
-          <p className={`text-xs font-bold uppercase tracking-wide ${t.eyebrow}`}>{eyebrow}</p>
+          {eyebrow && <p className={`text-xs font-bold uppercase tracking-wide ${t.eyebrow}`}>{eyebrow}</p>}
           <h2 className="font-heading mt-0.5 text-xl font-bold text-ink-900 text-balance">{title}</h2>
           {body && <div className="mt-1 text-sm text-ink-600">{body}</div>}
         </div>

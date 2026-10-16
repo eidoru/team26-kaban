@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { ChevronRight, History, Pencil, ReceiptText, type LucideIcon } from "lucide-react";
+import { ChevronRight, History, Pencil, ReceiptText, Wallet, type LucideIcon } from "lucide-react";
 import type { GroupDetail } from "../../api/client";
 import { formatDueDate } from "../../lib/dates";
 import { formatPeso, formatRate } from "../../lib/money";
@@ -63,7 +63,7 @@ export function GroupDetails({ detail, onCancel }: { detail: GroupDetail; onCanc
       <dl className="divide-y divide-ink-100 rounded-3xl border border-ink-200 bg-white">
         {rows.map((row) => (
           <div key={row.label} className="flex gap-3 px-5 py-3">
-            <dt className="w-36 shrink-0 text-sm text-ink-500">{row.label}</dt>
+            <dt className="w-36 shrink-0 text-sm text-ink-500 lg:w-28">{row.label}</dt>
             <dd className="min-w-0 flex-1 text-sm font-bold text-ink-900">
               {row.value}
               {row.note && <span className="mt-0.5 block text-xs font-normal text-ink-500">{row.note}</span>}
@@ -71,6 +71,14 @@ export function GroupDetails({ detail, onCancel }: { detail: GroupDetail; onCanc
           </div>
         ))}
       </dl>
+      {started && (
+        <PageLink
+          to={`/groups/${group.id}/money`}
+          icon={Wallet}
+          title="Money & records"
+          note={viewer.isOrganizer ? "Collected and paid out, how rounds went, downloads" : "Your statement and the summary, to download"}
+        />
+      )}
       {started && (
         <PageLink to={`/groups/${group.id}/history`} icon={ReceiptText} title="Your history" note="Every payment, debt change and payout for your slot" />
       )}

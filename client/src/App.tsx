@@ -17,11 +17,11 @@ const CreateGroupPage = lazy(() =>
   import("./pages/create/CreateGroupPage").then((m) => ({ default: m.CreateGroupPage })),
 );
 const GroupPage = lazy(() => import("./pages/group/GroupPage").then((m) => ({ default: m.GroupPage })));
+const MoneyRecordsPage = lazy(() =>
+  import("./pages/group/MoneyRecordsPage").then((m) => ({ default: m.MoneyRecordsPage })),
+);
 const EditGroupPage = lazy(() =>
   import("./pages/group/EditGroupPage").then((m) => ({ default: m.EditGroupPage })),
-);
-const LaunchReviewPage = lazy(() =>
-  import("./pages/group/LaunchReviewPage").then((m) => ({ default: m.LaunchReviewPage })),
 );
 const ActivityPage = lazy(() => import("./pages/group/ActivityPage").then((m) => ({ default: m.ActivityPage })));
 const HistoryPage = lazy(() => import("./pages/group/HistoryPage").then((m) => ({ default: m.HistoryPage })));
@@ -53,9 +53,11 @@ export function App() {
               <Route path="/groups/new" element={<CreateGroupPage />} />
               <Route path="/groups/:id" element={<GroupPage />} />
               <Route path="/groups/:id/edit" element={<EditGroupPage />} />
-              <Route path="/groups/:id/launch" element={<LaunchReviewPage />} />
+              {/* The review step is gone (R-DEC-28); launching happens on the group page. */}
+              <Route path="/groups/:id/launch" element={<Navigate to=".." relative="path" replace />} />
               <Route path="/groups/:id/activity" element={<ActivityPage />} />
               <Route path="/groups/:id/history" element={<HistoryPage />} />
+              <Route path="/groups/:id/money" element={<MoneyRecordsPage />} />
             </Route>
           </Route>
 

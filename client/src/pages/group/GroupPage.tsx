@@ -38,25 +38,23 @@ import { formatPeso } from "../../lib/money";
 import { ui } from "../../lib/ui";
 import { useGroupRealtime } from "../../lib/useGroupRealtime";
 import { GroupDetails } from "./GroupDetails";
-import { InviteSheet, SlotSheet } from "./GroupSheets";
+import { InviteLinkPanel, PlaceholderSheet, SlotSheet } from "./GroupSheets";
 import { PayoutSchedule } from "./PayoutSchedule";
 import { currentOrder } from "./slots";
 import { PaySheet, type PayMode } from "./active/PaySheet";
 import { PayoutSheet } from "./active/PayoutSheet";
 import { debtReportable, owedBy, payoutsToActOnFor, reviewItems, standingOf, type ReviewItem } from "./active/period";
-import { DebtsList, MyPayments, PeriodCard, PeriodStatusList, RefundsOwed } from "./active/PeriodSections";
+import { DebtsList, MyPayments, PayoutStageCard, PeriodCard, PeriodStatusList, RefundsOwed } from "./active/PeriodSections";
 import { DisputeSheet } from "./active/DisputeSheet";
 import { SwapSheet, SwapsList } from "./swaps/SwapSections";
-import { Recap, RecordsSection } from "./records/RecordsSections";
-import { MoneyOverview, Trends, YourTurn } from "./dashboard/StatsSections";
+import { Recap } from "./records/RecordsSections";
+import { MyStanding, YourTurn } from "./dashboard/StatsSections";
 import { swapToActOn } from "./swaps/swaps";
 import { ReviewSheet } from "./active/ReviewSheet";
 import { SlotsList } from "./SlotsList";
 
-const STATE_LABELS: Record<GroupDetail["group"]["state"], string> = {
-  LOBBY: "In the lobby",
-  LAUNCHED: "Launched",
-  ACTIVE: "Running",
+/** Only end states get a label; while it's being set up or runs, the page itself shows the state. */
+const STATE_LABELS: Partial<Record<GroupDetail["group"]["state"], string>> = {
   COMPLETED: "Completed",
   COMPLETED_WITH_OUTSTANDING_DEBT: "Completed, debts open",
   CANCELLED: "Cancelled",
@@ -191,6 +189,17 @@ function GroupView({ detail }: { detail: GroupDetail }) {
     }
   }
 
+  /** R-LCH-01..03: the lobby page is the launch summary; one confirmation, then it's final. */
+  async function launch() {
+    const confirmed = await dialog.confirm({
+      title: `Launch ${group.name}?`,
+      description:
+        "After this, the settings, members and payout order are final, and the invite link stops working. Everyone is notified.",
+      confirmLabel: "Launch",
+    });
+    if (confirmed) await run("launch", () => api.launch(group.id));
+  }
+
   async function startNow() {
     await api.activateNow(group.id);
     await queryClient.invalidateQueries({ queryKey: groupKey(group.id) });
@@ -310,11 +319,17 @@ function GroupView({ detail }: { detail: GroupDetail }) {
           eyebrow="Next step"
           title={`Fill ${detail.openSlots} open slot${detail.openSlots === 1 ? "" : "s"}`}
           body="Share the invite link, or add a placeholder for someone without an account."
-        />
+        >
+          <InviteLinkPanel
+            detail={detail}
+            pending={pending}
+            onCreateLink={() => void run("invite", () => api.createInviteLink(group.id))}
+          />
+        </NowPanel>
       );
       primary = (
         <button type="button" onClick={() => setInviteOpen(true)} className={ui.btnPrimary}>
-          Invite members
+          Add a placeholder
         </button>
       );
     } else if (!ordered) {
@@ -351,9 +366,10 @@ function GroupView({ detail }: { detail: GroupDetail }) {
         />
       );
       primary = (
-        <Link to={`/groups/${group.id}/launch`} className={ui.btnPrimary}>
-          Review and launch
-        </Link>
+        <button type="button" onClick={() => void launch()} disabled={pending === "launch"} className={ui.btnPrimary}>
+          <Rocket className="h-4 w-4" aria-hidden />
+          {pending === "launch" ? "Launching…" : "Launch paluwagan"}
+        </button>
       );
     }
   } else if (group.state === "LOBBY") {
@@ -375,7 +391,6 @@ function GroupView({ detail }: { detail: GroupDetail }) {
       <NowPanel
         tone="sun"
         icon={CalendarClock}
-        eyebrow="Launched"
         title={`Starts ${formatDueDate(group.startDate)}`}
         body={
           <>
@@ -611,129 +626,138 @@ function GroupView({ detail }: { detail: GroupDetail }) {
     } else {
       now = <NowPanel tone="calm" icon={CircleCheck} eyebrow="Complete" title="Every payout is done, and nobody owes anything" />;
     }
-    if (group.state === "ACTIVE" && isOrganizer && demoTools) {
-      now = (
-        <>
-          {now}
-          <div className="-mt-4 text-right">
-            <button type="button" onClick={() => void closeRoundNow()} className={ui.btnGhost}>
-              Close this round now (demo)
-            </button>
-          </div>
-        </>
-      );
-    }
   } else if (group.state === "CANCELLED") {
     now = <NowPanel tone="calm" icon={Ban} eyebrow="Cancelled" title="This paluwagan was cancelled" body="The organizer cancelled it before it launched." />;
   }
 
   return (
     <div className="min-w-0 space-y-8">
+      {/* The terms are in Details; the header is the name, plus the round while it runs. */}
       <header>
-        {/* While it runs, the header is the one place that names the current round. */}
-        <p className="text-xs font-bold uppercase tracking-wide text-ink-500">
-          {detail.period
-            ? `Round ${detail.period.number} of ${group.slotCount} · payout ${formatDueDate(detail.period.payoutDate)}`
-            : STATE_LABELS[group.state]}
-        </p>
-        <h1 className={`${ui.pageTitle} mt-1`}>{group.name}</h1>
-        <p className="mt-1 text-sm text-ink-600">
-          {formatPeso(group.contribution)} {group.frequencyLabel.toLowerCase()} · {group.slotCount} slots · pot{" "}
-          {formatPeso(group.pot)}
-        </p>
+        {STATE_LABELS[group.state] && (
+          <p className="mb-1 text-xs font-bold uppercase tracking-wide text-ink-500">{STATE_LABELS[group.state]}</p>
+        )}
+        <h1 className={ui.pageTitle}>{group.name}</h1>
+        {detail.period && (
+          <p className="mt-1 text-sm text-ink-500">
+            Round {detail.period.number} of {group.slotCount}
+          </p>
+        )}
       </header>
 
-      {now}
-      {error && (
-        <p className={ui.error} role="alert">
-          {error.message}{" "}
-          <button type="button" onClick={clearError} className="underline">
-            Dismiss
-          </button>
-        </p>
-      )}
+      {/* Once it runs, wide screens split the page: this round's work in the main column, reference
+          (schedule, details, page links) in a side column. Phones and the lobby stay one column. */}
+      <div className={started ? "lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start lg:gap-8" : ""}>
+        <div className="min-w-0 space-y-8">
+          {/* Members see their own numbers first, then what to do; the organizer sees the round first. */}
+          {started && !isOrganizer && <MyStanding detail={detail} stats={stats} />}
+          {!isOrganizer && now}
+          {detail.period && <PeriodCard detail={detail} stats={stats} />}
+          {/* Any earlier payout still on its way, with where it stands. */}
+          {[...detail.payouts]
+            .reverse()
+            .filter((p) => p.status !== "CONFIRMED")
+            .map((p) => (
+              <PayoutStageCard key={p.round} detail={detail} payout={p} onOpen={() => setPayoutRound(p.round)} />
+            ))}
+          {isOrganizer && now}
+          {error && (
+            <p className={ui.error} role="alert">
+              {error.message}{" "}
+              <button type="button" onClick={clearError} className="underline">
+                Dismiss
+              </button>
+            </p>
+          )}
 
-      {detail.period && (
-        <>
-          <PeriodCard detail={detail} stats={stats} />
-          <PeriodStatusList
+          {detail.period && (
+            <>
+              <PeriodStatusList
+                detail={detail}
+                pending={pending}
+                onRecord={(slot) => pay(slot.id, "CONTRIBUTION")}
+                onRemind={(slot) => void run(`remind-${slot.id}`, () => api.remindSlot(group.id, slot.id))}
+              />
+            </>
+          )}
+          {/* Members have their payout in "You"; the organizer's turn card stays unless it's this round. */}
+          {isOrganizer && stats && stats.myTurn?.round !== detail.period?.number && <YourTurn detail={detail} stats={stats} />}
+          <DebtsList detail={detail} onPay={(slot) => pay(slot.id, "DEBT_PAYMENT")} />
+          <RefundsOwed detail={detail} />
+          <MyPayments
             detail={detail}
             pending={pending}
-            onRecord={(slot) => pay(slot.id, "CONTRIBUTION")}
-            onRemind={(slot) => void run(`remind-${slot.id}`, () => api.remindSlot(group.id, slot.id))}
+            onWithdraw={(s) => void withdraw(s)}
+            onDispute={(s) => setDisputeForId(s.id)}
+            onWithdrawDispute={(d) => void withdrawDispute(d)}
           />
-        </>
-      )}
-      {stats && stats.myTurn?.round !== detail.period?.number && <YourTurn detail={detail} stats={stats} />}
-      <DebtsList detail={detail} onPay={(slot) => pay(slot.id, "DEBT_PAYMENT")} />
-      <RefundsOwed detail={detail} />
-      <MyPayments
-        detail={detail}
-        pending={pending}
-        onWithdraw={(s) => void withdraw(s)}
-        onDispute={(s) => setDisputeForId(s.id)}
-        onWithdrawDispute={(d) => void withdrawDispute(d)}
-      />
-      <SwapsList
-        detail={detail}
-        hideId={nowSwapId}
-        pending={pending}
-        onAccept={(sw) => swapAction(sw, () => api.acceptSwap(group.id, sw.id))}
-        onDecline={(sw) => swapAction(sw, () => api.declineSwap(group.id, sw.id))}
-        onApprove={(sw) => swapAction(sw, () => api.approveSwap(group.id, sw.id))}
-        onDeny={(sw) => void denySwap(sw)}
-        onCancel={(sw) => swapAction(sw, () => api.cancelSwap(group.id, sw.id))}
-      />
-      {(group.state === "COMPLETED" || group.state === "COMPLETED_WITH_OUTSTANDING_DEBT") && <Recap detail={detail} />}
-      {/* Once everyone has a turn, the schedule lists every member too, so it replaces the member list. */}
-      {!ordered && (
-        <SlotsList
-          detail={detail}
-          onSelect={selectSlot}
-          onOpenSlot={isOrganizer && inLobby ? () => setInviteOpen(true) : undefined}
-        />
-      )}
-      <PayoutSchedule
-        detail={detail}
-        canArrange={isOrganizer && inLobby && full}
-        draft={orderDraft}
-        pending={pending}
-        onDraftChange={setOrderDraft}
-        onShuffle={() => void run("shuffle", () => api.shuffleOrder(group.id))}
-        onSaveOrder={(slotIds) =>
-          void run("order", () => api.setOrder(group.id, slotIds)).then((saved) => saved && setOrderDraft(null))
-        }
-        onSelect={selectSlot}
-        onOpenPayout={setPayoutRound}
-      />
-      {isOrganizer && stats && (
-        <>
-          {/* Once it's finished the Recap carries these totals, so they show only while it runs. */}
-          {group.state === "ACTIVE" && <MoneyOverview stats={stats} />}
-          <Trends stats={stats} />
-        </>
-      )}
-      {started && <RecordsSection detail={detail} />}
-      <GroupDetails detail={detail} onCancel={() => void cancelGroup()} />
-
-      {inLobby && !isOrganizer && (
-        <div className="text-center">
-          <button type="button" onClick={() => void leave()} className={ui.btnDangerGhost}>
-            Leave this paluwagan
-          </button>
+          <SwapsList
+            detail={detail}
+            hideId={nowSwapId}
+            pending={pending}
+            onAccept={(sw) => swapAction(sw, () => api.acceptSwap(group.id, sw.id))}
+            onDecline={(sw) => swapAction(sw, () => api.declineSwap(group.id, sw.id))}
+            onApprove={(sw) => swapAction(sw, () => api.approveSwap(group.id, sw.id))}
+            onDeny={(sw) => void denySwap(sw)}
+            onCancel={(sw) => swapAction(sw, () => api.cancelSwap(group.id, sw.id))}
+          />
+          {(group.state === "COMPLETED" || group.state === "COMPLETED_WITH_OUTSTANDING_DEBT") && <Recap detail={detail} />}
+          {/* Once everyone has a turn, the schedule lists every member too, so it replaces the member list. */}
+          {!ordered && (
+            <SlotsList
+              detail={detail}
+              onSelect={selectSlot}
+              onOpenSlot={isOrganizer && inLobby ? () => setInviteOpen(true) : undefined}
+            />
+          )}
         </div>
-      )}
+        {/* Beside the main column only once the page splits (running); stacked below it otherwise. */}
+        <aside aria-label="About this paluwagan" className={`mt-8 min-w-0 space-y-8 ${started ? "lg:mt-0" : ""}`}>
+          <PayoutSchedule
+            detail={detail}
+            canArrange={isOrganizer && inLobby && full}
+            draft={orderDraft}
+            pending={pending}
+            onDraftChange={setOrderDraft}
+            onShuffle={() => void run("shuffle", () => api.shuffleOrder(group.id))}
+            onSaveOrder={(slotIds) =>
+              void run("order", () => api.setOrder(group.id, slotIds)).then((saved) => saved && setOrderDraft(null))
+            }
+            onSelect={selectSlot}
+            onOpenPayout={setPayoutRound}
+          />
+          <GroupDetails detail={detail} onCancel={() => void cancelGroup()} />
+
+          {inLobby && !isOrganizer && (
+            <div className="text-center">
+              <button type="button" onClick={() => void leave()} className={ui.btnDangerGhost}>
+                Leave this paluwagan
+              </button>
+            </div>
+          )}
+          {/* Testing aids stay out of the real flow: last, and marked as demo. */}
+          {group.state === "ACTIVE" && isOrganizer && demoTools && detail.period && (
+            <section aria-labelledby="demo-heading" className="rounded-3xl border-2 border-dashed border-ink-300 p-5">
+              <h2 id="demo-heading" className="text-xs font-bold uppercase tracking-wide text-ink-500">
+                Demo tools
+              </h2>
+              <p className="mt-1 text-sm text-ink-600">Skip ahead without waiting for the calendar. Only you see this.</p>
+              <button type="button" onClick={() => void closeRoundNow()} className={`${ui.btnSecondarySm} mt-3`}>
+                Close round {detail.period.number} now
+              </button>
+            </section>
+          )}
+        </aside>
+      </div>
 
       {/* While the order is being arranged, Save and Cancel are the only actions. */}
       {primary && !orderDraft && <ActionBar>{primary}</ActionBar>}
 
       {isOrganizer && inLobby && (
-        <InviteSheet
+        <PlaceholderSheet
           open={inviteOpen}
-          detail={detail}
           pending={pending}
           onClose={() => setInviteOpen(false)}
-          onCreateLink={() => void run("invite", () => api.createInviteLink(group.id))}
           onAddPlaceholder={async (input) => !!(await run("placeholder", () => api.addPlaceholder(group.id, input)))}
         />
       )}

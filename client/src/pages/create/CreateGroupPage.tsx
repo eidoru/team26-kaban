@@ -114,7 +114,7 @@ function Review({ draft, onEdit }: { draft: SetupDraft; onEdit: (step: number) =
   const amounts = previewAmounts(draft);
   const rows: { label: string; value: string; step: number }[] = [
     { label: "Name", value: draft.name.trim(), step: 0 },
-    { label: "Slots", value: `${draft.slotCount} (one is yours)`, step: 0 },
+    { label: "Slots", value: String(draft.slotCount), step: 0 },
     { label: "Contribution", value: amounts ? formatPeso(amounts.contribution) : "—", step: 1 },
     { label: "Pot", value: amounts ? formatPeso(amounts.pot) : "—", step: 1 },
     { label: "Frequency", value: frequencyLabel(draft.frequency, Number(draft.intervalText) || null), step: 2 },

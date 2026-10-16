@@ -1,6 +1,6 @@
 import { CircleAlert, CircleCheck, TriangleAlert } from "lucide-react";
 import type { GroupDetail, GroupStats, Health } from "../../../api/client";
-import { dueHint, formatDueDate } from "../../../lib/dates";
+import { dueHint, formatDueDate, formatShortDate } from "../../../lib/dates";
 import { formatPeso } from "../../../lib/money";
 import { ui } from "../../../lib/ui";
 
@@ -24,6 +24,62 @@ export function HealthChip({ health }: { health: Health }) {
  * §15.3 "My slot": the viewer's turn, what it would come to now (after their own shortfall and
  * debt, the same rules as a real payout), or what they got.
  */
+/**
+ * A member's own numbers at a glance (§15.3): where they stand this round, what they owe, and their
+ * payout. Tiles with nothing in them are left out. The actions for each live in the To do list.
+ */
+export function MyStanding({ detail, stats }: { detail: GroupDetail; stats?: GroupStats }) {
+  const me = detail.slots.find((s) => s.isViewer);
+  const standing = detail.period?.slots.find((s) => s.slotId === detail.viewer.slotId);
+  const owed = me ? me.debt.principal + me.debt.interest : 0;
+  const turn = stats?.myTurn;
+  const hint = detail.period ? dueHint(detail.period.payoutDate) : null;
+  const tiles: { label: string; value: string; note: string; tone?: string }[] = [];
+  if (standing) {
+    const paid = standing.status === "PAID";
+    tiles.push({
+      label: `Round ${detail.period!.number}`,
+      value: paid ? "Paid" : `${formatPeso(standing.approved)} of ${formatPeso(standing.due)}`,
+      note: paid
+        ? `${formatPeso(standing.approved)} in`
+        : standing.pending > 0
+          ? `${formatPeso(standing.pending)} waiting for review`
+          : hint
+            ? `Due ${hint.label}`
+            : "",
+      tone: paid ? "text-brand-700" : undefined,
+    });
+  }
+  if (owed > 0) {
+    tiles.push({ label: "You owe", value: formatPeso(owed), note: `To ${detail.group.organizerName}`, tone: "text-danger-700" });
+  }
+  if (turn) {
+    const got = turn.net != null && turn.status !== "AWAITING_HANDOVER";
+    tiles.push({
+      label: "Your payout",
+      value: got ? `Got ${formatPeso(turn.net!)}` : formatPeso(turn.projected ?? detail.group.pot),
+      note: `Round ${turn.round} · ${formatShortDate(turn.payoutDate)}`,
+    });
+  }
+  if (tiles.length === 0) return null;
+  return (
+    <section aria-labelledby="standing-heading" className="rounded-3xl border border-ink-200 bg-white p-5">
+      <h2 id="standing-heading" className="text-xs font-bold uppercase tracking-wide text-ink-500">
+        You
+      </h2>
+      <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-4 sm:grid-cols-3">
+        {tiles.map((t) => (
+          <div key={t.label} className="min-w-0">
+            <dt className="text-xs text-ink-500">{t.label}</dt>
+            <dd className={`font-heading mt-0.5 text-xl font-bold tabular-nums ${t.tone ?? "text-ink-900"}`}>{t.value}</dd>
+            {t.note && <dd className="text-xs text-ink-500">{t.note}</dd>}
+          </div>
+        ))}
+      </dl>
+    </section>
+  );
+}
+
 export function YourTurn({ detail, stats }: { detail: GroupDetail; stats: GroupStats }) {
   const turn = stats.myTurn;
   if (!turn) return null;

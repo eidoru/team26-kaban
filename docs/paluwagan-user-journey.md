@@ -169,7 +169,7 @@ No payout happens on the start date itself.
 | R-ORD-01 | Payout ordering becomes available only when **all slots are filled**. |
 | R-ORD-02 | The organizer can arrange the order manually or use **random shuffle**, as many times as they like. |
 | R-ORD-03 | **Launching** makes the order final; there is no separate lock step (R-DEC-27). |
-| R-LCH-01 | Before launching, the organizer sees a **launch summary**: all details, schedule with every payout date and recipient, member list. |
+| R-LCH-01 | Before launching, the organizer sees a **launch summary**: all details, schedule with every payout date and recipient, member list. The lobby page itself is that summary; launching asks for one confirmation (R-DEC-28). |
 | R-LCH-02 | Launch requires: all slots filled, payout order set, start date still valid per R-SET-05 *(assumption; otherwise the organizer must edit the start date)*. |
 | R-LCH-03 | On launch → `LAUNCHED`. All settings are locked from this point onward. |
 | R-LCH-04 | When the start date is reached → `ACTIVE`, Contribution Period 1 opens, all members are notified. |
@@ -392,3 +392,4 @@ Test cases worth covering: the first recipient (all debt is post-payout), the la
 | R-DEC-25 | (R-SWP-04, R-DEC-12) Until `SWAP_REQUEST_EXPIRY_DAYS` has a value, pending swaps don't expire with time. |
 | R-DEC-26 | (§15.1) Round health compares the share of the pot collected (approved money) with the share of the period that has passed: **at risk** when collection is more than 10 points behind the calendar, **short** when the reminder window (`REMINDER_DAYS_BEFORE`) has started and the pot isn't full, otherwise **on track**. |
 | R-DEC-27 | (R-ORD-03, 2026-10-16) Locking and launching are one step. The organizer can shuffle or arrange the order until launch; launching makes the order final along with the settings. |
+| R-DEC-28 | (R-LCH-01, 2026-10-17) No separate review screen before launch: once the order is set, the lobby page (details, schedule, members) is the summary, and Launch asks for one confirmation. |

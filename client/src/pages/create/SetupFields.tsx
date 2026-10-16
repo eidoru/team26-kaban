@@ -1,5 +1,5 @@
 import { CalendarDays, Info } from "lucide-react";
-import { MAX_SLOTS, MIN_CUSTOM_INTERVAL_DAYS, MIN_SLOTS, MIN_START_LEAD_DAYS } from "@domain/constants";
+import { MAX_SLOTS, MIN_CUSTOM_INTERVAL_DAYS, MIN_SLOTS } from "@domain/constants";
 import { interestOn, pesos, rateFromPercent } from "@domain/money";
 import { frequencyLabel, type SetupErrors } from "@domain/setup";
 import type { Frequency } from "@domain/schedule";
@@ -63,14 +63,7 @@ export function BasicsSection({ draft, set, errors }: SectionProps) {
           max={MAX_SLOTS}
           unit="slots"
         />
-        {errors.slotCount ? (
-          <p className="mt-1.5 text-xs font-semibold text-danger-700">{errors.slotCount}</p>
-        ) : (
-          <p className="mt-2 text-xs text-ink-500">
-            One slot is yours. Each slot gets the pot once, so {Number.isFinite(draft.slotCount) ? draft.slotCount : "this many"}{" "}
-            slots means {Number.isFinite(draft.slotCount) ? draft.slotCount : "as many"} rounds.
-          </p>
-        )}
+        {errors.slotCount && <p className="mt-1.5 text-xs font-semibold text-danger-700">{errors.slotCount}</p>}
       </div>
     </div>
   );
@@ -96,7 +89,6 @@ export function MoneySection({ draft, set, errors }: SectionProps) {
         onChange={(amountText) => set({ amountText })}
         error={errors.amount}
         placeholder={draft.amountMode === "POT" ? "10,000" : "2,000"}
-        helper={draft.amountMode === "CONTRIBUTION" ? "Whole pesos, no centavos." : undefined}
       />
       {amounts?.potAdjustedFrom != null && (
         <p className="flex gap-2 rounded-2xl bg-sun-50 px-4 py-3 text-sm text-sun-900">
@@ -149,20 +141,23 @@ export function ScheduleSection({ draft, set, errors, earliestStart }: SectionPr
         label="Start date"
         error={errors.startDate}
         hasValue={draft.startDate !== ""}
-        helper={`At least ${MIN_START_LEAD_DAYS} days from today. Contributions for the first payout are collected from this day.`}
       >
         {(props) => (
           <input {...props} type="date" min={earliestStart} value={draft.startDate} onChange={(e) => set({ startDate: e.target.value })} />
         )}
       </Field>
       {dates && (
-        <div className="flex items-start gap-3 rounded-2xl border border-ink-200 bg-white p-4 text-sm">
+        <dl className="flex items-start gap-3 rounded-2xl border border-ink-200 bg-white p-4">
           <CalendarDays className="mt-0.5 h-5 w-5 shrink-0 text-brand-600" aria-hidden />
-          <p className="text-ink-700">
-            First payout <b>{formatDueDate(dates.first)}</b>, last payout <b>{formatDueDate(dates.last)}</b>.{" "}
-            {dates.count} rounds in all. No one is paid on the start date itself.
-          </p>
-        </div>
+          <div className="min-w-0 flex-1">
+            <dt className="text-xs text-ink-500">First payout</dt>
+            <dd className="text-sm font-bold text-ink-900">{formatDueDate(dates.first)}</dd>
+          </div>
+          <div className="min-w-0 flex-1">
+            <dt className="text-xs text-ink-500">Last payout</dt>
+            <dd className="text-sm font-bold text-ink-900">{formatDueDate(dates.last)}</dd>
+          </div>
+        </dl>
       )}
     </div>
   );

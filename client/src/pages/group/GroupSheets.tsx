@@ -10,30 +10,52 @@ const NAME_MAX = 100;
 const CONTACT_MAX = 200;
 
 /**
- * Filling open slots (R-LOB-01, R-LOB-02): share the invite link, or hold a slot for someone
- * without an account. `onAddPlaceholder` resolves true when the placeholder was added, which
- * closes the sheet so the new slot shows on the board.
+ * The invite link (R-LOB-01), shown in the lobby's next-step panel while slots are open: share it,
+ * or replace it so the old one stops working.
  */
-export function InviteSheet({
-  open,
+export function InviteLinkPanel({
   detail,
   pending,
-  onClose,
   onCreateLink,
+}: {
+  detail: GroupDetail;
+  pending: string | null;
+  onCreateLink: () => void;
+}) {
+  const { group, inviteLink } = detail;
+  return inviteLink ? (
+    <>
+      <ShareLink url={inviteLink.url} shareText={`Join ${group.name} on Kaban`} />
+      <button type="button" onClick={onCreateLink} disabled={pending === "invite"} className={`${ui.link} mt-2`}>
+        Make a new link (the old one stops working)
+      </button>
+    </>
+  ) : (
+    <button type="button" onClick={onCreateLink} disabled={pending === "invite"} className={ui.btnPrimaryFull}>
+      {pending === "invite" ? "Creating…" : "Create invite link"}
+    </button>
+  );
+}
+
+/**
+ * Holding a slot for someone without an account (R-LOB-02). `onAddPlaceholder` resolves true when
+ * the placeholder was added, which closes the sheet so the new slot shows on the board.
+ */
+export function PlaceholderSheet({
+  open,
+  pending,
+  onClose,
   onAddPlaceholder,
 }: {
   open: boolean;
-  detail: GroupDetail;
   pending: string | null;
   onClose: () => void;
-  onCreateLink: () => void;
   onAddPlaceholder: (input: { name: string; contact?: string }) => Promise<boolean>;
 }) {
   const [name, setName] = useState("");
   const [contact, setContact] = useState("");
   const nameError = !name.trim() ? "Enter a name." : name.trim().length > NAME_MAX ? `Up to ${NAME_MAX} characters.` : null;
   const contactError = contact.trim().length > CONTACT_MAX ? `Up to ${CONTACT_MAX} characters.` : null;
-  const { group, inviteLink, openSlots } = detail;
 
   async function add() {
     if (nameError || contactError) return;
@@ -45,59 +67,28 @@ export function InviteSheet({
   }
 
   return (
-    <Sheet
-      open={open}
-      onClose={onClose}
-      title="Fill open slots"
-      subtitle={`${openSlots} of ${group.slotCount} slots still open`}
-    >
-      <div className="space-y-6">
-        <section>
-          <h3 className="text-sm font-bold text-ink-900">Invite link</h3>
-          <p className="mt-0.5 text-sm text-ink-500">Anyone with it can take an open slot until the paluwagan launches.</p>
-          <div className="mt-3">
-            {inviteLink ? (
-              <>
-                <ShareLink url={inviteLink.url} shareText={`Join ${group.name} on Kaban`} />
-                <button type="button" onClick={onCreateLink} disabled={pending === "invite"} className={`${ui.link} mt-2`}>
-                  Make a new link (the old one stops working)
-                </button>
-              </>
-            ) : (
-              <button type="button" onClick={onCreateLink} disabled={pending === "invite"} className={ui.btnPrimaryFull}>
-                {pending === "invite" ? "Creating…" : "Create invite link"}
-              </button>
-            )}
-          </div>
-        </section>
-
-        {openSlots > 0 && (
-          <form
-            className="space-y-4 border-t border-ink-100 pt-6"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void add();
-            }}
-          >
-            <div>
-              <h3 className="text-sm font-bold text-ink-900">Add a placeholder</h3>
-              <p className="mt-0.5 text-sm text-ink-500">
-                For someone without an account. You record their payments, and they can claim the slot later.
-              </p>
-            </div>
-            <Field label="Name" error={nameError} hasValue={name !== ""}>
-              {(props) => <input {...props} value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" />}
-            </Field>
-            <Field label="Contact (optional)" error={contactError} hasValue={contact !== ""} helper="Phone or Messenger, for your reference.">
-              {(props) => <input {...props} value={contact} onChange={(e) => setContact(e.target.value)} autoComplete="off" />}
-            </Field>
-            <button type="submit" disabled={!!nameError || !!contactError || pending === "placeholder"} className={ui.btnSecondaryFull}>
-              <UserPlus className="h-4 w-4" aria-hidden />
-              {pending === "placeholder" ? "Adding…" : "Add placeholder"}
-            </button>
-          </form>
-        )}
-      </div>
+    <Sheet open={open} onClose={onClose} title="Add a placeholder">
+      <form
+        className="space-y-4"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void add();
+        }}
+      >
+        <p className="text-sm text-ink-500">
+          For someone without an account. You record their payments, and they can claim the slot later.
+        </p>
+        <Field label="Name" error={nameError} hasValue={name !== ""}>
+          {(props) => <input {...props} value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" />}
+        </Field>
+        <Field label="Contact (optional)" error={contactError} hasValue={contact !== ""} helper="Phone or Messenger, for your reference.">
+          {(props) => <input {...props} value={contact} onChange={(e) => setContact(e.target.value)} autoComplete="off" />}
+        </Field>
+        <button type="submit" disabled={!!nameError || !!contactError || pending === "placeholder"} className={ui.btnPrimaryFull}>
+          <UserPlus className="h-4 w-4" aria-hidden />
+          {pending === "placeholder" ? "Adding…" : "Add placeholder"}
+        </button>
+      </form>
     </Sheet>
   );
 }

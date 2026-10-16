@@ -17,18 +17,13 @@ export function SlotsList({
   onSelect?: (slot: SlotView) => void;
   onOpenSlot?: () => void;
 }) {
-  const { slots, group, openSlots } = detail;
+  const { slots, openSlots } = detail;
   const rowBase = "flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left";
   return (
     <section aria-labelledby="slots-heading">
-      <div className="mb-3 flex items-end justify-between gap-2">
-        <h2 id="slots-heading" className={ui.sectionHeading}>
-          Members
-        </h2>
-        <span className="text-sm font-semibold text-ink-500 tabular-nums">
-          {slots.length} of {group.slotCount} slots filled
-        </span>
-      </div>
+      <h2 id="slots-heading" className={`${ui.sectionHeading} mb-3`}>
+        Members
+      </h2>
       <ul className="divide-y divide-ink-100 overflow-hidden rounded-3xl border border-ink-200 bg-white">
         {slots.map((slot) => {
           const body = (
@@ -37,7 +32,6 @@ export function SlotsList({
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-bold text-ink-900">
                   {slot.name}
-                  {slot.isViewer && <span className="font-semibold text-brand-700"> (you)</span>}
                 </span>
                 <span className="flex items-center gap-1 text-xs text-ink-500">
                   {slot.claimLink && <Link2 className="h-3 w-3" aria-hidden />}
@@ -48,7 +42,7 @@ export function SlotsList({
           );
           const actionable = onSelect && slotHasActions(slot, detail);
           return (
-            <li key={slot.id}>
+            <li key={slot.id} className={slot.isViewer ? "bg-brand-50" : undefined}>
               {actionable ? (
                 <button type="button" onClick={() => onSelect(slot)} className={`${rowBase} transition-colors hover:bg-ink-50`}>
                   {body}

@@ -1,66 +1,186 @@
-import { ChevronRight, Clock, ImageOff, Paperclip } from "lucide-react";
-import type { DisputeView, GroupDetail, GroupStats, PeriodSlot, SlotView, SubmissionView } from "../../../api/client";
+import { Check, Clock, ImageOff, Paperclip } from "lucide-react";
+import type { DisputeView, GroupDetail, GroupStats, PayoutView, PeriodSlot, SlotView, SubmissionView } from "../../../api/client";
 import { Avatar } from "../../../components/Avatar";
-import { formatDueDate } from "../../../lib/dates";
+import { daysUntil, formatLocalDate, formatMonthDay } from "../../../lib/dates";
 import { formatPeso } from "../../../lib/money";
 import { ui } from "../../../lib/ui";
 import { latestDispute } from "./period";
 import { HealthChip } from "../dashboard/StatsSections";
 
+type StageState = "done" | "active" | "todo";
+interface Stage {
+  label: string;
+  note?: string;
+  state: StageState;
+}
+
+/**
+ * Where money is in a round's life, as three steps with the current one lit: collecting, then the
+ * payout, then the recipient confirming it.
+ */
+const STAGE_BAR = { done: "bg-brand-600", active: "bg-sun-400", todo: "bg-ink-200" };
+const STAGE_LABEL = { done: "text-ink-600", active: "text-ink-900", todo: "text-ink-400" };
+
+function StageTrack({ stages }: { stages: Stage[] }) {
+  return (
+    <ol className="grid gap-2" style={{ gridTemplateColumns: `repeat(${stages.length}, minmax(0, 1fr))` }} aria-label="Stage">
+      {stages.map((stage) => (
+        <li key={stage.label} aria-current={stage.state === "active" ? "step" : undefined}>
+          <span className={`block h-1.5 rounded-full ${STAGE_BAR[stage.state]}`} />
+          <span className={`mt-2 flex items-center gap-1 text-xs font-bold ${STAGE_LABEL[stage.state]}`}>
+            {stage.state === "done" && <Check className="h-3.5 w-3.5 shrink-0" aria-hidden />}
+            {stage.state === "active" && (
+              <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-sun-500" aria-hidden />
+            )}
+            {stage.label}
+          </span>
+          {stage.note && <span className="block text-xs text-ink-500">{stage.note}</span>}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+/**
+ * A payout still on its way (§7): handed over by the organizer, then confirmed by the recipient.
+ * Shown to everyone (R-DEC-06) while the next round collects, so both stages are visible at once.
+ */
+export function PayoutStageCard({ detail, payout, onOpen }: { detail: GroupDetail; payout: PayoutView; onOpen: () => void }) {
+  const recipient = detail.slots.find((s) => s.id === payout.recipientSlotId);
+  const handedOver = payout.status !== "AWAITING_HANDOVER";
+  // A placeholder can't confirm, and the organizer already holds their own pot: one step, no "Received".
+  const oneStep = recipient?.kind === "PLACEHOLDER" || recipient?.isOrganizer;
+  const collected: Stage = { label: "Collected", note: formatMonthDay(payout.payoutDate), state: "done" };
+  return (
+    <section
+      aria-label={`Round ${payout.round} payout`}
+      className="rounded-3xl border-2 border-sun-200 bg-sun-50 p-5 sm:p-6"
+    >
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <p className="min-w-0">
+          <span className="block text-xs font-bold uppercase tracking-wide text-sun-800">Round {payout.round} payout</span>
+          <span className="font-heading block text-lg font-bold text-ink-900">
+            {formatPeso(payout.net)} to {recipient?.isViewer ? "you" : recipient?.name}
+          </span>
+        </p>
+        <button type="button" onClick={onOpen} className={`${ui.btnSecondarySm} shrink-0`}>
+          Details
+        </button>
+      </div>
+      <StageTrack
+        stages={
+          oneStep
+            ? [collected, { label: "Paid out", note: `By ${detail.group.organizerName}`, state: "active" }]
+            : [
+                collected,
+                {
+                  label: "Handed over",
+                  note: payout.handedOverAt ? formatLocalDate(payout.handedOverAt) : `By ${detail.group.organizerName}`,
+                  state: handedOver ? "done" : "active",
+                },
+                {
+                  label: "Received",
+                  note: recipient?.isViewer ? "Confirm when you have it" : `${recipient?.name} confirms`,
+                  state: handedOver ? "active" : "todo",
+                },
+              ]
+        }
+      />
+    </section>
+  );
+}
+
 /**
  * The open round: whose pot it is, when, how much is collected (approved money only, R-SUB-07),
  * and (from the stats) the period's dates, its health and what the recipient would get now.
  */
+/**
+ * The round card's look for each stage: green while it collects, amber on the payout date itself
+ * (the round closes the day after, so the payout date is a stage everyone can see).
+ */
+const CARD_THEMES = {
+  collecting: {
+    card: "bg-brand-700 text-white",
+    muted: "text-brand-100",
+    pill: "bg-sun-300 text-brand-900",
+    track: "bg-brand-900/50",
+    fill: "bg-sun-300",
+    fillPending: "bg-sun-300/40",
+  },
+  payoutDay: {
+    card: "bg-sun-400 text-sun-950",
+    muted: "text-sun-900",
+    pill: "bg-sun-950 text-sun-200",
+    track: "bg-sun-950/15",
+    fill: "bg-sun-950",
+    fillPending: "bg-sun-950/40",
+  },
+} as const;
+
 export function PeriodCard({ detail, stats }: { detail: GroupDetail; stats?: GroupStats }) {
   const open = stats?.openRound;
   const period = detail.period!;
   const recipient = detail.slots.find((s) => s.id === period.recipientSlotId);
   const percent = Math.min(100, Math.round((period.approvedTotal / period.expected) * 100));
   const pendingPercent = Math.min(100 - percent, Math.round((period.pendingTotal / period.expected) * 100));
+  const payoutDay = (daysUntil(period.payoutDate) ?? 1) <= 0;
+  const theme = CARD_THEMES[payoutDay ? "payoutDay" : "collecting"];
+  const who = recipient?.isViewer ? "You" : (recipient?.name ?? "—");
   return (
-    <section aria-label={`Round ${period.number}`} className="rounded-3xl bg-brand-700 p-5 text-white shadow-card sm:p-6">
-      {/* The page header names the round and its payout date; the card is about the pot. */}
-      {open && detail.viewer.isOrganizer && (
-        <div className="mb-3 flex flex-wrap items-center gap-2">
-          <HealthChip health={open.health} />
-          <span className="text-xs text-brand-100">Collecting since {formatDueDate(open.periodStart)}</span>
-        </div>
-      )}
+    <section
+      aria-labelledby="current-round"
+      className={`rounded-3xl p-5 shadow-card transition-colors sm:p-6 ${theme.card}`}
+    >
+      {/* The stage heads the card (the round number is under the page title). The organizer sees the
+          round's health only when it needs attention: "on track" is the normal state, not news. */}
+      <h2 id="current-round" className="sr-only">
+        Round {period.number} of {detail.group.slotCount}
+      </h2>
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ${theme.pill}`}>
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" aria-hidden />
+          {payoutDay ? "Payout day" : `Collecting · until ${formatMonthDay(period.payoutDate)}`}
+        </span>
+        {open && detail.viewer.isOrganizer && open.health !== "ON_TRACK" && <HealthChip health={open.health} />}
+      </div>
       <div className="flex items-center gap-3">
         {recipient && <Avatar name={recipient.name} size="md" placeholder={recipient.kind === "PLACEHOLDER"} />}
         <p className="min-w-0">
-          <span className="block text-sm text-brand-100">This pot goes to</span>
-          <span className="font-heading block truncate text-xl font-bold">
-            {recipient?.isViewer ? "You" : (recipient?.name ?? "—")}
-          </span>
-          {open?.projectedPayout != null && open.projectedPayout < detail.group.pot && (
-            <span className="block text-xs text-brand-100">
-              About {formatPeso(open.projectedPayout)} after what {recipient?.isViewer ? "you" : "they"} owe
-            </span>
+          <span className={`block text-sm ${theme.muted}`}>{payoutDay ? "The pot goes out today to" : "This pot goes to"}</span>
+          <span className="font-heading block truncate text-xl font-bold">{who}</span>
+          {/* The recipient has their own projection in "You"; everyone else sees it here. */}
+          {open?.projectedPayout != null && open.projectedPayout < detail.group.pot && !recipient?.isViewer && (
+            <span className={`block text-xs ${theme.muted}`}>About {formatPeso(open.projectedPayout)} after what they owe</span>
           )}
         </p>
       </div>
       <p className="font-heading mt-4 text-3xl font-bold tabular-nums">
         {formatPeso(period.approvedTotal)}
-        <span className="text-base font-semibold text-brand-100"> of {formatPeso(period.expected)} collected</span>
+        <span className={`text-base font-semibold ${theme.muted}`}> of {formatPeso(period.expected)} collected</span>
       </p>
       <div
-        className="mt-2 flex h-2.5 overflow-hidden rounded-full bg-brand-900/50"
+        className={`mt-2 flex h-2.5 overflow-hidden rounded-full ${theme.track}`}
         role="progressbar"
         aria-valuenow={percent}
         aria-valuemin={0}
         aria-valuemax={100}
         aria-label="Collected so far"
       >
-        <div className="h-full bg-sun-300" style={{ width: `${percent}%` }} />
-        <div className="h-full bg-sun-300/40" style={{ width: `${pendingPercent}%` }} />
+        <div className={`h-full ${theme.fill}`} style={{ width: `${percent}%` }} />
+        <div className={`h-full ${theme.fillPending}`} style={{ width: `${pendingPercent}%` }} />
       </div>
       {period.pendingTotal > 0 && (
-        <p className="mt-2 text-xs text-brand-100">{formatPeso(period.pendingTotal)} more is waiting for review.</p>
+        <p className={`mt-2 text-xs ${theme.muted}`}>{formatPeso(period.pendingTotal)} more is waiting for review.</p>
+      )}
+      {payoutDay && (
+        <p className={`mt-2 text-xs ${theme.muted}`}>Payments approved before midnight still count; then the round closes.</p>
       )}
     </section>
   );
 }
+
+/** One size for whatever ends a row in "This round", a button or a status badge, so rows line up. */
+const TRAILING = "h-9 min-w-24 shrink-0 items-center justify-center px-3";
 
 function StatusChip({ standing }: { standing: PeriodSlot }) {
   const styles = {
@@ -69,7 +189,7 @@ function StatusChip({ standing }: { standing: PeriodSlot }) {
     UNPAID: "bg-ink-100 text-ink-600",
   } as const;
   const label = { PAID: "Paid", PARTIAL: "Partly paid", UNPAID: "Not paid" }[standing.status];
-  return <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${styles[standing.status]}`}>{label}</span>;
+  return <span className={`inline-flex rounded-full text-sm font-bold ${TRAILING} ${styles[standing.status]}`}>{label}</span>;
 }
 
 /**
@@ -110,7 +230,6 @@ export function PeriodStatusList({
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-bold text-ink-900">
                   {slot.name}
-                  {slot.isViewer && <span className="font-semibold text-brand-700"> (you)</span>}
                 </span>
                 <span className="block text-xs text-ink-500 tabular-nums">
                   {standing.status === "PAID"
@@ -121,34 +240,31 @@ export function PeriodStatusList({
                   )}
                 </span>
               </span>
-              <StatusChip standing={standing} />
             </>
           );
-          const row = "flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left";
           const remindable =
             onRemind && detail.viewer.isOrganizer && slot.kind === "MEMBER" && !slot.isViewer && standing.status !== "PAID";
           const remindedRecently = standing.remindedRecently;
+          // Each row's one action is a labelled button, not a tappable row with a bare chevron.
           return (
-            <li key={slot.id} className={remindable ? "flex items-center" : undefined}>
-              {remindable ? (
-                <>
-                  <div className={`${row} min-w-0 flex-1 pr-2`}>{body}</div>
-                  <button
-                    type="button"
-                    onClick={() => onRemind(slot)}
-                    disabled={remindedRecently || pending === `remind-${slot.id}`}
-                    className={`${ui.btnGhost} mr-2 shrink-0 text-xs`}
-                  >
-                    {remindedRecently ? "Reminded" : pending === `remind-${slot.id}` ? "…" : "Remind"}
-                  </button>
-                </>
-              ) : recordable ? (
-                <button type="button" onClick={() => onRecord(slot)} className={`${row} transition-colors hover:bg-ink-50`}>
-                  {body}
-                  <ChevronRight className="h-4 w-4 shrink-0 text-ink-400" aria-hidden />
+            <li key={slot.id} className={`flex min-h-16 items-center gap-3 px-4 py-3 ${slot.isViewer ? "bg-brand-50" : ""}`}>
+              {body}
+              {recordable ? (
+                <button type="button" onClick={() => onRecord(slot)} className={`${ui.btnSecondarySm} ${TRAILING}`}>
+                  {slot.isViewer && !detail.viewer.isOrganizer ? "Report" : "Record"}
+                </button>
+              ) : remindable ? (
+                <button
+                  type="button"
+                  onClick={() => onRemind(slot)}
+                  disabled={remindedRecently || pending === `remind-${slot.id}`}
+                  className={`${ui.btnSecondarySm} ${TRAILING}`}
+                >
+                  {remindedRecently ? "Reminded" : pending === `remind-${slot.id}` ? "Reminding…" : "Remind"}
                 </button>
               ) : (
-                <div className={row}>{body}</div>
+                // With a button, the amount line already says what's missing; the chip would crowd the name.
+                <StatusChip standing={standing} />
               )}
             </li>
           );
@@ -272,12 +388,11 @@ export function DebtsList({ detail, onPay }: { detail: GroupDetail; onPay: (slot
       </p>
       <ul className="divide-y divide-ink-100 overflow-hidden rounded-3xl border border-ink-200 bg-white">
         {owing.map(({ slot, total }) => (
-          <li key={slot.id} className="flex min-h-16 items-center gap-3 px-4 py-3">
+          <li key={slot.id} className={`flex min-h-16 items-center gap-3 px-4 py-3 ${slot.isViewer ? "bg-brand-50" : ""}`}>
             <Avatar name={slot.name} size="md" placeholder={slot.kind === "PLACEHOLDER"} />
             <span className="min-w-0 flex-1">
               <span className="block truncate text-sm font-bold text-ink-900">
                 {slot.name}
-                {slot.isViewer && <span className="font-semibold text-brand-700"> (you)</span>}
               </span>
               <span className="block text-xs text-ink-500 tabular-nums">
                 {formatPeso(slot.debt.principal)} unpaid

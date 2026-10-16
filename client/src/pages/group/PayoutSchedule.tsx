@@ -1,14 +1,14 @@
 import { ArrowDown, ArrowUp, ChevronRight, Shuffle } from "lucide-react";
 import type { GroupDetail, SlotView } from "../../api/client";
-import { dueHint, formatDateParts } from "../../lib/dates";
+import { dueHint, formatShortDate } from "../../lib/dates";
 import { formatPeso } from "../../lib/money";
 import { ui } from "../../lib/ui";
-import { currentOrder, slotHasActions, slotTag } from "./slots";
+import { currentOrder, slotHasActions } from "./slots";
 
 const PAYOUT_LINE = {
   AWAITING_HANDOVER: (net: string) => `${net} to hand over`,
-  HANDED_OVER: (net: string) => `${net} handed over · waiting for confirmation`,
-  CONFIRMED: (net: string) => `Got ${net}`,
+  HANDED_OVER: (net: string) => `Handed over ${net}`,
+  CONFIRMED: (net: string) => `Paid out ${net}`,
 } as const;
 
 /**
@@ -46,6 +46,9 @@ export function PayoutSchedule({
   const order = currentOrder(detail);
   // While arranging, the rows follow the draft; dates stay fixed to round numbers.
   const recipients: (SlotView | undefined)[] = (draft ?? order ?? []).map((id) => slotById.get(id));
+  // If any payout falls outside this year, every date shows its year so the column lines up.
+  const thisYear = String(new Date().getFullYear());
+  const withYear = schedule.some((r) => !r.payoutDate.startsWith(thisYear));
 
   function startArranging() {
     onDraftChange?.(order ?? [...slots].sort((a, b) => Number(b.isOrganizer) - Number(a.isOrganizer)).map((s) => s.id));
@@ -58,12 +61,8 @@ export function PayoutSchedule({
     onDraftChange?.(next);
   }
 
-  const subtitle =
-    group.state === "LOBBY" && !order
-      ? "Who gets each payout is set once every slot is filled."
-      : group.state !== "LOBBY"
-        ? "The order is final."
-        : "You can change it until you launch.";
+  // The one thing worth saying: before launch, an order can still change.
+  const subtitle = group.state === "LOBBY" && order ? "You can change it until you launch." : null;
   const moveButton =
     "flex h-11 w-11 items-center justify-center rounded-full border-2 border-ink-200 text-ink-700 hover:bg-ink-50 disabled:opacity-30";
 
@@ -74,7 +73,7 @@ export function PayoutSchedule({
           <h2 id="schedule-heading" className={ui.sectionHeading}>
             Payout schedule
           </h2>
-          <p className={ui.sectionSubtitle}>{subtitle}</p>
+          {subtitle && <p className={ui.sectionSubtitle}>{subtitle}</p>}
         </div>
         {canArrange && !draft && (
           <div className="flex gap-2">
@@ -93,15 +92,12 @@ export function PayoutSchedule({
         {schedule.map((round, index) => {
           const slot = recipients[index];
           const payout = detail.payouts.find((p) => p.round === round.number);
-          // The heading already says "Payout schedule", so rows show the date in its own column and
-          // use the line under the name for where the payout stands.
-          const parts = formatDateParts(round.payoutDate);
-          const hint = dueHint(round.payoutDate)?.label ?? "";
+          // One idea per row: who, and when. A second line appears only when there's news: a payout
+          // made or pending, or the round collecting now. Upcoming turns need nothing beyond the date.
           const status = payout
             ? PAYOUT_LINE[payout.status](formatPeso(payout.net))
-            : round.status === "OPEN"
-              ? "Collecting now"
-              : hint.charAt(0).toUpperCase() + hint.slice(1);
+            : null;
+          const hint = dueHint(round.payoutDate)?.label ?? "";
           const body = (
             <>
               <span
@@ -121,31 +117,26 @@ export function PayoutSchedule({
                   <>
                     <span className="block truncate text-sm font-bold text-ink-900">
                       {slot.name}
-                      {slot.isViewer && <span className="font-semibold text-brand-700"> (you)</span>}
                     </span>
-                    <span className={`block truncate text-xs ${round.status === "OPEN" && !payout ? "font-semibold text-brand-700" : "text-ink-500"}`}>
-                      {status}
-                      {slot.kind === "PLACEHOLDER" && ` · ${slotTag(slot).toLowerCase()}`}
-                    </span>
+                    {status && (
+                      <span className={`block truncate text-xs ${payout ? "text-ink-500" : "font-semibold text-brand-700"}`}>
+                        {status}
+                      </span>
+                    )}
                   </>
                 ) : (
                   // No order yet (the subtitle says so): the countdown is all there is to say.
-                  <span className="block truncate text-sm text-ink-500">{status}</span>
+                  <span className="block truncate text-sm text-ink-500">{hint.charAt(0).toUpperCase() + hint.slice(1)}</span>
                 )}
               </span>
-              {parts && (
-                <span className="shrink-0 text-right">
-                  <span className="block text-sm font-bold tabular-nums text-ink-900">{parts.day}</span>
-                  <span className="block text-xs text-ink-500">{parts.weekday}</span>
-                </span>
-              )}
+              <span className="shrink-0 text-sm font-semibold tabular-nums text-ink-700">{formatShortDate(round.payoutDate, withYear)}</span>
             </>
           );
           const opensPayout = !!payout && !!onOpenPayout;
           const tappable = !draft && slot && (opensPayout || (onSelect && slotHasActions(slot, detail)));
           // One fixed height for every row, arranging or not: it fits the 44px move buttons, and the
           // text lines truncate instead of wrapping. Arranging tightens the spacing to leave the name room.
-          const rowClass = `flex h-17 w-full items-center ${draft ? "gap-2 px-3" : "gap-3 px-4"} text-left ${slot?.isViewer ? "bg-brand-50" : ""}`;
+          const rowClass = `flex h-14 w-full items-center ${draft ? "gap-2 px-3" : "gap-3 px-4"} text-left ${slot?.isViewer ? "bg-brand-50" : ""}`;
           return (
             <li key={round.number}>
               {tappable ? (
@@ -160,6 +151,8 @@ export function PayoutSchedule({
               ) : (
                 <div className={rowClass}>
                   {body}
+                  {/* Same width as the chevron on tappable rows, so every date lines up. */}
+                  {!draft && <span className="w-4 shrink-0" aria-hidden />}
                   {draft && (
                     <span className="flex shrink-0 gap-1">
                       <button type="button" onClick={() => move(index, -1)} disabled={index === 0} aria-label={`Move ${slot?.name} earlier`} className={moveButton}>
