@@ -13,10 +13,14 @@ export function slotTag(slot: SlotView): string {
 }
 
 /**
- * Whether the organizer has anything to do with this slot: a placeholder's claim link (any time it
- * can be claimed), or removing someone (lobby only). Their own slot has no actions.
+ * Whether tapping this slot does anything for the viewer: ask to swap turns (running), a
+ * placeholder's claim link (organizer, any time it can be claimed), or removing someone (lobby).
  */
 export function slotHasActions(slot: SlotView, detail: GroupDetail): boolean {
   if (slot.isViewer) return false;
+  // While it runs, anyone can ask to swap with an upcoming turn (§9).
+  if (detail.group.state === "ACTIVE") {
+    return slot.kind === "PLACEHOLDER" || detail.schedule.some((r) => r.recipientSlotId === slot.id && r.status !== "CLOSED");
+  }
   return slot.kind === "PLACEHOLDER" || detail.group.state === "LOBBY";
 }

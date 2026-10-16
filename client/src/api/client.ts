@@ -182,6 +182,17 @@ export interface DisputeView {
   refund: number | null;
 }
 
+/** A request to trade payout turns (§9). */
+export interface SwapView {
+  id: string;
+  requesterSlotId: string;
+  targetSlotId: string;
+  status: "AWAITING_TARGET" | "AWAITING_ORGANIZER" | "APPROVED" | "DECLINED" | "DENIED" | "EXPIRED" | "CANCELLED";
+  createdAt: string;
+  expiresAt: string | null;
+  reviewNote: string | null;
+}
+
 export interface GroupDetail {
   group: GroupSummary & { organizerName: string };
   viewer: { slotId: string; isOrganizer: boolean };
@@ -195,6 +206,8 @@ export interface GroupDetail {
   submissions: SubmissionView[];
   /** Disputes the viewer may see, oldest first. */
   disputes: DisputeView[];
+  /** Turn swaps the viewer may see, newest first. */
+  swaps: SwapView[];
   /** Processed payouts, newest first. */
   payouts: PayoutView[];
   /** LOBBY only. */
@@ -530,6 +543,13 @@ export const api = {
   denyDispute: (id: string, disputeId: string, note: string) =>
     send<GroupDetail>("POST", `/groups/${id}/disputes/${disputeId}/deny`, { note }),
   cancelDispute: (id: string, disputeId: string) => send<GroupDetail>("POST", `/groups/${id}/disputes/${disputeId}/cancel`),
+  requestSwap: (id: string, body: { targetSlotId: string; requesterSlotId?: string }) =>
+    send<GroupDetail>("POST", `/groups/${id}/swaps`, body),
+  acceptSwap: (id: string, swapId: string) => send<GroupDetail>("POST", `/groups/${id}/swaps/${swapId}/accept`),
+  declineSwap: (id: string, swapId: string) => send<GroupDetail>("POST", `/groups/${id}/swaps/${swapId}/decline`),
+  approveSwap: (id: string, swapId: string) => send<GroupDetail>("POST", `/groups/${id}/swaps/${swapId}/approve`),
+  denySwap: (id: string, swapId: string, note: string) => send<GroupDetail>("POST", `/groups/${id}/swaps/${swapId}/deny`, { note }),
+  cancelSwap: (id: string, swapId: string) => send<GroupDetail>("POST", `/groups/${id}/swaps/${swapId}/cancel`),
   markHandedOver: (id: string, round: number, proofPath?: string) =>
     send<GroupDetail>("POST", `/groups/${id}/rounds/${round}/handover`, { proofPath }),
   confirmReceipt: (id: string, round: number) => send<GroupDetail>("POST", `/groups/${id}/rounds/${round}/confirm-receipt`),

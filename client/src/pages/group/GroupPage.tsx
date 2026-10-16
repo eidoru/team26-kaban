@@ -2,6 +2,7 @@ import { type ReactNode, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import {
+  ArrowLeftRight,
   Ban,
   Banknote,
   CalendarClock,
@@ -15,7 +16,15 @@ import {
   Shuffle,
   Users,
 } from "lucide-react";
-import { ApiError, api, type DisputeView, type GroupDetail, type SlotView, type SubmissionView } from "../../api/client";
+import {
+  ApiError,
+  api,
+  type DisputeView,
+  type GroupDetail,
+  type SlotView,
+  type SubmissionView,
+  type SwapView,
+} from "../../api/client";
 import { ActionBar } from "../../components/flow/ActionBar";
 import { NowPanel } from "../../components/flow/NowPanel";
 import { useDialog } from "../../context/DialogContext";
@@ -35,6 +44,8 @@ import { PayoutSheet } from "./active/PayoutSheet";
 import { debtReportable, owedBy, payoutToActOn, reviewItems, standingOf, type ReviewItem } from "./active/period";
 import { DebtsList, MyPayments, PeriodCard, PeriodStatusList, RefundsOwed } from "./active/PeriodSections";
 import { DisputeSheet } from "./active/DisputeSheet";
+import { SwapSheet, SwapsList } from "./swaps/SwapSections";
+import { swapToActOn } from "./swaps/swaps";
 import { ReviewSheet } from "./active/ReviewSheet";
 import { SlotsList } from "./SlotsList";
 
@@ -106,6 +117,7 @@ function GroupView({ detail }: { detail: GroupDetail }) {
   const [payTarget, setPayTarget] = useState<{ slotId: string; mode: PayMode } | null>(null);
   const [payoutRound, setPayoutRound] = useState<number | null>(null);
   const [disputeForId, setDisputeForId] = useState<string | null>(null);
+  const [swapWithSlotId, setSwapWithSlotId] = useState<string | null>(null);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [demoTools] = useDemoToolsSetting();
   const selectedSlot = detail.slots.find((s) => s.id === selectedSlotId) ?? null;
@@ -237,7 +249,28 @@ function GroupView({ detail }: { detail: GroupDetail }) {
     if (confirmed) await run(`withdraw-${submission.id}`, () => api.cancelSubmission(group.id, submission.id));
   }
 
-  const selectSlot = isOrganizer && group.state !== "CANCELLED" ? (slot: SlotView) => setSelectedSlotId(slot.id) : undefined;
+  // While it runs, tapping someone's turn asks to swap (§9); otherwise organizers open slot actions.
+  const selectSlot =
+    group.state === "ACTIVE"
+      ? (slot: SlotView) => setSwapWithSlotId(slot.id)
+      : isOrganizer && group.state !== "CANCELLED"
+        ? (slot: SlotView) => setSelectedSlotId(slot.id)
+        : undefined;
+
+  const swapAction = (swap: SwapView, call: () => Promise<GroupDetail>) => void run(`swap-${swap.id}`, call);
+  async function denySwap(swap: SwapView) {
+    const note = await dialog.prompt({
+      title: "Deny this swap?",
+      label: "Why not?",
+      required: true,
+      multiline: true,
+      submitLabel: "Deny swap",
+    });
+    if (note?.trim()) await run(`swap-${swap.id}`, () => api.denySwap(group.id, swap.id, note.trim()));
+  }
+
+  // The swap the Now panel shows with its actions; the swaps list leaves it out.
+  let nowSwapId: string | undefined;
 
   // --- The viewer's next step (design rule: it comes first), and the one main action.
   let now: ReactNode;
@@ -352,6 +385,19 @@ function GroupView({ detail }: { detail: GroupDetail }) {
     const mine = period ? standingOf(detail, viewer.slotId) : null;
     const queue = isOrganizer ? reviewItems(detail) : [];
     const payout = payoutToActOn(detail);
+    const swapTask = swapToActOn(detail);
+    /** "Your round 3 (Feb 1)" / "Mia's round 2 (Jan 1)", for the swap panel. */
+    const turnLine = (slotId: string) => {
+      const slot = detail.slots.find((x) => x.id === slotId);
+      const round = detail.schedule.find((r) => r.recipientSlotId === slotId);
+      return `${slot?.isViewer ? "Your" : `${slot?.name}'s`} round ${round?.number} (${round ? formatDueDate(round.payoutDate) : ""})`;
+    };
+    const payButton = (
+      <button type="button" onClick={() => pay(viewer.slotId, "CONTRIBUTION")} className={ui.btnPrimary}>
+        <HandCoins className="h-4 w-4" aria-hidden />
+        {isOrganizer ? "Record your payment" : "Report a payment"}
+      </button>
+    );
     const owed = owedBy(detail, viewer.slotId);
     const debtLeft = debtReportable(detail, viewer.slotId);
     const hint = period ? dueHint(period.payoutDate) : null;
@@ -418,6 +464,57 @@ function GroupView({ detail }: { detail: GroupDetail }) {
           {confirming ? "Confirm receipt" : ownPayout ? "Mark as received" : "Mark as handed over"}
         </button>
       );
+    } else if (swapTask) {
+      const { swap, as } = swapTask;
+      nowSwapId = swap.id;
+      const requester = detail.slots.find((x) => x.id === swap.requesterSlotId);
+      const target = detail.slots.find((x) => x.id === swap.targetSlotId);
+      now = (
+        <NowPanel
+          tone="sun"
+          icon={ArrowLeftRight}
+          eyebrow="Turn swap"
+          title={
+            as === "target"
+              ? `${requester?.name} asks to swap turns${target?.isViewer ? "" : ` with ${target?.name}`}`
+              : `Approve ${requester?.name} and ${target?.name} swapping turns`
+          }
+          body={
+            as === "target"
+              ? `${turnLine(swap.targetSlotId)} for ${turnLine(swap.requesterSlotId)}.`
+              : "They both agreed. Approving changes the payout order."
+          }
+        >
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() =>
+                as === "target"
+                  ? swapAction(swap, () => api.declineSwap(group.id, swap.id))
+                  : void denySwap(swap)
+              }
+              disabled={pending === `swap-${swap.id}`}
+              className={`${ui.btnSecondary} min-h-11 flex-1`}
+            >
+              {as === "target" ? "Decline" : "Deny"}
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                swapAction(swap, () =>
+                  as === "target" ? api.acceptSwap(group.id, swap.id) : api.approveSwap(group.id, swap.id),
+                )
+              }
+              disabled={pending === `swap-${swap.id}`}
+              className={`${ui.btnPrimary} min-h-11 flex-1`}
+            >
+              {as === "target" ? "Accept" : "Approve"}
+            </button>
+          </div>
+        </NowPanel>
+      );
+      // Paying stays the main action while a swap waits.
+      if (mine && mine.reportable > 0) primary = payButton;
     } else if (mine && mine.reportable > 0) {
       now = (
         <NowPanel
@@ -434,12 +531,7 @@ function GroupView({ detail }: { detail: GroupDetail }) {
           }
         />
       );
-      primary = (
-        <button type="button" onClick={() => pay(viewer.slotId, "CONTRIBUTION")} className={ui.btnPrimary}>
-          <HandCoins className="h-4 w-4" aria-hidden />
-          {isOrganizer ? "Record your payment" : "Report a payment"}
-        </button>
-      );
+      primary = payButton;
     } else if (debtLeft > 0) {
       now = (
         <NowPanel
@@ -543,7 +635,7 @@ function GroupView({ detail }: { detail: GroupDetail }) {
       {detail.period && (
         <>
           <PeriodCard detail={detail} />
-          <PeriodStatusList detail={detail} onRecord={isOrganizer ? (slot) => pay(slot.id, "CONTRIBUTION") : undefined} />
+          <PeriodStatusList detail={detail} onRecord={(slot) => pay(slot.id, "CONTRIBUTION")} />
         </>
       )}
       <DebtsList detail={detail} onPay={(slot) => pay(slot.id, "DEBT_PAYMENT")} />
@@ -554,6 +646,16 @@ function GroupView({ detail }: { detail: GroupDetail }) {
         onWithdraw={(s) => void withdraw(s)}
         onDispute={(s) => setDisputeForId(s.id)}
         onWithdrawDispute={(d) => void withdrawDispute(d)}
+      />
+      <SwapsList
+        detail={detail}
+        hideId={nowSwapId}
+        pending={pending}
+        onAccept={(sw) => swapAction(sw, () => api.acceptSwap(group.id, sw.id))}
+        onDecline={(sw) => swapAction(sw, () => api.declineSwap(group.id, sw.id))}
+        onApprove={(sw) => swapAction(sw, () => api.approveSwap(group.id, sw.id))}
+        onDeny={(sw) => void denySwap(sw)}
+        onCancel={(sw) => swapAction(sw, () => api.cancelSwap(group.id, sw.id))}
       />
       {/* Once everyone has a turn, the schedule lists every member too, so it replaces the member list. */}
       {!ordered && (
@@ -608,6 +710,17 @@ function GroupView({ detail }: { detail: GroupDetail }) {
         }
         onClose={() => setPayTarget(null)}
         onSubmit={submitPayment}
+      />
+      <SwapSheet
+        detail={detail}
+        slot={detail.slots.find((x) => x.id === swapWithSlotId) ?? null}
+        pending={pending}
+        onClose={() => setSwapWithSlotId(null)}
+        onRequest={async (slot) => !!(await run("swap", () => api.requestSwap(group.id, { targetSlotId: slot.id })))}
+        onManageSlot={(slot) => {
+          setSwapWithSlotId(null);
+          setSelectedSlotId(slot.id);
+        }}
       />
       <DisputeSheet
         detail={detail}

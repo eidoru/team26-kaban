@@ -62,8 +62,9 @@ function StatusChip({ standing }: { standing: PeriodSlot }) {
 }
 
 /**
- * Everyone's standing this round, in payout order (R-SUB-07, R-DEC-06). `onRecord` makes the
- * organizer's own row and placeholders tappable, to record their payments (R-SUB-02).
+ * Everyone's standing this round, in payout order (R-SUB-07, R-DEC-06). The viewer's own row is
+ * always tappable to pay, whatever the Now panel is showing; the organizer's placeholder rows too,
+ * to record their payments (R-SUB-02).
  */
 export function PeriodStatusList({ detail, onRecord }: { detail: GroupDetail; onRecord?: (slot: SlotView) => void }) {
   const period = detail.period!;
@@ -77,7 +78,10 @@ export function PeriodStatusList({ detail, onRecord }: { detail: GroupDetail; on
       <ul className="divide-y divide-ink-100 overflow-hidden rounded-3xl border border-ink-200 bg-white">
         {slots.map((slot) => {
           const standing = period.slots.find((s) => s.slotId === slot.id)!;
-          const recordable = onRecord && (slot.isViewer || slot.kind === "PLACEHOLDER") && standing.status !== "PAID";
+          const recordable =
+            onRecord &&
+            (slot.isViewer || (detail.viewer.isOrganizer && slot.kind === "PLACEHOLDER")) &&
+            standing.status !== "PAID";
           const body = (
             <>
               <Avatar name={slot.name} size="md" placeholder={slot.kind === "PLACEHOLDER"} />
