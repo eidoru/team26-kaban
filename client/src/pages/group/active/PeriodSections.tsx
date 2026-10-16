@@ -1,9 +1,10 @@
 import { ChevronRight, Clock, ImageOff, Paperclip } from "lucide-react";
-import type { GroupDetail, PeriodSlot, SlotView, SubmissionView } from "../../../api/client";
+import type { DisputeView, GroupDetail, PeriodSlot, SlotView, SubmissionView } from "../../../api/client";
 import { Avatar } from "../../../components/Avatar";
 import { formatDueDate } from "../../../lib/dates";
 import { formatPeso } from "../../../lib/money";
 import { ui } from "../../../lib/ui";
+import { latestDispute } from "./period";
 
 /** The open round: whose pot it is, when, and how much is collected (approved money only, R-SUB-07). */
 export function PeriodCard({ detail }: { detail: GroupDetail }) {
@@ -123,15 +124,22 @@ const SUBMISSION_LABELS: Record<SubmissionView["status"], { text: string; tone: 
   CANCELLED: { text: "Withdrawn", tone: "text-ink-500" },
 };
 
-/** What the viewer reported this round, newest first, with Withdraw on pending ones (R-SUB-04). */
+/**
+ * What the viewer reported, newest first: Withdraw on pending ones (R-SUB-04), Dispute on approved
+ * contributions while their period is open (§6.2), and each dispute's outcome.
+ */
 export function MyPayments({
   detail,
   pending,
   onWithdraw,
+  onDispute,
+  onWithdrawDispute,
 }: {
   detail: GroupDetail;
   pending: string | null;
   onWithdraw: (submission: SubmissionView) => void;
+  onDispute: (submission: SubmissionView) => void;
+  onWithdrawDispute: (dispute: DisputeView) => void;
 }) {
   const mine = detail.submissions.filter((s) => s.mine).sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
   if (mine.length === 0) return null;
@@ -145,12 +153,20 @@ export function MyPayments({
         {mine.map((s) => {
           const label = SUBMISSION_LABELS[s.status];
           const slot = nameOf(s.slotId);
+          const dispute = latestDispute(detail, s.id);
+          const changed = s.effectiveAmount != null && s.effectiveAmount !== s.amount;
+          const disputable =
+            s.status === "APPROVED" &&
+            s.appliedAs === "CONTRIBUTION" &&
+            s.round === detail.period?.number &&
+            dispute?.status !== "PENDING";
           return (
             <li key={s.id} className="px-4 py-3">
               <div className="flex items-start gap-3">
                 <span className="min-w-0 flex-1">
                   <span className="block text-sm font-bold text-ink-900 tabular-nums">
-                    {formatPeso(s.amount)}
+                    {formatPeso(s.effectiveAmount ?? s.amount)}
+                    {changed && <span className="font-semibold text-ink-500"> (was {formatPeso(s.amount)})</span>}
                     {!slot?.isViewer && <span className="font-semibold text-ink-600"> for {slot?.name}</span>}
                     {(s.type === "DEBT_PAYMENT" || s.appliedAs === "DEBT_PAYMENT") && (
                       <span className="font-semibold text-ink-600"> toward debt</span>
@@ -176,7 +192,13 @@ export function MyPayments({
                     Withdraw
                   </button>
                 )}
+                {disputable && (
+                  <button type="button" onClick={() => onDispute(s)} className={ui.btnGhost}>
+                    Dispute
+                  </button>
+                )}
               </div>
+              {dispute && <DisputeLine dispute={dispute} pending={pending} onWithdraw={onWithdrawDispute} />}
               {s.status === "DENIED" && s.denialReason && (
                 <p className="mt-2 rounded-xl bg-danger-50 px-3 py-2 text-xs text-danger-800">Reason: {s.denialReason}</p>
               )}
@@ -231,6 +253,79 @@ export function DebtsList({ detail, onPay }: { detail: GroupDetail; onPay: (slot
             </span>
           </li>
         ))}
+      </ul>
+    </section>
+  );
+}
+
+/** A dispute's outcome under its payment. */
+function DisputeLine({
+  dispute,
+  pending,
+  onWithdraw,
+}: {
+  dispute: DisputeView;
+  pending: string | null;
+  onWithdraw: (dispute: DisputeView) => void;
+}) {
+  const to = formatPeso(dispute.proposedAmount);
+  const lines: Record<DisputeView["status"], { text: string; tone: string }> = {
+    PENDING: { text: `You asked to change it to ${to}. Waiting for review.`, tone: "bg-sun-50 text-sun-900" },
+    APPROVED: {
+      text: `Changed to ${to}.${dispute.refund ? ` The organizer owes you a ${formatPeso(dispute.refund)} refund.` : ""}`,
+      tone: "bg-brand-50 text-brand-900",
+    },
+    DENIED: { text: `Change to ${to} not accepted: ${dispute.reviewNote}`, tone: "bg-danger-50 text-danger-800" },
+    CANCELLED: { text: `You withdrew the change to ${to}.`, tone: "bg-ink-50 text-ink-600" },
+    EXPIRED: {
+      text: `The change to ${to} wasn't settled before the payout, so ${formatPeso(dispute.previousAmount)} stands.`,
+      tone: "bg-ink-50 text-ink-600",
+    },
+  };
+  const line = lines[dispute.status];
+  return (
+    <div className={`mt-2 flex items-start gap-2 rounded-xl px-3 py-2 text-xs ${line.tone}`}>
+      <span className="flex-1">{line.text}</span>
+      {dispute.status === "PENDING" && dispute.mine && (
+        <button
+          type="button"
+          onClick={() => onWithdraw(dispute)}
+          disabled={pending === `withdraw-dispute-${dispute.id}`}
+          className="shrink-0 font-bold underline"
+        >
+          Withdraw
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** R-DSP-03 / R-DEC-14: refunds the organizer owes, recorded only. Hidden when there are none. */
+export function RefundsOwed({ detail }: { detail: GroupDetail }) {
+  const refunds = detail.disputes.filter((d) => d.refund);
+  if (!detail.viewer.isOrganizer || refunds.length === 0) return null;
+  return (
+    <section aria-labelledby="refunds-heading">
+      <h2 id="refunds-heading" className={ui.sectionHeading}>
+        Refunds you owe
+      </h2>
+      <p className={`${ui.sectionSubtitle} mb-3`}>From approved disputes. Hand these back outside the app.</p>
+      <ul className="divide-y divide-ink-100 overflow-hidden rounded-3xl border border-ink-200 bg-white">
+        {refunds.map((d) => {
+          const slot = detail.slots.find((s) => s.id === d.slotId);
+          return (
+            <li key={d.id} className="flex items-center gap-3 px-4 py-3">
+              <Avatar name={slot?.name} size="md" placeholder={slot?.kind === "PLACEHOLDER"} />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-bold text-ink-900">{slot?.name}</span>
+                <span className="block text-xs text-ink-500">
+                  Round {d.round}: {formatPeso(d.previousAmount)} corrected to {formatPeso(d.proposedAmount)}
+                </span>
+              </span>
+              <span className="font-heading text-base font-bold tabular-nums text-ink-900">{formatPeso(d.refund!)}</span>
+            </li>
+          );
+        })}
       </ul>
     </section>
   );

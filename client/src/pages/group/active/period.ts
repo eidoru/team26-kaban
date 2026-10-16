@@ -1,5 +1,5 @@
 import { submissionCap } from "@domain/submissions";
-import type { GroupDetail } from "../../../api/client";
+import type { DisputeView, GroupDetail, SubmissionView } from "../../../api/client";
 
 /** Pending submissions in the order they came in: the order they must be reviewed in (R-SUB-05). */
 export function reviewQueue(detail: GroupDetail) {
@@ -48,4 +48,24 @@ export function payoutToActOn(detail: GroupDetail) {
         : p.status === "HANDED_OVER" && p.recipientSlotId === viewer.slotId,
     ) ?? null
   );
+}
+
+/** Pending disputes, oldest first: reviewed before payments, since they expire at the payout (R-DEC-21). */
+export function disputeQueue(detail: GroupDetail) {
+  return detail.disputes.filter((d) => d.status === "PENDING");
+}
+
+/** The latest dispute about a submission, if any. */
+export function latestDispute(detail: GroupDetail, submissionId: string) {
+  return detail.disputes.filter((d) => d.submissionId === submissionId).at(-1) ?? null;
+}
+
+export type ReviewItem = { kind: "dispute"; item: DisputeView } | { kind: "payment"; item: SubmissionView };
+
+/** Disputes first (they expire at the payout, R-DEC-21), then payments in the order they came in. */
+export function reviewItems(detail: GroupDetail): ReviewItem[] {
+  return [
+    ...disputeQueue(detail).map((item) => ({ kind: "dispute" as const, item })),
+    ...reviewQueue(detail).map((item) => ({ kind: "payment" as const, item })),
+  ];
 }

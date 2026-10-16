@@ -15,7 +15,7 @@ import {
   Shuffle,
   Users,
 } from "lucide-react";
-import { ApiError, api, type GroupDetail, type SlotView, type SubmissionView } from "../../api/client";
+import { ApiError, api, type DisputeView, type GroupDetail, type SlotView, type SubmissionView } from "../../api/client";
 import { ActionBar } from "../../components/flow/ActionBar";
 import { NowPanel } from "../../components/flow/NowPanel";
 import { useDialog } from "../../context/DialogContext";
@@ -32,8 +32,9 @@ import { PayoutSchedule } from "./PayoutSchedule";
 import { currentOrder } from "./slots";
 import { PaySheet, type PayMode } from "./active/PaySheet";
 import { PayoutSheet } from "./active/PayoutSheet";
-import { debtReportable, owedBy, payoutToActOn, reviewQueue, standingOf } from "./active/period";
-import { DebtsList, MyPayments, PeriodCard, PeriodStatusList } from "./active/PeriodSections";
+import { debtReportable, owedBy, payoutToActOn, reviewItems, standingOf, type ReviewItem } from "./active/period";
+import { DebtsList, MyPayments, PeriodCard, PeriodStatusList, RefundsOwed } from "./active/PeriodSections";
+import { DisputeSheet } from "./active/DisputeSheet";
 import { ReviewSheet } from "./active/ReviewSheet";
 import { SlotsList } from "./SlotsList";
 
@@ -104,6 +105,7 @@ function GroupView({ detail }: { detail: GroupDetail }) {
   const [orderDraft, setOrderDraft] = useState<string[] | null>(null);
   const [payTarget, setPayTarget] = useState<{ slotId: string; mode: PayMode } | null>(null);
   const [payoutRound, setPayoutRound] = useState<number | null>(null);
+  const [disputeForId, setDisputeForId] = useState<string | null>(null);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [demoTools] = useDemoToolsSetting();
   const selectedSlot = detail.slots.find((s) => s.id === selectedSlotId) ?? null;
@@ -173,6 +175,40 @@ function GroupView({ detail }: { detail: GroupDetail }) {
   }
 
   const pay = (slotId: string, mode: PayMode) => setPayTarget({ slotId, mode });
+
+  /** Raise a dispute from the sheet; failures surface in the sheet. */
+  async function raiseDispute(input: { submissionId: string; proposedAmount: number; reason: string }) {
+    let message = "";
+    const saved = await run("dispute", () => api.raiseDispute(group.id, input), { onError: (e) => (message = e.message) });
+    if (!saved) {
+      clearError();
+      throw new Error(message);
+    }
+    return true;
+  }
+
+  async function withdrawDispute(dispute: DisputeView) {
+    const confirmed = await dialog.confirm({
+      title: "Withdraw this dispute?",
+      description: `The payment stays at ${formatPeso(dispute.previousAmount)}. You can dispute it again before the payout.`,
+      confirmLabel: "Withdraw",
+      variant: "danger",
+    });
+    if (confirmed) await run(`withdraw-dispute-${dispute.id}`, () => api.cancelDispute(group.id, dispute.id));
+  }
+
+  const approveItem = async (review: ReviewItem) =>
+    !!(await run("approve", () =>
+      review.kind === "dispute"
+        ? api.approveDispute(group.id, review.item.id)
+        : api.approveSubmission(group.id, review.item.id),
+    ));
+  const denyItem = async (review: ReviewItem, reason: string) =>
+    !!(await run("deny", () =>
+      review.kind === "dispute"
+        ? api.denyDispute(group.id, review.item.id, reason)
+        : api.denySubmission(group.id, review.item.id, reason),
+    ));
 
   /** Submit from the pay sheet; failures surface in the sheet, not behind it. */
   async function submitPayment(input: {
@@ -314,7 +350,7 @@ function GroupView({ detail }: { detail: GroupDetail }) {
   } else if (group.state === "ACTIVE" || group.state === "COMPLETED" || group.state === "COMPLETED_WITH_OUTSTANDING_DEBT") {
     const period = detail.period;
     const mine = period ? standingOf(detail, viewer.slotId) : null;
-    const queue = isOrganizer ? reviewQueue(detail) : [];
+    const queue = isOrganizer ? reviewItems(detail) : [];
     const payout = payoutToActOn(detail);
     const owed = owedBy(detail, viewer.slotId);
     const debtLeft = debtReportable(detail, viewer.slotId);
@@ -324,14 +360,24 @@ function GroupView({ detail }: { detail: GroupDetail }) {
     const owingSlots = detail.slots.filter((s) => s.debt.principal + s.debt.interest > 0);
 
     if (queue.length > 0) {
-      // Members are waiting on the organizer's reviews (R-SUB-03).
+      // Members are waiting on the organizer's reviews (R-SUB-03, R-DSP-02).
+      const disputes = queue.filter((q) => q.kind === "dispute").length;
+      const payments = queue.length - disputes;
+      const parts = [
+        disputes > 0 && `${disputes} dispute${disputes === 1 ? "" : "s"}`,
+        payments > 0 && `${payments} payment${payments === 1 ? "" : "s"}`,
+      ].filter(Boolean);
       now = (
         <NowPanel
           tone="sun"
           icon={ClipboardCheck}
           eyebrow="Needs you"
-          title={`${queue.length} payment${queue.length === 1 ? "" : "s"} to review`}
-          body="Oldest first. They count once you approve them."
+          title={`${parts.join(" and ")} to review`}
+          body={
+            disputes > 0
+              ? "Disputes first: they expire at the payout if you don't decide."
+              : "Oldest first. They count once you approve them."
+          }
         />
       );
       primary = (
@@ -501,7 +547,14 @@ function GroupView({ detail }: { detail: GroupDetail }) {
         </>
       )}
       <DebtsList detail={detail} onPay={(slot) => pay(slot.id, "DEBT_PAYMENT")} />
-      <MyPayments detail={detail} pending={pending} onWithdraw={(s) => void withdraw(s)} />
+      <RefundsOwed detail={detail} />
+      <MyPayments
+        detail={detail}
+        pending={pending}
+        onWithdraw={(s) => void withdraw(s)}
+        onDispute={(s) => setDisputeForId(s.id)}
+        onWithdrawDispute={(d) => void withdrawDispute(d)}
+      />
       {/* Once everyone has a turn, the schedule lists every member too, so it replaces the member list. */}
       {!ordered && (
         <SlotsList
@@ -556,6 +609,12 @@ function GroupView({ detail }: { detail: GroupDetail }) {
         onClose={() => setPayTarget(null)}
         onSubmit={submitPayment}
       />
+      <DisputeSheet
+        detail={detail}
+        submission={detail.submissions.find((s) => s.id === disputeForId) ?? null}
+        onClose={() => setDisputeForId(null)}
+        onSubmit={raiseDispute}
+      />
       <PayoutSheet
         detail={detail}
         payout={detail.payouts.find((p) => p.round === payoutRound) ?? null}
@@ -574,8 +633,8 @@ function GroupView({ detail }: { detail: GroupDetail }) {
           detail={detail}
           pending={pending}
           onClose={() => setReviewOpen(false)}
-          onApprove={async (id) => !!(await run("approve", () => api.approveSubmission(group.id, id)))}
-          onDeny={async (id, reason) => !!(await run("deny", () => api.denySubmission(group.id, id, reason)))}
+          onApprove={approveItem}
+          onDeny={denyItem}
         />
       )}
       <SlotSheet

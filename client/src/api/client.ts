@@ -163,6 +163,25 @@ export interface SubmissionView {
   selfApproved: boolean;
 }
 
+/** A request to change an approved contribution (§6.2). Amounts in centavos. */
+export interface DisputeView {
+  id: string;
+  submissionId: string;
+  slotId: string;
+  round: number | null;
+  previousAmount: number;
+  proposedAmount: number;
+  reason: string;
+  status: "PENDING" | "APPROVED" | "DENIED" | "CANCELLED" | "EXPIRED";
+  createdAt: string;
+  reviewedAt: string | null;
+  reviewNote: string | null;
+  /** Raised by the viewer, who may withdraw it while pending. */
+  mine: boolean;
+  /** The refund an approved decrease created (R-DSP-03), owed by the organizer. */
+  refund: number | null;
+}
+
 export interface GroupDetail {
   group: GroupSummary & { organizerName: string };
   viewer: { slotId: string; isOrganizer: boolean };
@@ -174,6 +193,8 @@ export interface GroupDetail {
   period: PeriodView | null;
   /** Submissions the viewer may see (this period's, pending, debt payments): all for the organizer, their own slot's otherwise. */
   submissions: SubmissionView[];
+  /** Disputes the viewer may see, oldest first. */
+  disputes: DisputeView[];
   /** Processed payouts, newest first. */
   payouts: PayoutView[];
   /** LOBBY only. */
@@ -503,6 +524,12 @@ export const api = {
     id: string,
     body: { slotId: string; type: "CONTRIBUTION" | "DEBT_PAYMENT"; amount: number; proofPath?: string; note?: string },
   ) => send<GroupDetail>("POST", `/groups/${id}/submissions`, body),
+  raiseDispute: (id: string, body: { submissionId: string; proposedAmount: number; reason: string }) =>
+    send<GroupDetail>("POST", `/groups/${id}/disputes`, body),
+  approveDispute: (id: string, disputeId: string) => send<GroupDetail>("POST", `/groups/${id}/disputes/${disputeId}/approve`),
+  denyDispute: (id: string, disputeId: string, note: string) =>
+    send<GroupDetail>("POST", `/groups/${id}/disputes/${disputeId}/deny`, { note }),
+  cancelDispute: (id: string, disputeId: string) => send<GroupDetail>("POST", `/groups/${id}/disputes/${disputeId}/cancel`),
   markHandedOver: (id: string, round: number, proofPath?: string) =>
     send<GroupDetail>("POST", `/groups/${id}/rounds/${round}/handover`, { proofPath }),
   confirmReceipt: (id: string, round: number) => send<GroupDetail>("POST", `/groups/${id}/rounds/${round}/confirm-receipt`),
