@@ -1,6 +1,6 @@
-import { type ReactNode, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query";
+import { type ReactNode, useEffect, useState } from "react";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeftRight,
   Ban,
@@ -46,6 +46,7 @@ import { DebtsList, MyPayments, PeriodCard, PeriodStatusList, RefundsOwed } from
 import { DisputeSheet } from "./active/DisputeSheet";
 import { SwapSheet, SwapsList } from "./swaps/SwapSections";
 import { Recap, RecordsSection } from "./records/RecordsSections";
+import { MoneyOverview, Trends, YourTurn } from "./dashboard/StatsSections";
 import { swapToActOn } from "./swaps/swaps";
 import { ReviewSheet } from "./active/ReviewSheet";
 import { SlotsList } from "./SlotsList";
@@ -112,10 +113,27 @@ function GroupView({ detail }: { detail: GroupDetail }) {
   const queryClient = useQueryClient();
   const dialog = useDialog();
   const { run, pending, error, clearError } = useGroupActions(group.id);
+  const started = group.state === "ACTIVE" || group.state === "COMPLETED" || group.state === "COMPLETED_WITH_OUTSTANDING_DEBT";
+  // Under the group's key, so every group refresh (realtime included) refreshes it too.
+  const { data: stats } = useQuery({
+    queryKey: [...groupKey(group.id), "stats"],
+    queryFn: () => api.stats(group.id),
+    enabled: started,
+  });
   const [inviteOpen, setInviteOpen] = useState(false);
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
   const [orderDraft, setOrderDraft] = useState<string[] | null>(null);
-  const [payTarget, setPayTarget] = useState<{ slotId: string; mode: PayMode } | null>(null);
+  // Home's "Pay" links here with ?pay=contribution|debt to open the pay sheet straight away.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [payTarget, setPayTarget] = useState<{ slotId: string; mode: PayMode } | null>(() => {
+    const pay = searchParams.get("pay");
+    return pay === "debt" || pay === "contribution"
+      ? { slotId: viewer.slotId, mode: pay === "debt" ? "DEBT_PAYMENT" : "CONTRIBUTION" }
+      : null;
+  });
+  useEffect(() => {
+    if (searchParams.has("pay")) setSearchParams({}, { replace: true });
+  }, [searchParams, setSearchParams]);
   const [payoutRound, setPayoutRound] = useState<number | null>(null);
   const [disputeForId, setDisputeForId] = useState<string | null>(null);
   const [swapWithSlotId, setSwapWithSlotId] = useState<string | null>(null);
@@ -635,7 +653,7 @@ function GroupView({ detail }: { detail: GroupDetail }) {
 
       {detail.period && (
         <>
-          <PeriodCard detail={detail} />
+          <PeriodCard detail={detail} stats={stats} />
           <PeriodStatusList
             detail={detail}
             pending={pending}
@@ -644,6 +662,7 @@ function GroupView({ detail }: { detail: GroupDetail }) {
           />
         </>
       )}
+      {stats && <YourTurn detail={detail} stats={stats} />}
       <DebtsList detail={detail} onPay={(slot) => pay(slot.id, "DEBT_PAYMENT")} />
       <RefundsOwed detail={detail} />
       <MyPayments
@@ -685,9 +704,14 @@ function GroupView({ detail }: { detail: GroupDetail }) {
         onSelect={selectSlot}
         onOpenPayout={setPayoutRound}
       />
-      {(group.state === "ACTIVE" || group.state === "COMPLETED" || group.state === "COMPLETED_WITH_OUTSTANDING_DEBT") && (
-        <RecordsSection detail={detail} />
+      {isOrganizer && stats && (
+        <>
+          {/* Once it's finished the Recap carries these totals, so they show only while it runs. */}
+          {group.state === "ACTIVE" && <MoneyOverview stats={stats} />}
+          <Trends stats={stats} />
+        </>
       )}
+      {started && <RecordsSection detail={detail} />}
       <GroupDetails detail={detail} onCancel={() => void cancelGroup()} />
 
       {inLobby && !isOrganizer && (

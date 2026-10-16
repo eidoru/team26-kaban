@@ -1,13 +1,18 @@
 import { ChevronRight, Clock, ImageOff, Paperclip } from "lucide-react";
-import type { DisputeView, GroupDetail, PeriodSlot, SlotView, SubmissionView } from "../../../api/client";
+import type { DisputeView, GroupDetail, GroupStats, PeriodSlot, SlotView, SubmissionView } from "../../../api/client";
 import { Avatar } from "../../../components/Avatar";
 import { formatDueDate } from "../../../lib/dates";
 import { formatPeso } from "../../../lib/money";
 import { ui } from "../../../lib/ui";
 import { latestDispute } from "./period";
+import { HealthChip } from "../dashboard/StatsSections";
 
-/** The open round: whose pot it is, when, and how much is collected (approved money only, R-SUB-07). */
-export function PeriodCard({ detail }: { detail: GroupDetail }) {
+/**
+ * The open round: whose pot it is, when, how much is collected (approved money only, R-SUB-07),
+ * and (from the stats) the period's dates, its health and what the recipient would get now.
+ */
+export function PeriodCard({ detail, stats }: { detail: GroupDetail; stats?: GroupStats }) {
+  const open = stats?.openRound;
   const period = detail.period!;
   const recipient = detail.slots.find((s) => s.id === period.recipientSlotId);
   const percent = Math.min(100, Math.round((period.approvedTotal / period.expected) * 100));
@@ -20,6 +25,14 @@ export function PeriodCard({ detail }: { detail: GroupDetail }) {
         </p>
         <p className="text-sm text-brand-50">Payout {formatDueDate(period.payoutDate)}</p>
       </div>
+      {open && detail.viewer.isOrganizer && (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <HealthChip health={open.health} />
+          <span className="text-xs text-brand-100">
+            Collecting {formatDueDate(open.periodStart)} to {formatDueDate(open.payoutDate)}
+          </span>
+        </div>
+      )}
       <div className="mt-3 flex items-center gap-3">
         {recipient && <Avatar name={recipient.name} size="md" placeholder={recipient.kind === "PLACEHOLDER"} />}
         <p className="min-w-0">
@@ -27,6 +40,11 @@ export function PeriodCard({ detail }: { detail: GroupDetail }) {
           <span className="font-heading block truncate text-xl font-bold">
             {recipient?.isViewer ? "You" : (recipient?.name ?? "—")}
           </span>
+          {open?.projectedPayout != null && open.projectedPayout < detail.group.pot && (
+            <span className="block text-xs text-brand-100">
+              About {formatPeso(open.projectedPayout)} after what they owe
+            </span>
+          )}
         </p>
       </div>
       <p className="font-heading mt-4 text-3xl font-bold tabular-nums">

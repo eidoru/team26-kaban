@@ -6,6 +6,8 @@ import { queryClient } from "./queryClient";
 type NotificationsData = { notifications: NotificationItem[]; unreadCount: number };
 
 export const myGroupsKey = ["groups"] as const;
+/** The home dashboard (§15.2), shared by Home and Money. */
+export const homeKey = ["home"] as const;
 
 export function prefetchRealtimeToken() {
   if (!isSupabaseRealtimeConfigured()) return;
@@ -18,13 +20,14 @@ export function prefetchRealtimeToken() {
 
 /** Warm the first screens right after signing in. */
 export function prefetchHomeData() {
-  void queryClient.prefetchQuery({ queryKey: myGroupsKey, queryFn: () => api.myGroups() });
+  void queryClient.prefetchQuery({ queryKey: homeKey, queryFn: () => api.home() });
   void queryClient.prefetchQuery({ queryKey: ["notifications"], queryFn: () => api.getNotifications() });
   prefetchRealtimeToken();
 }
 
 export function invalidateHomeLists(client: QueryClient) {
   void client.invalidateQueries({ queryKey: myGroupsKey });
+  void client.invalidateQueries({ queryKey: homeKey });
 }
 
 export function patchNotificationRead(client: QueryClient, notificationId: string) {

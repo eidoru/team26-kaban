@@ -24,6 +24,8 @@ const LaunchReviewPage = lazy(() =>
   import("./pages/group/LaunchReviewPage").then((m) => ({ default: m.LaunchReviewPage })),
 );
 const ActivityPage = lazy(() => import("./pages/group/ActivityPage").then((m) => ({ default: m.ActivityPage })));
+const HistoryPage = lazy(() => import("./pages/group/HistoryPage").then((m) => ({ default: m.HistoryPage })));
+const MoneyPage = lazy(() => import("./pages/MoneyPage").then((m) => ({ default: m.MoneyPage })));
 const InvitePage = lazy(() => import("./pages/join/InvitePage").then((m) => ({ default: m.InvitePage })));
 const ClaimPage = lazy(() => import("./pages/join/ClaimPage").then((m) => ({ default: m.ClaimPage })));
 
@@ -45,11 +47,15 @@ export function App() {
               <Route path="/home" element={<HomePage />} />
               <Route path="/profile" element={<ProfilePage />} />
               <Route path="/notifications" element={<NotificationsPage />} />
+              <Route path="/money" element={<MoneyPage />} />
+              {/* Old "Owed to you" address, kept for bookmarks and older notifications. */}
+              <Route path="/manager/obligations" element={<Navigate to="/money" replace />} />
               <Route path="/groups/new" element={<CreateGroupPage />} />
               <Route path="/groups/:id" element={<GroupPage />} />
               <Route path="/groups/:id/edit" element={<EditGroupPage />} />
               <Route path="/groups/:id/launch" element={<LaunchReviewPage />} />
               <Route path="/groups/:id/activity" element={<ActivityPage />} />
+              <Route path="/groups/:id/history" element={<HistoryPage />} />
             </Route>
           </Route>
 

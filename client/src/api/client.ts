@@ -234,6 +234,70 @@ export interface ActivityEntry {
   selfApproved: boolean;
 }
 
+export type Health = "ON_TRACK" | "AT_RISK" | "SHORT";
+
+/** §15.1 / §15.3 for one paluwagan. Amounts in centavos. */
+export interface GroupStats {
+  openRound: { number: number; periodStart: string; payoutDate: string; health: Health; projectedPayout: number | null } | null;
+  money: { collected: number; paidOut: number; toPayOut: number; coveredByOrganizer: number; owedToOrganizer: number; refunds: number };
+  collection: { round: number; payoutDate: string; approved: number; expected: number; rate: number }[];
+  reliability: { slotId: string; name: string; onTime: number; partial: number; missed: number }[];
+  myTurn: {
+    round: number;
+    payoutDate: string;
+    status: "UPCOMING" | "COLLECTING" | "AWAITING_HANDOVER" | "HANDED_OVER" | "CONFIRMED";
+    net: number | null;
+    /** What it would come to if paid out now, after this slot's shortfall and debt. */
+    projected: number | null;
+  } | null;
+}
+
+export interface HistoryEvent {
+  at: string;
+  round: number | null;
+  slotId: string;
+  name: string;
+  event: string;
+  amount: number | null;
+  principalDelta: number | null;
+  interestDelta: number | null;
+  status: string | null;
+  notes: string;
+  inherited: boolean;
+}
+
+/** §15.2: the member's home across every paluwagan. */
+export interface HomeDashboard {
+  groups: {
+    id: string;
+    name: string;
+    state: GroupState;
+    isOrganizer: boolean;
+    contribution: number;
+    frequencyLabel: string;
+    slotCount: number;
+    occupied: number;
+    startDate: string;
+    openRound: { number: number; payoutDate: string } | null;
+    myStanding: { due: number; approved: number; pending: number; reportable: number } | null;
+    myTurn: { round: number; payoutDate: string; paid: boolean } | null;
+    owed: number;
+    waiting: { reviews: number; swapsToAnswer: number; payoutsToHandOver: number; receiptsToConfirm: number };
+  }[];
+  due: { groupId: string; groupName: string; kind: "CONTRIBUTION" | "DEBT"; amount: number; dueDate: string | null; round: number | null }[];
+  payouts: {
+    groupId: string;
+    groupName: string;
+    round: number;
+    payoutDate: string;
+    status: "NOT_STARTED" | "UPCOMING" | "COLLECTING" | "AWAITING_HANDOVER" | "HANDED_OVER" | "CONFIRMED";
+    net: number | null;
+  }[];
+  debts: { groupId: string; groupName: string; principal: number; interest: number }[];
+  owedToMe: { groupId: string; groupName: string; name: string; amount: number }[];
+  totals: { contributed: number; received: number; owed: number; owedToMe: number; refundsToMe: number; refundsIOwe: number };
+}
+
 export type ExportKind = "statement" | "ledger" | "summary";
 export type ExportFormat = "pdf" | "csv";
 
@@ -612,6 +676,14 @@ export const api = {
     return request<{ entries: ActivityEntry[]; hasMore: boolean }>(`/groups/${id}/activity${qs ? `?${qs}` : ""}`);
   },
   remindSlot: (id: string, slotId: string) => send<GroupDetail>("POST", `/groups/${id}/slots/${slotId}/remind`),
+
+  // --- Dashboards (§15).
+  home: () => request<HomeDashboard>("/groups/home"),
+  stats: (id: string) => request<GroupStats>(`/groups/${id}/stats`),
+  history: (id: string, slotId?: string) =>
+    request<{ slotId: string; claimedAt: string | null; events: HistoryEvent[] }>(
+      `/groups/${id}/history${slotId ? `?slot=${encodeURIComponent(slotId)}` : ""}`,
+    ),
 
   // --- Records (§10, §14).
   summary: (id: string) => request<GroupSummaryTotals>(`/groups/${id}/summary`),
