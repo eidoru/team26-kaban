@@ -1,12 +1,24 @@
 import { type ReactNode, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { Ban, CalendarClock, CircleCheck, CloudOff, Hourglass, Lock, Rocket, Shuffle, Users } from "lucide-react";
-import { ApiError, api, type GroupDetail, type SlotView } from "../../api/client";
+import {
+  Ban,
+  CalendarClock,
+  CircleCheck,
+  ClipboardCheck,
+  CloudOff,
+  HandCoins,
+  Hourglass,
+  Lock,
+  Rocket,
+  Shuffle,
+  Users,
+} from "lucide-react";
+import { ApiError, api, type GroupDetail, type SlotView, type SubmissionView } from "../../api/client";
 import { ActionBar } from "../../components/flow/ActionBar";
 import { NowPanel } from "../../components/flow/NowPanel";
 import { useDialog } from "../../context/DialogContext";
-import { formatDueDate } from "../../lib/dates";
+import { dueHint, formatDueDate } from "../../lib/dates";
 import { useDemoToolsSetting } from "../../lib/devTools";
 import { groupKey, useGroup, useGroupActions } from "../../lib/groupQueries";
 import { invalidateHomeLists } from "../../lib/homeQueries";
@@ -17,6 +29,10 @@ import { GroupDetails } from "./GroupDetails";
 import { InviteSheet, SlotSheet } from "./GroupSheets";
 import { PayoutSchedule } from "./PayoutSchedule";
 import { currentOrder } from "./slots";
+import { PaySheet } from "./active/PaySheet";
+import { reviewQueue, standingOf } from "./active/period";
+import { MyPayments, PeriodCard, PeriodStatusList } from "./active/PeriodSections";
+import { ReviewSheet } from "./active/ReviewSheet";
 import { SlotsList } from "./SlotsList";
 
 const STATE_LABELS: Record<GroupDetail["group"]["state"], string> = {
@@ -84,6 +100,8 @@ function GroupView({ detail }: { detail: GroupDetail }) {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
   const [orderDraft, setOrderDraft] = useState<string[] | null>(null);
+  const [payForSlotId, setPayForSlotId] = useState<string | null>(null);
+  const [reviewOpen, setReviewOpen] = useState(false);
   const [demoTools] = useDemoToolsSetting();
   const selectedSlot = detail.slots.find((s) => s.id === selectedSlotId) ?? null;
 
@@ -138,6 +156,27 @@ function GroupView({ detail }: { detail: GroupDetail }) {
   async function startNow() {
     await api.activateNow(group.id);
     await queryClient.invalidateQueries({ queryKey: groupKey(group.id) });
+  }
+
+  /** Submit from the pay sheet; failures surface in the sheet, not behind it. */
+  async function submitPayment(input: { slotId: string; amount: number; proofPath?: string; note?: string }) {
+    let message = "";
+    const saved = await run("pay", () => api.submitPayment(group.id, input), { onError: (e) => (message = e.message) });
+    if (!saved) {
+      clearError();
+      throw new Error(message);
+    }
+    return true;
+  }
+
+  async function withdraw(submission: SubmissionView) {
+    const confirmed = await dialog.confirm({
+      title: "Withdraw this payment report?",
+      description: "The organizer won't review it. You can report the payment again later.",
+      confirmLabel: "Withdraw",
+      variant: "danger",
+    });
+    if (confirmed) await run(`withdraw-${submission.id}`, () => api.cancelSubmission(group.id, submission.id));
   }
 
   const selectSlot = isOrganizer && group.state !== "CANCELLED" ? (slot: SlotView) => setSelectedSlotId(slot.id) : undefined;
@@ -250,17 +289,81 @@ function GroupView({ detail }: { detail: GroupDetail }) {
         )}
       </NowPanel>
     );
-  } else if (group.state === "ACTIVE") {
-    const open = detail.schedule.find((r) => r.status === "OPEN");
-    now = (
-      <NowPanel
-        tone="brand"
-        icon={CircleCheck}
-        eyebrow={open ? `Round ${open.number} of ${group.slotCount}` : "Running"}
-        title={open ? `Collecting for the ${formatDueDate(open.payoutDate)} payout` : "This paluwagan is running"}
-        body="Recording payments isn't built yet. It comes with the next part of the rewrite."
-      />
+  } else if (group.state === "ACTIVE" && detail.period) {
+    const period = detail.period;
+    const mine = standingOf(detail, viewer.slotId)!;
+    const queue = isOrganizer ? reviewQueue(detail) : [];
+    const hint = dueHint(period.payoutDate);
+    // The date itself is on the round card; here, how long is left.
+    const due = hint ? `Due ${hint.label}.` : "";
+    const payButton = (
+      <button type="button" onClick={() => setPayForSlotId(viewer.slotId)} className={ui.btnPrimary}>
+        <HandCoins className="h-4 w-4" aria-hidden />
+        {isOrganizer ? "Record your payment" : "Report a payment"}
+      </button>
     );
+    if (queue.length > 0) {
+      // The organizer's queue comes first: members are waiting on it (R-SUB-03).
+      now = (
+        <NowPanel
+          tone="sun"
+          icon={ClipboardCheck}
+          eyebrow="Needs you"
+          title={`${queue.length} payment${queue.length === 1 ? "" : "s"} to review`}
+          body="Oldest first. They count toward the pot once you approve them."
+        />
+      );
+      primary = (
+        <button type="button" onClick={() => setReviewOpen(true)} className={ui.btnPrimary}>
+          Review payments
+        </button>
+      );
+    } else if (mine.reportable > 0) {
+      now = (
+        <NowPanel
+          tone="brand"
+          icon={HandCoins}
+          eyebrow={`Round ${period.number}`}
+          title={mine.approved + mine.pending > 0 ? `Pay the remaining ${formatPeso(mine.reportable)}` : `Pay ${formatPeso(mine.due)}`}
+          body={
+            <>
+              {due}
+              {mine.pending > 0 && ` ${formatPeso(mine.pending)} is already waiting for review.`}
+            </>
+          }
+        />
+      );
+      primary = payButton;
+    } else if (mine.status !== "PAID") {
+      now = (
+        <NowPanel
+          tone="calm"
+          icon={Hourglass}
+          eyebrow={`Round ${period.number}`}
+          title="Waiting for review"
+          body={`Your ${formatPeso(mine.pending)} is with ${group.organizerName}. It counts once approved.`}
+        />
+      );
+    } else {
+      const recipientIsMe = period.recipientSlotId === viewer.slotId;
+      now = (
+        <NowPanel
+          tone="calm"
+          icon={CircleCheck}
+          eyebrow={`Round ${period.number}`}
+          title="You're paid up for this round"
+          body={
+            recipientIsMe
+              ? `This round's ${formatPeso(group.pot)} pot comes to you on ${formatDueDate(period.payoutDate)}.`
+              : isOrganizer
+                ? "Nothing to review. Record payments for placeholders from the list below."
+                : `Next contributions open after the ${formatDueDate(period.payoutDate)} payout.`
+          }
+        />
+      );
+    }
+  } else if (group.state === "ACTIVE") {
+    now = <NowPanel tone="calm" icon={CircleCheck} eyebrow="Running" title="This paluwagan is running" />;
   } else if (group.state === "CANCELLED") {
     now = <NowPanel tone="calm" icon={Ban} eyebrow="Cancelled" title="This paluwagan was cancelled" body="The organizer cancelled it before it launched." />;
   }
@@ -286,6 +389,13 @@ function GroupView({ detail }: { detail: GroupDetail }) {
         </p>
       )}
 
+      {group.state === "ACTIVE" && detail.period && (
+        <>
+          <PeriodCard detail={detail} />
+          <PeriodStatusList detail={detail} onRecord={isOrganizer ? (slot) => setPayForSlotId(slot.id) : undefined} />
+          <MyPayments detail={detail} pending={pending} onWithdraw={(s) => void withdraw(s)} />
+        </>
+      )}
       {/* Once everyone has a turn, the schedule lists every member too, so it replaces the member list. */}
       {!ordered && (
         <SlotsList
@@ -327,6 +437,22 @@ function GroupView({ detail }: { detail: GroupDetail }) {
           onClose={() => setInviteOpen(false)}
           onCreateLink={() => void run("invite", () => api.createInviteLink(group.id))}
           onAddPlaceholder={async (input) => !!(await run("placeholder", () => api.addPlaceholder(group.id, input)))}
+        />
+      )}
+      <PaySheet
+        detail={detail}
+        slot={detail.slots.find((s) => s.id === payForSlotId) ?? null}
+        onClose={() => setPayForSlotId(null)}
+        onSubmit={submitPayment}
+      />
+      {isOrganizer && (
+        <ReviewSheet
+          open={reviewOpen}
+          detail={detail}
+          pending={pending}
+          onClose={() => setReviewOpen(false)}
+          onApprove={async (id) => !!(await run("approve", () => api.approveSubmission(group.id, id)))}
+          onDeny={async (id, reason) => !!(await run("deny", () => api.denySubmission(group.id, id, reason)))}
         />
       )}
       <SlotSheet

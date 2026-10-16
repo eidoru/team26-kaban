@@ -96,6 +96,50 @@ export interface ScheduleRound {
   status: "UPCOMING" | "OPEN" | "CLOSED";
 }
 
+export type PeriodStatus = "PAID" | "PARTIAL" | "UNPAID";
+
+/** One slot's standing in the open period (R-SUB-07). Amounts in centavos. */
+export interface PeriodSlot {
+  slotId: string;
+  due: number;
+  approved: number;
+  pending: number;
+  status: PeriodStatus;
+  pendingReview: boolean;
+}
+
+export interface PeriodView {
+  roundId: string;
+  number: number;
+  periodStart: string;
+  payoutDate: string;
+  recipientSlotId: string;
+  expected: number;
+  approvedTotal: number;
+  pendingTotal: number;
+  slots: PeriodSlot[];
+}
+
+export interface SubmissionView {
+  id: string;
+  slotId: string;
+  round: number | null;
+  type: "CONTRIBUTION" | "DEBT_PAYMENT";
+  amount: number;
+  effectiveAmount: number | null;
+  status: "PENDING" | "APPROVED" | "DENIED" | "CANCELLED";
+  note: string | null;
+  proofAttached: boolean;
+  /** Short-lived link to the photo; only for the submitter's slot and the organizer. */
+  proofUrl: string | null;
+  submittedAt: string;
+  /** Reported by the viewer, who may withdraw it while pending. */
+  mine: boolean;
+  reviewedAt: string | null;
+  denialReason: string | null;
+  selfApproved: boolean;
+}
+
 export interface GroupDetail {
   group: GroupSummary & { organizerName: string };
   viewer: { slotId: string; isOrganizer: boolean };
@@ -103,6 +147,10 @@ export interface GroupDetail {
   openSlots: number;
   inviteLink: { url: string; createdAt: string } | null;
   schedule: ScheduleRound[];
+  /** The open contribution period; null outside ACTIVE. */
+  period: PeriodView | null;
+  /** This period's submissions the viewer may see: all for the organizer, their own slot's otherwise. */
+  submissions: SubmissionView[];
   /** LOBBY only. */
   launch: { blockers: string[]; earliestStartDate: string } | null;
 }
@@ -423,6 +471,17 @@ export const api = {
   lockOrder: (id: string) => send<GroupDetail>("POST", `/groups/${id}/order/lock`),
   launch: (id: string) => send<GroupDetail>("POST", `/groups/${id}/launch`),
   leaveGroup: (id: string) => send<{ ok: true }>("POST", `/groups/${id}/leave`),
+  // --- Payments (§6.1). Upload a proof first (requestProofUpload, then lib/proofUpload), then submit.
+  requestProofUpload: (id: string, contentType: string) =>
+    send<{ path: string; token: string }>("POST", `/groups/${id}/proofs`, { contentType }),
+  submitPayment: (id: string, body: { slotId: string; amount: number; proofPath?: string; note?: string }) =>
+    send<GroupDetail>("POST", `/groups/${id}/submissions`, body),
+  approveSubmission: (id: string, submissionId: string) =>
+    send<GroupDetail>("POST", `/groups/${id}/submissions/${submissionId}/approve`),
+  denySubmission: (id: string, submissionId: string, reason: string) =>
+    send<GroupDetail>("POST", `/groups/${id}/submissions/${submissionId}/deny`, { reason }),
+  cancelSubmission: (id: string, submissionId: string) =>
+    send<GroupDetail>("POST", `/groups/${id}/submissions/${submissionId}/cancel`),
   /** Demo tools only. */
   activateNow: (id: string) => send<{ ok: true; activated: number }>("POST", `/dev/groups/${id}/activate-now`),
 
