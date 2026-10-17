@@ -2,7 +2,6 @@ import { CircleAlert, CircleCheck, TriangleAlert } from "lucide-react";
 import type { GroupDetail, GroupStats, Health } from "../../../api/client";
 import { dueHint, formatShortDate } from "../../../lib/dates";
 import { formatPeso } from "../../../lib/money";
-import { ui } from "../../../lib/ui";
 
 /** Status chip: icon + label, never color alone. */
 export function HealthChip({ health }: { health: Health }) {
@@ -132,15 +131,12 @@ const BAR_MAX = 120;
 
 /**
  * §15.1 history and trends: how much of each closed round's pot came in on time (one series:
- * no legend, the heading names it), and each member's record. Hidden until a round has closed.
+ * no legend, the figure caption names it), and each member's record. Hidden until a round has closed.
  */
 export function Trends({ stats }: { stats: GroupStats }) {
   if (stats.collection.length === 0) return null;
   return (
-    <section aria-labelledby="trends-heading" className="space-y-4">
-      <h2 id="trends-heading" className={ui.sectionHeading}>
-        How rounds went
-      </h2>
+    <section aria-label="How rounds went" className="space-y-4">
       <figure className="rounded-3xl border border-ink-200 bg-white p-5">
         <figcaption className="text-sm font-bold text-ink-900">Collected by each payout</figcaption>
         <p className="text-xs text-ink-500">Share of the pot approved before the payout date. The rest the organizer covered.</p>
@@ -169,12 +165,12 @@ export function Trends({ stats }: { stats: GroupStats }) {
         </div>
         <div className="mt-1 flex gap-[2px]" aria-hidden>
           {stats.collection.map((c) => (
-            <span key={c.round} className="flex-1 text-center text-[11px] text-ink-500">
+            <span key={c.round} className="flex-1 text-center text-xs text-ink-500">
               {c.round}
             </span>
           ))}
         </div>
-        <p className="mt-1 text-center text-[11px] text-ink-500" aria-hidden>
+        <p className="mt-1 text-center text-xs text-ink-500" aria-hidden>
           Round
         </p>
         <details className="mt-3 text-sm">

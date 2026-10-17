@@ -16,7 +16,7 @@ function UnreadBadge({ count, className = "" }: { count: number; className?: str
   if (count <= 0) return null;
   return (
     <span
-      className={`inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-danger-600 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white ${className}`}
+      className={`inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-danger-600 px-1.5 py-0.5 text-[11px] font-bold leading-none text-white ${className}`}
     >
       {count > 99 ? "99+" : count}
     </span>
@@ -175,7 +175,7 @@ export function AppLayout() {
               <NavLink
                 to={item.to}
                 className={({ isActive }) =>
-                  `relative flex flex-col items-center gap-0.5 px-1 pb-2 pt-2 text-[11px] font-bold transition-colors ${
+                  `relative flex flex-col items-center gap-0.5 px-1 pb-2 pt-2 text-xs font-bold transition-colors ${
                     isActive ? "text-brand-700" : "text-ink-500 hover:text-ink-700"
                   }`
                 }

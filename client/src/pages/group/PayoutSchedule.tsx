@@ -70,8 +70,6 @@ export function PayoutSchedule({
     onDraftChange?.(next);
   }
 
-  // The one thing worth saying: before launch, an order can still change.
-  const subtitle = group.state === "LOBBY" && order ? "You can change it until you launch." : null;
   const moveButton =
     "flex h-11 w-11 items-center justify-center rounded-full border-2 border-ink-200 text-ink-700 hover:bg-ink-50 disabled:opacity-30";
 
@@ -80,12 +78,9 @@ export function PayoutSchedule({
       {/* Once it runs, the Schedule view's tab names this list: the heading is for screen readers only,
           with no margin, so the list starts where the Members list does. */}
       <div className={group.state === "LOBBY" ? "mb-3 flex flex-wrap items-end justify-between gap-2" : ""}>
-        <div>
-          <h2 id="schedule-heading" className={group.state === "LOBBY" ? ui.sectionHeading : "sr-only"}>
-            Payout schedule
-          </h2>
-          {subtitle && <p className={ui.sectionSubtitle}>{subtitle}</p>}
-        </div>
+        <h2 id="schedule-heading" className={group.state === "LOBBY" ? ui.sectionHeading : "sr-only"}>
+          Payout schedule
+        </h2>
         {/* While arranging, the buttons stay in the layout but invisible (and out of reach), so the list
             doesn't move up, even on a phone where they wrap below the heading. */}
         {canArrange && (
@@ -120,17 +115,17 @@ export function PayoutSchedule({
           const body = (
             <>
               {/* The date leads: this is a calendar. The year sits underneath when the list crosses years. */}
-              <span className="w-12 shrink-0 tabular-nums leading-tight">
-                <span className="block text-sm font-bold text-ink-900">{formatMonthDay(round.payoutDate)}</span>
-                {withYear && <span className="block text-xs text-ink-500">{round.payoutDate.slice(0, 4)}</span>}
+              <span className="w-14 shrink-0 tabular-nums leading-tight">
+                <span className="block text-base font-bold text-ink-900">{formatMonthDay(round.payoutDate)}</span>
+                {withYear && <span className="block text-sm text-ink-500">{round.payoutDate.slice(0, 4)}</span>}
               </span>
               {/* The rail: solid up to the round collecting now, dashed after it, so progress reads at a
                   glance. Paid-out rounds are filled, the open one is ringed, upcoming ones are hollow. */}
-              <span className="relative flex w-7 shrink-0 items-center justify-center self-stretch" aria-hidden>
+              <span className="relative flex w-8 shrink-0 items-center justify-center self-stretch" aria-hidden>
                 {index > 0 && <span className={`absolute top-0 h-1/2 ${railClass(round)}`} />}
                 {next && <span className={`absolute bottom-0 h-1/2 ${railClass(next)}`} />}
                 <span
-                  className={`relative flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${
+                  className={`relative flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold ${
                     round.status === "CLOSED"
                       ? "bg-brand-600 text-white"
                       : round.status === "OPEN"
@@ -145,14 +140,14 @@ export function PayoutSchedule({
               <span className="min-w-0 flex-1">
                 {slot ? (
                   <>
-                    <span className="block truncate text-sm font-bold text-ink-900">{slot.name}</span>
+                    <span className="block truncate text-base font-bold text-ink-900">{slot.name}</span>
                     {status && (
-                      <span className="block truncate text-xs tabular-nums text-ink-500">{status}</span>
+                      <span className="block truncate text-sm tabular-nums text-ink-500">{status}</span>
                     )}
                   </>
                 ) : (
                   // No order yet: how far off the date is.
-                  <span className="block truncate text-sm text-ink-500">{hint.charAt(0).toUpperCase() + hint.slice(1)}</span>
+                  <span className="block truncate text-base text-ink-500">{hint.charAt(0).toUpperCase() + hint.slice(1)}</span>
                 )}
               </span>
             </>
@@ -162,10 +157,10 @@ export function PayoutSchedule({
           // Only where the viewer may actually ask (R-SWP-01/03, R-DEC-23).
           const canSwap = !!onSwap && !draft && !payout && !!slot && !slot.isViewer && swapRequestBlocker(detail, slot.id) === null;
           const tappable = !draft && !canSwap && slot && (opensPayout || (onSelect && slotHasActions(slot, detail)));
-          // One fixed height for every row, arranging or not: it fits the 44px move buttons, and the
-          // text lines truncate instead of wrapping. Arranging tightens the spacing to leave the name room.
-          // 64px, like the Members rows (a 40px avatar plus padding), so the two lists read alike.
-          const rowClass = `flex h-16 w-full items-center ${draft ? "gap-2 px-3" : "gap-3 px-4"} text-left`;
+          // One fixed height and spacing for every row, arranging or not: it fits the 44px move buttons, and
+          // the text lines truncate instead of wrapping. 72px, like the Members rows, with the Debts table's
+          // type and padding so the views read alike.
+          const rowClass = "flex h-18 w-full items-center gap-3 px-5 text-left";
           return (
             <li key={round.number}>
               {tappable ? (

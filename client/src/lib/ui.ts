@@ -4,7 +4,7 @@ const btnBase =
 const btnPrimaryBase = `${btnBase} bg-brand-700 text-white shadow-press hover:bg-brand-600 active:translate-y-[2px] active:shadow-none disabled:translate-y-0 disabled:shadow-press`;
 const btnSecondaryBase = `${btnBase} border-2 border-ink-200 bg-white text-ink-700 hover:border-brand-200 hover:bg-brand-50`;
 const inputBase =
-  "rounded-2xl border-2 border-ink-200 bg-white px-4 py-2.5 text-sm text-ink-900 placeholder:text-ink-400 transition-colors focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-500/15";
+  "rounded-2xl border-2 border-ink-200 bg-white px-4 py-2.5 text-base text-ink-900 placeholder:text-ink-400 transition-colors focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-500/15";
 const badgeBase = "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold";
 
 export const ui = {
@@ -38,7 +38,6 @@ export const ui = {
   skeleton: "animate-pulse rounded-2xl bg-ink-100",
   formStack: "space-y-6",
   sectionCard: "rounded-3xl border border-ink-200 bg-white p-6 shadow-card",
-  sectionSubtitle: "mt-0.5 text-sm text-ink-500",
   toggleTrack: "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors",
   toggleTrackOn: "bg-brand-600",
   toggleTrackOff: "bg-ink-300",
