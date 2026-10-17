@@ -749,7 +749,12 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
               onWithdrawDispute={(d) => void withdrawDispute(d)}
             />
             {(group.state === "COMPLETED" || group.state === "COMPLETED_WITH_OUTSTANDING_DEBT") && <Recap detail={detail} />}
-            {/* Testing aids stay out of the real flow: last, and marked as demo. */}
+          </div>
+          <div className="mt-8 min-w-0 space-y-8 lg:mt-0">
+            <aside aria-label="Details">
+              <GroupDetails detail={detail} links={false} heading={false} />
+            </aside>
+            {/* Testing aids stay out of the real flow: after the details, and marked as demo. */}
             {group.state === "ACTIVE" && isOrganizer && demoTools && detail.period && (
               <section aria-labelledby="demo-heading" className="rounded-3xl border-2 border-dashed border-ink-300 p-5">
                 <h2 id="demo-heading" className="text-xs font-bold uppercase tracking-wide text-ink-500">
@@ -760,16 +765,13 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
                   type="button"
                   onClick={() => void closeRoundNow()}
                   disabled={pending !== null}
-                  className={`${ui.btnSecondarySm} mt-3`}
+                  className={`${ui.btnSecondaryFull} mt-3`}
                 >
                   Close round {detail.period.number} now
                 </button>
               </section>
             )}
           </div>
-          <aside aria-label="Details" className="mt-8 min-w-0 lg:mt-0">
-            <GroupDetails detail={detail} links={false} heading={false} />
-          </aside>
         </div>
       )}
 
