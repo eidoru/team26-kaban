@@ -86,11 +86,20 @@ export function PayoutSchedule({
           </h2>
           {subtitle && <p className={ui.sectionSubtitle}>{subtitle}</p>}
         </div>
-        {canArrange && !draft && (
-          <div className="flex gap-2">
-            <button type="button" onClick={onShuffle} disabled={pending === "shuffle"} className={ui.btnSecondarySm}>
+        {/* While arranging, the buttons stay in the layout but invisible (and out of reach), so the list
+            doesn't move up, even on a phone where they wrap below the heading. */}
+        {canArrange && (
+          <div className={`flex gap-2 ${draft ? "invisible" : ""}`}>
+            {/* A shuffle takes a split second and the rows changing are the feedback, so the button doesn't
+                disable or relabel (that flickered on repeated clicks); clicks while one runs are ignored. */}
+            <button
+              type="button"
+              onClick={() => pending !== "shuffle" && onShuffle?.()}
+              aria-busy={pending === "shuffle"}
+              className={ui.btnSecondarySm}
+            >
               <Shuffle className="h-4 w-4" aria-hidden />
-              {pending === "shuffle" ? "Shuffling…" : order ? "Shuffle again" : "Shuffle"}
+              {order ? "Shuffle again" : "Shuffle"}
             </button>
             <button type="button" onClick={startArranging} className={ui.btnSecondarySm}>
               Arrange
@@ -204,7 +213,7 @@ export function PayoutSchedule({
       </ol>
 
       {draft && (
-        <div className="mt-3 flex gap-2">
+        <div className="mt-3 flex justify-end gap-2">
           <button type="button" onClick={() => onDraftChange?.(null)} className={`${ui.btnSecondary} min-h-11 flex-1 sm:flex-none`}>
             Cancel
           </button>

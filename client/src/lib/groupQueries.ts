@@ -37,6 +37,9 @@ export function useGroupActions(groupId: string) {
       setError(null);
       try {
         const detail = await action();
+        // A refetch still in flight (often one our own realtime broadcast started) can hold the state from
+        // before this action; left alone, it lands after us and the screen flips back. Repeated shuffles hit it.
+        await queryClient.cancelQueries({ queryKey: groupKey(groupId), exact: true });
         queryClient.setQueryData(groupKey(groupId), detail);
         invalidateHomeLists(queryClient);
         return detail;
