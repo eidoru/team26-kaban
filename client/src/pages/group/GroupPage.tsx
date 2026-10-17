@@ -153,8 +153,7 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
   async function launch() {
     const confirmed = await dialog.confirm({
       title: `Launch ${group.name}?`,
-      description:
-        "After this, the settings, members and payout order are final, and the invite link stops working. Everyone is notified.",
+      description: "Settings, members and payout order become final. Everyone is notified.",
       confirmLabel: "Launch",
     });
     if (confirmed) await run("launch", () => api.launch(group.id));
@@ -371,7 +370,7 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
       >
         {isOrganizer && demoTools && (
           <button type="button" onClick={() => void startNow()} disabled={pending !== null} className={ui.btnSecondarySm}>
-            Start now (demo)
+            Start now
           </button>
         )}
       </NowPanel>
