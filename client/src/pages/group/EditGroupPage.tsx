@@ -48,7 +48,7 @@ function EditForm({ detail }: { detail: GroupDetail }) {
   }
 
   return (
-    <div className="mx-auto max-w-xl">
+    <div className="mx-auto max-w-3xl">
       <Link to={`/groups/${group.id}`} className={`${ui.btnGhost} mb-6`}>
         <ArrowLeft className="h-4 w-4" aria-hidden />
         Back

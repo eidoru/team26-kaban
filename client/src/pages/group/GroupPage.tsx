@@ -710,7 +710,7 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
       ) : (
         // Dashboard: members see their own numbers first, then what to do; the organizer the round first.
         // The terms sit beside it on wide screens, and at the end on phones.
-        <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_17rem] lg:items-start lg:gap-8">
+        <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_17rem] lg:items-start lg:gap-8 xl:grid-cols-[minmax(0,1fr)_22rem] xl:gap-10">
           <div className="min-w-0 space-y-8">
             {started && !isOrganizer && <MyStanding detail={detail} stats={stats} />}
             {!isOrganizer && now}

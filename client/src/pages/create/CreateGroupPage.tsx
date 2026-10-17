@@ -65,7 +65,7 @@ export function CreateGroupPage() {
   const isLast = step === STEPS.length - 1;
 
   return (
-    <div className="mx-auto max-w-xl">
+    <div className="mx-auto max-w-3xl">
       <div className="mb-6 flex items-center justify-between gap-3">
         {step === 0 ? (
           <Link to="/home" className={ui.btnGhost}>
