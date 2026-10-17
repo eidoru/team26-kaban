@@ -141,7 +141,8 @@ export async function reviewSubmission(
   submissionId: string,
   decision: { approve: true } | { approve: false; reason: string },
 ) {
-  const reason = decision.approve ? null : trimmedNote(decision.reason, "The reason");
+  // `=== false`, not truthiness: Vercel compiles the function non-strict, where only this narrows the union.
+  const reason = decision.approve === false ? trimmedNote(decision.reason, "The reason") : null;
   if (!decision.approve && !reason) throw badRequest("Say why, so the member knows what to fix.");
 
   return withGroupLock(groupId, async (tx, group) => {

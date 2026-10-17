@@ -191,7 +191,8 @@ export async function reviewSwap(
   swapId: string,
   decision: { approve: true } | { approve: false; note: string },
 ) {
-  const note = decision.approve ? null : decision.note.trim();
+  // `=== false`, not truthiness: Vercel compiles the function non-strict, where only this narrows the union.
+  const note = decision.approve === false ? decision.note.trim() : null;
   if (!decision.approve && !note) throw badRequest("Say why, so they understand.");
   if (note && note.length > NOTE_MAX_LENGTH) throw badRequest(`The reason can be up to ${NOTE_MAX_LENGTH} characters.`);
   return withGroupLock(groupId, async (tx) => {
