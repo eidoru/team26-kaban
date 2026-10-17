@@ -49,7 +49,8 @@ async function projectedPayouts(groupId: string) {
 
 /**
  * §15.1 for one paluwagan: the open round's health and projected payout, the money overview, the
- * collection rate per closed round, and each member's reliability (on time, partial, missed).
+ * collection rate per closed round (and, still to close, the open round so far and later rounds
+ * paid ahead, R-DEC-31), and each member's reliability (on time, partial, missed).
  * Also the viewer's own projected payout (§15.3). Everyone sees it (R-DEC-06).
  */
 export async function groupStats(groupId: string, viewerUserId: string) {
@@ -84,10 +85,33 @@ export async function groupStats(groupId: string, viewerUserId: string) {
   }
 
   const closed = group.rounds.filter((r) => r.status === "CLOSED");
-  const collection = closed.map((r) => {
-    const approved = r.results.reduce((total, x) => total + Math.min(Number(x.approved), Number(x.due)), 0);
-    return { round: r.number, payoutDate: toCalendarDate(r.payoutDate), approved, expected, rate: expected ? approved / expected : 0 };
+  const bar = (r: (typeof group.rounds)[number], approved: number) => ({
+    round: r.number,
+    payoutDate: toCalendarDate(r.payoutDate),
+    status: r.status,
+    approved,
+    expected,
+    rate: expected ? approved / expected : 0,
   });
+  // Rounds still to close: approved money so far, the open round's and what was paid ahead
+  // (R-DEC-31). Upcoming rounds show up to the last one with anything in it.
+  const later = group.rounds.filter((r) => r.status !== "CLOSED");
+  const laterRows = await prisma.submission.findMany({
+    where: { roundId: { in: later.map((r) => r.id) }, status: "APPROVED", appliedAs: "CONTRIBUTION" },
+    select: { roundId: true, slotId: true, amount: true, effectiveAmount: true },
+  });
+  const laterBars = later.map((r) => {
+    const bySlot = new Map<string, number>();
+    for (const row of laterRows.filter((x) => x.roundId === r.id)) {
+      bySlot.set(row.slotId, (bySlot.get(row.slotId) ?? 0) + Number(row.effectiveAmount ?? row.amount));
+    }
+    return bar(r, [...bySlot.values()].reduce((total, paid) => total + Math.min(paid, contribution), 0));
+  });
+  const lastPaidAhead = laterBars.reduce((last, b, i) => (b.status === "UPCOMING" && b.approved > 0 ? i : last), -1);
+  const collection = [
+    ...closed.map((r) => bar(r, r.results.reduce((total, x) => total + Math.min(Number(x.approved), Number(x.due)), 0))),
+    ...laterBars.filter((b, i) => b.status === "OPEN" || i <= lastPaidAhead),
+  ];
   const reliability = group.slots.map((slot) => {
     const results = closed.flatMap((r) => r.results.filter((x) => x.slotId === slot.id));
     return {
@@ -172,7 +196,13 @@ export async function homeDashboard(userId: string) {
     // Things only this person can move forward.
     const [toReview, disputesToReview] = slot.isOrganizer
       ? await Promise.all([
-          prisma.submission.count({ where: { groupId: group.id, status: "PENDING" } }),
+          // R-DEC-33: a payment split across rounds is one review.
+          prisma.submission
+            .findMany({ where: { groupId: group.id, status: "PENDING" }, select: { batchId: true } })
+            .then((rows) => {
+              const batches = new Set(rows.map((r) => r.batchId).filter(Boolean));
+              return rows.filter((r) => !r.batchId).length + batches.size;
+            }),
           prisma.dispute.count({ where: { groupId: group.id, status: "PENDING" } }),
         ])
       : [0, 0];

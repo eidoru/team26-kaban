@@ -4,6 +4,10 @@ import {
   contributionApprovalError,
   correctionIncrease,
   disputeAmountError,
+  contributionAmountError,
+  contributionRooms,
+  roundsLabel,
+  splitContribution,
   periodStatus,
   refundFor,
   submissionAmountError,
@@ -209,5 +213,54 @@ describe("the room rule (R-DEC-29)", () => {
   it("only an increase holds room", () => {
     expect(correctionIncrease(pesos(1_000), pesos(1_500))).toBe(pesos(500));
     expect(correctionIncrease(pesos(1_000), pesos(400))).toBe(0);
+  });
+});
+
+describe("R-DEC-31 / R-DEC-33 paying ahead, and one payment across rounds", () => {
+  const room = (round: number, pesosLeft: number) => ({ round, room: pesos(pesosLeft) });
+  const upcoming = [room(3, 2_000), room(2, 2_000), room(4, 2_000), room(5, 2_000)];
+
+  it("fills what's left of the open round first, then later rounds in order", () => {
+    const rooms = contributionRooms({ open: room(1, 1_000), upcoming, debtLeft: 0, maxAhead: null });
+    expect(rooms.map((r) => r.round)).toEqual([1, 2, 3, 4, 5]);
+    expect(splitContribution(pesos(7_000), rooms)).toEqual([
+      { round: 1, amount: pesos(1_000) },
+      { round: 2, amount: pesos(2_000) },
+      { round: 3, amount: pesos(2_000) },
+      { round: 4, amount: pesos(2_000) },
+    ]);
+  });
+
+  it("the last round takes a partial amount", () => {
+    const rooms = contributionRooms({ open: room(1, 0), upcoming, debtLeft: 0, maxAhead: null });
+    expect(splitContribution(pesos(3_000), rooms)).toEqual([
+      { round: 2, amount: pesos(2_000) },
+      { round: 3, amount: pesos(1_000) },
+    ]);
+  });
+
+  it("skips rounds already covered", () => {
+    const upcoming = [room(2, 0), room(3, 500)];
+    const rooms = contributionRooms({ open: room(1, 0), upcoming, debtLeft: 0, maxAhead: null });
+    expect(rooms).toEqual([room(3, 500)]);
+  });
+
+  it("debt keeps a payment to the open round", () => {
+    const rooms = contributionRooms({ open: room(2, 2_000), upcoming, debtLeft: pesos(1), maxAhead: null });
+    expect(rooms).toEqual([room(2, 2_000)]);
+    expect(contributionAmountError(pesos(3_000), pesos(2_000), true)).toBe(
+      "That's more than what's left to pay. Pay off the debt before paying ahead.",
+    );
+    expect(contributionAmountError(pesos(2_000), pesos(2_000), true)).toBeNull();
+  });
+
+  it("keeps to PAY_AHEAD_MAX_ROUNDS when it has a value", () => {
+    const rooms = contributionRooms({ open: room(1, 0), upcoming, debtLeft: 0, maxAhead: 2 });
+    expect(rooms.map((r) => r.round)).toEqual([2, 3]);
+  });
+
+  it("labels a payment's rounds", () => {
+    expect(roundsLabel([3])).toBe("round 3");
+    expect(roundsLabel([4, 1, 2, 3])).toBe("rounds 1–4");
   });
 });

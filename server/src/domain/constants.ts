@@ -24,6 +24,8 @@ export const SWAP_REQUEST_EXPIRY_DAYS: number | null = null;
 export const REMINDER_DAYS_BEFORE = 3;
 /** R-DEC-07 */
 export const RECEIPT_AUTO_CONFIRM_DAYS: number | null = null;
+/** R-DEC-31: how many rounds after the open one a contribution can be paid ahead (TBD: no limit yet). */
+export const PAY_AHEAD_MAX_ROUNDS: number | null = null;
 /** Notes on submissions and denial reasons (the pre-rewrite note limit; the spec sets none). */
 export const NOTE_MAX_LENGTH = 500;
 /** Largest proof image, matching the bucket's limit (assumption; the spec sets none). */
