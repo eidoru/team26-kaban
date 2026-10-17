@@ -35,15 +35,18 @@ export function InviteLinkPanel({
 
 /**
  * Holding a slot for someone without an account (R-LOB-02). `onAddPlaceholder` resolves true when
- * the placeholder was added, which closes the sheet so the new slot shows on the board.
+ * the placeholder was added, which shows a done screen. Once that fills the last open slot (`full`),
+ * the done screen no longer offers to add another.
  */
 export function PlaceholderSheet({
   open,
+  full,
   pending,
   onClose,
   onAddPlaceholder,
 }: {
   open: boolean;
+  full: boolean;
   pending: string | null;
   onClose: () => void;
   onAddPlaceholder: (input: { name: string; contact?: string }) => Promise<boolean>;
@@ -70,7 +73,11 @@ export function PlaceholderSheet({
 
   if (open && added) {
     return (
-      <SheetDone title={`Added ${added}`} onClose={close} another={{ label: "Add another", onClick: () => setAdded(null) }}>
+      <SheetDone
+        title={`Added ${added}`}
+        onClose={close}
+        another={full ? undefined : { label: "Add another", onClick: () => setAdded(null) }}
+      >
         {added} is in the list. You record their payments, and you can send them a claim link anytime.
       </SheetDone>
     );

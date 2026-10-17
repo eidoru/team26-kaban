@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { formatPeso } from "../domain/money.js";
+import { roundsLabel } from "../domain/submissions.js";
 import type { AuditAction } from "../lib/audit.js";
 import { prisma } from "../lib/prisma.js";
 import { formatDisplayDate } from "../lib/dates.js";
@@ -49,7 +50,12 @@ export function describe(entry: {
   const { actor, amounts: a, before: b, after: f } = entry;
   const target = entry.target ?? "a member";
   const self = actor === entry.target;
-  const round = f.round != null ? ` in round ${f.round}` : "";
+  // R-DEC-33: a payment split across rounds names them all.
+  const round = Array.isArray(f.rounds)
+    ? ` for ${roundsLabel(f.rounds as number[])}`
+    : f.round != null
+      ? ` in round ${f.round}`
+      : "";
   const T = (title: string, detail: string | null = null) => ({ title, detail });
 
   switch (entry.action as AuditAction) {
@@ -94,7 +100,11 @@ export function describe(entry: {
       return T("The payout order was reset", typeof f.reason === "string" ? `${f.reason}.` : null);
     case "submission.created": {
       const debt = f.type === "DEBT_PAYMENT";
-      return T(`${actor} reported ${peso(a.amount)}${self ? "" : ` for ${target}`}${debt ? " toward debt" : round}`);
+      return T(
+        `${actor} reported ${peso(a.amount)}${self ? "" : ` for ${target}`}${
+          debt ? " toward debt" : f.ahead && !Array.isArray(f.rounds) ? ` ahead for round ${f.round}` : round
+        }`,
+      );
     }
     case "submission.approved":
       return T(

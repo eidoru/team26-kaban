@@ -17,7 +17,7 @@ import { AppError, conflict } from "../lib/errors.js";
 import { prisma } from "../lib/prisma.js";
 import { fromCalendarDate, todayInManila, toCalendarDate } from "../lib/today.js";
 import { notifyUsers } from "./notifications.js";
-import { openPeriodView, visibleSubmissions } from "./submissions.js";
+import { aheadView, openPeriodView, visibleSubmissions } from "./submissions.js";
 import { visibleDisputes } from "./disputes.js";
 import { visibleSwaps } from "./swaps.js";
 import { proofViewUrls } from "../lib/storage.js";
@@ -199,8 +199,8 @@ export async function groupDetail(groupId: string, viewerUserId: string, appOrig
   const today = todayInManila();
 
   // Every debt change, so each slot's debt can show what each round added (only after launch),
-  // fetched alongside the open period.
-  const [debtEntries, period] = await Promise.all([
+  // fetched alongside the open period and what's been paid ahead (R-DEC-31).
+  const [debtEntries, period, ahead] = await Promise.all([
     group.rounds.length > 0
       ? prisma.debtEntry.findMany({
           where: { groupId },
@@ -209,6 +209,7 @@ export async function groupDetail(groupId: string, viewerUserId: string, appOrig
         })
       : [],
     openPeriodView(prisma, groupId, settings.contribution),
+    group.state === "ACTIVE" ? aheadView(prisma, groupId) : [],
   ]);
   const breakdownOf = (slotId: string) =>
     debtBreakdown(
@@ -279,6 +280,8 @@ export async function groupDetail(groupId: string, viewerUserId: string, appOrig
     schedule,
     /** The open contribution period and each slot's standing in it (R-SUB-07); null outside ACTIVE. */
     period,
+    /** R-DEC-31: per slot and upcoming round, what's been paid ahead (only rounds with something in them). */
+    ahead,
     submissions,
     /** Disputes the viewer may see (§6.2), oldest first, with any refund they created. */
     disputes,

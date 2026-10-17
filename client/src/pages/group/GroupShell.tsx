@@ -75,7 +75,7 @@ export function GroupShell() {
           </p>
         )}
       </header>
-      <div className="lg:grid lg:grid-cols-[11rem_minmax(0,1fr)] lg:items-start lg:gap-8">
+      <div className="lg:grid lg:grid-cols-[11rem_minmax(0,1fr)] lg:items-start lg:gap-8 xl:grid-cols-[13rem_minmax(0,1fr)] xl:gap-10">
         <GroupNav detail={detail} />
         <div className="mt-6 min-w-0 lg:mt-0">
           <Outlet context={context} />

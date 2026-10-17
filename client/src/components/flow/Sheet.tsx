@@ -46,7 +46,7 @@ export function Sheet({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className={`animate-rise relative flex max-h-[88dvh] w-full flex-col rounded-t-3xl border border-ink-200 bg-white shadow-lift sm:rounded-3xl ${wide ? "sm:max-w-2xl" : "sm:max-w-lg"}`}
+        className={`animate-rise relative flex max-h-[88dvh] w-full flex-col rounded-t-3xl border border-ink-200 bg-white shadow-lift sm:rounded-3xl ${wide ? "sm:max-w-3xl" : "sm:max-w-xl"}`}
       >
         <div className="mx-auto mt-2 h-1.5 w-10 shrink-0 rounded-full bg-ink-200 sm:hidden" aria-hidden />
         <div className="flex shrink-0 items-start justify-between gap-3 px-5 pb-3 pt-3 sm:px-6 sm:pt-5">

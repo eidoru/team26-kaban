@@ -39,7 +39,8 @@ export async function raiseDispute(
     if (submission.status !== "APPROVED" || submission.appliedAs !== "CONTRIBUTION") {
       throw conflict("Only approved contributions can be reported.", "NOT_DISPUTABLE");
     }
-    if (submission.round?.status !== "OPEN") {
+    // R-DEC-32: a payment made ahead can be reported until its round's payout too.
+    if (submission.round?.status !== "OPEN" && submission.round?.status !== "UPCOMING") {
       throw conflict("Problem reports close when the period's payout happens.", "PERIOD_CLOSED");
     }
     if (submission.disputes.length > 0) throw conflict("This payment already has an open dispute.", "ALREADY_DISPUTED");

@@ -316,6 +316,8 @@ model Submission {
   denialReason    String?         @map("denial_reason")
   /// R-SUB-09
   selfApproved    Boolean         @default(false) @map("self_approved")
+  /// R-DEC-33: one payment split across rounds, one submission per round; reviewed and withdrawn as one.
+  batchId         String?         @map("batch_id")
 
   group    Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
   slot     Slot      @relation(fields: [slotId], references: [id], onDelete: Cascade)
@@ -324,6 +326,7 @@ model Submission {
 
   @@index([groupId, status, submittedAt])
   @@index([slotId, roundId])
+  @@index([batchId])
   @@map("submissions")
 }
 
