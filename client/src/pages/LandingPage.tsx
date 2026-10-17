@@ -1,8 +1,9 @@
 import { Link } from "react-router-dom";
 import {
+  ArrowLeftRight,
   Bell,
   BookOpenCheck,
-  CalendarRange,
+  FileDown,
   HandCoins,
   Link2,
   ListOrdered,
@@ -22,9 +23,9 @@ const FEATURES: { icon: LucideIcon; title: string; description: string }[] = [
     description: "Members report what they paid and the organizer reviews it, so partial payments and shortfalls stay visible to the whole group.",
   },
   {
-    icon: CalendarRange,
-    title: "Forming to finish",
-    description: "Set the amount, schedule and roster size, then follow every round until the cycle completes.",
+    icon: ArrowLeftRight,
+    title: "Swap turns",
+    description: "Need the pot sooner or later? Trade payout turns with another member, with the organizer's approval.",
   },
   {
     icon: ListOrdered,
@@ -39,12 +40,12 @@ const FEATURES: { icon: LucideIcon; title: string; description: string }[] = [
   {
     icon: ShieldAlert,
     title: "Shortfall tracking",
-    description: "If someone pays short, the organizer covers the pot and it becomes a debt, with optional interest, that everyone can see.",
+    description: "If someone pays short, the organizer covers the pot and it becomes a debt, with optional interest, taken from that member's own payout. Nobody else's pot shrinks.",
   },
   {
-    icon: Bell,
-    title: "Home dashboard & alerts",
-    description: "Payments due, confirmations waiting and recent activity, all in one place.",
+    icon: FileDown,
+    title: "Records you can export",
+    description: "Every payment, payout and change goes into a public activity log, with PDF and CSV statements for every member.",
   },
 ];
 
@@ -58,8 +59,8 @@ const STEPS = [
     description: "Send an invite link, or add placeholders for people not on Kaban yet.",
   },
   {
-    title: "Lock the order & start",
-    description: "Once every slot is filled, lock the payout order and launch. Round 1 opens on the start date.",
+    title: "Set the order & launch",
+    description: "Once every slot is filled, shuffle or arrange the payout order and launch. Round 1 opens on the start date.",
   },
   {
     title: "Run each round together",
@@ -71,7 +72,7 @@ const ROLES: { icon: LucideIcon; who: string; what: string }[] = [
   {
     icon: UserRound,
     who: "Organizers",
-    what: "set up the paluwagan, invite members, lock the payout order, review payments and hand over each pot.",
+    what: "set up the paluwagan, invite members, set the payout order, review payments and hand over each pot.",
   },
   {
     icon: UsersRound,
@@ -227,7 +228,7 @@ export function LandingPage() {
               <h3 className="font-heading text-xl font-bold text-ink-900">Not a payment app</h3>
               <p className="mt-3 text-sm leading-relaxed text-ink-700">
                 Kaban does not move money, hold balances or process transfers. Members pay each
-                other the way they already do (cash, bank transfer or e-wallet) and use Kaban to
+                other the way they already do (cash, GCash or bank transfer) and use Kaban to
                 report, confirm and reconcile what was paid.
               </p>
             </div>
@@ -257,6 +258,9 @@ export function LandingPage() {
             <p className="mx-auto mt-3 max-w-md text-base text-ink-600">
               Create a free account, start a group, and invite your members in minutes.
             </p>
+            <Link to="/register" className={`${ui.btnPrimary} mt-6`}>
+              Create an account
+            </Link>
           </div>
         </section>
       </main>
