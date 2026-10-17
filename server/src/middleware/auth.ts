@@ -97,14 +97,6 @@ export function requireCronSecret(req: Request, res: Response, next: NextFunctio
 }
 
 /** UAT/demo tools are unavailable on Vercel production deploys. */
-export function requireNonProductionDeploy(_req: Request, res: Response, next: NextFunction) {
-  if (process.env.VERCEL_ENV === "production") {
-    res.status(404).json({ error: "Not found" });
-    return;
-  }
-
-  next();
-}
 
 /**
  * Organizer demo tools (advance round). Off on Vercel production unless ALLOW_DEMO_TOOLS=true
@@ -119,5 +111,3 @@ export function requireDemoTools(_req: Request, res: Response, next: NextFunctio
   next();
 }
 
-/** @deprecated Use requireNonProductionDeploy */
-export const requireCronTesting = requireNonProductionDeploy;

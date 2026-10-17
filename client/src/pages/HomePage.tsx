@@ -1,485 +1,271 @@
-import { Link, useNavigate } from "react-router-dom";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { type ReactNode, useState } from "react";
-import { api, type GroupSummary, type HomeAttentionItem, type NotificationItem } from "../api/client";
-import { useAuth } from "../context/AuthContext";
-import { formatWhen } from "../lib/formatWhen";
-import { formatFrequency } from "../lib/frequency";
-import { ArrowRight, BadgeCheck, CircleAlert, Clock, Users, Wallet, type LucideIcon } from "lucide-react";
-import { Avatar } from "../components/Avatar";
+import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import {
+  ArrowLeftRight,
+  Banknote,
+  BellRing,
+  CalendarDays,
+  Check,
+  ChevronRight,
+  ClipboardCheck,
+  HandCoins,
+  Plus,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
+import { api, type HomeDashboard } from "../api/client";
+import { CompleteSeal } from "../components/CompleteSeal";
 import { KabanChest } from "../components/Illustration";
 import { NotificationIcon } from "../components/NotificationIcon";
-import { StatCard, type StatCardIconName, type StatCardTone } from "../components/StatCard";
-import { patchNotificationRead } from "../lib/homeQueries";
-import { statusBadgeClass, ui } from "../lib/ui";
+import { dueHint, formatShortDate } from "../lib/dates";
+import { formatPeso } from "../lib/money";
+import { homeKey } from "../lib/homeQueries";
+import { ui } from "../lib/ui";
 
-function SectionHeader({
-  title,
-  subtitle,
-  action,
-}: {
-  title: string;
-  subtitle?: string;
-  action?: ReactNode;
-}) {
-  return (
-    <div className="mb-4 flex items-start justify-between gap-3">
-      <div className="min-w-0">
-        <h2 className={ui.sectionHeader}>{title}</h2>
-        {subtitle && <p className={ui.sectionSubtitle}>{subtitle}</p>}
-      </div>
-      {action && <div className="shrink-0 pt-0.5">{action}</div>}
-    </div>
-  );
-}
+type Group = HomeDashboard["groups"][number];
 
-function statusLabel(status: GroupSummary["status"]) {
-  switch (status) {
-    case "forming":
-      return "Forming";
-    case "active":
-      return "Active";
-    case "completed":
-      return "Completed";
-  }
-}
-
-function groupStatusDetail(group: GroupSummary): string {
-  const filled = group.filledCount ?? 0;
-
-  if (group.status === "forming") {
-    const open = group.openSlots ?? 0;
-    if (open > 0) {
-      return `${filled}/${group.slotCount} members · ${open} seat${open === 1 ? "" : "s"} open`;
+/** Everything across the viewer's paluwagans that only they can move forward. */
+function waitingItems(groups: Group[]) {
+  const items: { groupId: string; icon: LucideIcon; text: string }[] = [];
+  for (const g of groups) {
+    const w = g.waiting;
+    if (w.reviews) items.push({ groupId: g.id, icon: ClipboardCheck, text: `${w.reviews} to review in ${g.name}` });
+    if (w.payoutsToHandOver) items.push({ groupId: g.id, icon: Banknote, text: `A payout to hand over in ${g.name}` });
+    if (w.receiptsToConfirm) items.push({ groupId: g.id, icon: Banknote, text: `Confirm you got your payout from ${g.name}` });
+    if (w.swapsToAnswer) items.push({ groupId: g.id, icon: ArrowLeftRight, text: `A turn swap to answer in ${g.name}` });
+    if (w.placeholdersToRecord) {
+      const n = w.placeholdersToRecord;
+      items.push({ groupId: g.id, icon: HandCoins, text: `${n} placeholder payment${n === 1 ? "" : "s"} to record in ${g.name}` });
     }
-    return `${filled}/${group.slotCount} members · ready to start`;
+    if (w.membersToRemind) {
+      const n = w.membersToRemind;
+      items.push({ groupId: g.id, icon: BellRing, text: `${n} member${n === 1 ? "" : "s"} to remind in ${g.name}` });
+    }
   }
-  if (group.status === "active") {
-    return `${group.slotCount} members · cycle in progress`;
-  }
-  const collected = group.totalCollected != null ? Number(group.totalCollected) : null;
-  const debt = group.outstandingDebt != null ? Number(group.outstandingDebt) : null;
-  if (debt != null && debt > 0) {
-    return `${group.slotCount} members · ₱${debt.toLocaleString()} still owed`;
-  }
-  if (collected != null && collected > 0) {
-    return `${group.slotCount} members · ₱${collected.toLocaleString()} collected`;
-  }
-  return `${group.slotCount} members · finished`;
+  return items;
 }
 
-function turnChipLabel(group: GroupSummary): string | null {
-  const current = group.currentRoundNumber;
-  const mine = group.myPayoutRoundNumber;
-  if (group.status !== "active" || current == null || mine == null) return null;
-  const roundsAway = mine - current;
-  if (roundsAway < 0) return null;
-  if (roundsAway === 0) return "Your turn now";
-  if (roundsAway === 1) return "You're next";
-  return `Your turn in ${roundsAway} rounds`;
+interface Badge {
+  icon: LucideIcon;
+  text: string;
+  tone: string;
 }
 
-function formingFillPercent(group: GroupSummary): number {
-  if (group.slotCount <= 0) return 0;
-  return Math.min(100, Math.round(((group.filledCount ?? 0) / group.slotCount) * 100));
-}
-
-function GroupTile({
-  group,
-  onPrefetch,
-  muted = false,
-}: {
-  group: GroupSummary;
-  onPrefetch: (id: string) => void;
-  muted?: boolean;
-}) {
-  const amount = `₱${Number(group.contributionAmount).toLocaleString()}`;
-  const freq = formatFrequency(group.frequency, group.frequencyDays);
-  const fillPercent = formingFillPercent(group);
-  const turnLabel = muted ? null : turnChipLabel(group);
-
-  return (
-    <Link
-      to={`/groups/${group.id}`}
-      onMouseEnter={() => onPrefetch(group.id)}
-      onFocus={() => onPrefetch(group.id)}
-      className={`group flex h-full flex-col gap-4 rounded-3xl border border-ink-200 bg-white p-5 shadow-card transition-all motion-safe:hover:-translate-y-0.5 hover:shadow-lift ${
-        muted ? "opacity-80" : ""
-      }`}
-    >
-      <div className="flex items-start gap-3">
-        <Avatar name={group.name} size="md" shape="tile" className={muted ? "grayscale" : ""} />
-        <div className="min-w-0 flex-1">
-          <h3 className="font-heading truncate text-lg font-bold text-ink-900">{group.name}</h3>
-          <p className="mt-0.5 truncate text-sm text-ink-500">
-            {amount} · {freq}
-          </p>
-        </div>
-        <span className={`${statusBadgeClass(group.status)} shrink-0`}>{statusLabel(group.status)}</span>
-      </div>
-
-      {group.status === "forming" && !muted && (
-        <div className="h-2.5 overflow-hidden rounded-full bg-ink-100" aria-hidden>
-          <div
-            className="h-full rounded-full bg-gradient-to-r from-brand-500 to-brand-400 transition-all"
-            style={{ width: `${fillPercent}%` }}
-          />
-        </div>
-      )}
-
-      {/* Wraps so the chips drop under the status line on narrow cards instead of widening them. */}
-      <div className="mt-auto flex flex-wrap items-center justify-between gap-x-3 gap-y-2 text-sm">
-        <span className="min-w-0 truncate font-semibold text-ink-600">{groupStatusDetail(group)}</span>
-        <span className="ml-auto flex flex-wrap items-center justify-end gap-2">
-          {turnLabel && <span className={ui.badgeTurn}>{turnLabel}</span>}
-          {group.role === "manager" && (
-            <span className="rounded-full bg-ink-100 px-2.5 py-0.5 text-xs font-bold text-ink-600">
-              Organizing
-            </span>
-          )}
-          <ArrowRight
-            className="h-4 w-4 text-ink-400 transition-transform group-hover:translate-x-0.5"
-            aria-hidden
-          />
-        </span>
-      </div>
-    </Link>
-  );
-}
-
-const ATTENTION_ICON: Record<HomeAttentionItem["kind"], LucideIcon> = {
-  forming_ready: BadgeCheck,
-  forming_slots: Users,
-  confirm_payments: BadgeCheck,
-  payment_due: Clock,
-  owed_outstanding: Wallet,
+const TONES = {
+  good: "bg-brand-100 text-brand-800",
+  due: "bg-sun-100 text-sun-900",
+  bad: "bg-danger-50 text-danger-700",
+  info: "bg-ink-100 text-ink-700",
 };
 
-function AttentionItem({ item }: { item: HomeAttentionItem }) {
-  const Icon = ATTENTION_ICON[item.kind] ?? CircleAlert;
-  const high = item.priority === "high";
-  return (
-    <Link
-      to={item.link}
-      className={`group flex h-full items-start gap-3 rounded-3xl border-2 p-4 transition-colors ${
-        high
-          ? "border-danger-200 bg-danger-50 hover:border-danger-300"
-          : "border-sun-200 bg-sun-50 hover:border-sun-300"
-      }`}
-    >
-      <span
-        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl ${
-          high ? "bg-white text-danger-600" : "bg-white text-sun-700"
-        }`}
-        aria-hidden
-      >
-        <Icon className="h-[18px] w-[18px]" />
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-bold text-ink-900">{item.title}</p>
-        <p className="mt-0.5 text-sm text-ink-700">{item.body}</p>
-      </div>
-      <ArrowRight
-        className="mt-1 h-4 w-4 shrink-0 text-ink-500 transition-transform group-hover:translate-x-0.5"
-        aria-hidden
-      />
-    </Link>
-  );
+/** Where a paluwagan stands for this viewer, as short badges: one fact each, no sentences. */
+function badges(g: Group): Badge[] {
+  const out: Badge[] = [];
+  switch (g.state) {
+    case "LOBBY":
+      out.push(
+        g.occupied < g.slotCount
+          ? { icon: Users, text: `${g.occupied} of ${g.slotCount} joined`, tone: TONES.info }
+          : { icon: Users, text: "Ready to launch", tone: TONES.info },
+      );
+      break;
+    case "LAUNCHED":
+      out.push({ icon: CalendarDays, text: `Starts ${formatShortDate(g.startDate)}`, tone: TONES.info });
+      break;
+    case "ACTIVE": {
+      const s = g.myStanding;
+      if (g.openRound && s) {
+        out.push(
+          s.approved >= s.due
+            ? { icon: Check, text: "Paid up", tone: TONES.good }
+            : { icon: HandCoins, text: `${formatPeso(s.approved)} of ${formatPeso(s.due)} paid`, tone: TONES.due },
+        );
+      }
+      break;
+    }
+    // A finished paluwagan wears the check seal by its name instead of a badge; only a debt of yours stays.
+    case "COMPLETED_WITH_OUTSTANDING_DEBT":
+      if (g.owed > 0) out.push({ icon: HandCoins, text: `You owe ${formatPeso(g.owed)}`, tone: TONES.bad });
+      break;
+  }
+  if (g.myTurn && g.state !== "LOBBY") {
+    out.push(
+      g.myTurn.paid
+        ? { icon: Banknote, text: "Got your payout", tone: TONES.info }
+        : { icon: Banknote, text: `Payout ${formatShortDate(g.myTurn.payoutDate, true)}`, tone: TONES.info },
+    );
+  }
+  return out;
 }
 
-function GroupGridSkeleton() {
-  return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2" aria-hidden>
-      {[0, 1].map((i) => (
-        <div key={i} className="rounded-3xl border border-ink-200 bg-white p-5">
-          <div className="flex items-center gap-3">
-            <div className={`${ui.skeleton} h-10 w-10`} />
-            <div className="flex-1 space-y-2">
-              <div className={`${ui.skeleton} h-4 w-2/3`} />
-              <div className={`${ui.skeleton} h-3 w-1/3`} />
-            </div>
-          </div>
-          <div className={`${ui.skeleton} mt-5 h-3 w-1/2`} />
-        </div>
-      ))}
-    </div>
-  );
-}
+/**
+ * §15.2 home: what's waiting on you, what's due soonest (each with Pay), your paluwagans, and
+ * recent activity.
+ */
+export function HomePage() {
+  const { data, isPending } = useQuery({ queryKey: homeKey, queryFn: () => api.home() });
+  const { data: notes } = useQuery({ queryKey: ["notifications"], queryFn: () => api.getNotifications(), staleTime: 30_000 });
 
-function ActivityRow({
-  item,
-  onNavigate,
-}: {
-  item: NotificationItem;
-  onNavigate: (link: string) => void;
-}) {
-  const content = (
-    <div className="flex gap-3">
-      <NotificationIcon type={item.type} size="sm" />
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-bold text-ink-900">{item.title}</p>
-        <p className="mt-0.5 line-clamp-1 text-sm text-ink-600">{item.body}</p>
-        <p className="mt-1 text-xs text-ink-500">
-          {item.groupName && <span>{item.groupName} · </span>}
-          <time>{formatWhen(item.createdAt)}</time>
-        </p>
-      </div>
-      {item.isUnread && (
-        <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full bg-brand-600" aria-label="Unread" />
-      )}
-    </div>
-  );
-
-  const className =
-    "block w-full rounded-2xl px-3 py-2.5 text-left transition-colors hover:bg-ink-50";
-
-  if (item.link) {
+  if (isPending || !data) {
     return (
-      <button type="button" onClick={() => onNavigate(item.link!)} className={className}>
-        {content}
-      </button>
+      <div className="space-y-3" aria-busy>
+        {[0, 1, 2].map((i) => (
+          <div key={i} className={`${ui.skeleton} h-24`} />
+        ))}
+      </div>
     );
   }
 
-  return <div className={className}>{content}</div>;
-}
+  const waiting = waitingItems(data.groups);
+  const recent = (notes?.notifications ?? []).slice(0, 5);
+  const start = (
+    <Link to="/groups/new" className={ui.btnSecondarySm}>
+      <Plus className="h-4 w-4" aria-hidden />
+      Start a paluwagan
+    </Link>
+  );
 
-export function HomePage() {
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const { user } = useAuth();
-  const [pastExpanded, setPastExpanded] = useState(false);
-
-  const {
-    data: groupsData,
-    isLoading: groupsLoading,
-    error: groupsError,
-  } = useQuery({
-    queryKey: ["groups"],
-    queryFn: () => api.groups(),
-    staleTime: 60_000,
-  });
-
-  const { data: overviewData, error: overviewError } = useQuery({
-    queryKey: ["home-overview"],
-    queryFn: () => api.getHomeOverview(),
-    staleTime: 30_000,
-  });
-
-  const { data: notificationsData, isLoading: notificationsLoading } = useQuery({
-    queryKey: ["notifications"],
-    queryFn: () => api.getNotifications(),
-    staleTime: 30_000,
-  });
-
-  const markRead = useMutation({
-    mutationFn: (id: string) => api.markNotificationRead(id),
-    onMutate: (notificationId) => {
-      patchNotificationRead(queryClient, notificationId);
-    },
-    onError: () => {
-      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
-      void queryClient.invalidateQueries({ queryKey: ["home-overview"] });
-    },
-  });
-
-  function prefetchGroup(groupId: string) {
-    void queryClient.prefetchQuery({
-      queryKey: ["group", groupId],
-      queryFn: ({ signal }) => api.getGroup(groupId, signal),
-      staleTime: 60_000,
-    });
+  if (data.groups.length === 0) {
+    return (
+      <div className={`${ui.emptyState} flex flex-col items-center`}>
+        <KabanChest className="w-32" />
+        <h1 className="font-heading mt-4 text-xl font-bold text-ink-900">No paluwagans yet</h1>
+        <p className={`mt-1 max-w-sm text-sm ${ui.muted}`}>Start one and invite your group, or open an invite link someone sent you.</p>
+        <Link to="/groups/new" className={`mt-6 ${ui.btnPrimary}`}>
+          <Plus className="h-4 w-4" aria-hidden />
+          Start a paluwagan
+        </Link>
+      </div>
+    );
   }
-
-  const recentActivity = (notificationsData?.notifications ?? []).slice(0, 6);
-
-  function handleActivityNavigate(link: string, notificationId: string, isUnread: boolean) {
-    if (isUnread) void markRead.mutate(notificationId);
-    navigate(link);
-  }
-
-  const groups = groupsData?.groups ?? [];
-  const ongoing = groups.filter((g) => g.status !== "completed");
-  const past = groups.filter((g) => g.status === "completed");
-  const stats = overviewData?.stats;
-  const firstName = user?.displayName?.split(/\s+/)[0] ?? "there";
-
-  const metrics = [
-    stats && stats.paymentsDue > 0
-      ? { label: "Due now", value: String(stats.paymentsDue), hint: "payments this cycle", icon: "clock", tone: "warning" }
-      : null,
-    stats && stats.pendingConfirmations > 0
-      ? {
-          label: "To confirm",
-          value: String(stats.pendingConfirmations),
-          hint: "awaiting your review",
-          icon: "check",
-          tone: "success",
-        }
-      : null,
-    stats && stats.totalOwed != null && Number(stats.totalOwed) > 0
-      ? {
-          label: "Owed to you",
-          value: `₱${Number(stats.totalOwed).toLocaleString()}`,
-          hint: "outstanding obligations",
-          icon: "wallet",
-          tone: "danger",
-        }
-      : null,
-    stats && stats.unreadNotifications > 0
-      ? { label: "Unread", value: String(stats.unreadNotifications), hint: "notifications", icon: "bell", tone: "neutral" }
-      : null,
-  ].filter(Boolean) as {
-    label: string;
-    value: string;
-    hint: string;
-    icon: StatCardIconName;
-    tone: StatCardTone;
-  }[];
-
-  const subtitle =
-    ongoing.length === 0
-      ? "Create a paluwagan or join one with an invite link."
-      : stats && metrics.length > 0
-        ? `${ongoing.length} group${ongoing.length === 1 ? "" : "s"} · ${metrics.length} item${metrics.length === 1 ? "" : "s"} need attention`
-        : `${ongoing.length} ongoing paluwagan${ongoing.length === 1 ? "" : "s"}`;
 
   return (
-    <div className="space-y-10">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className={ui.pageTitle}>Kumusta, {firstName}!</h1>
-          <p className={ui.pageSubtitle}>{subtitle}</p>
-        </div>
-        <Link to="/groups/new" className={`${ui.btnPrimary} shrink-0`}>
-          New paluwagan
-        </Link>
-      </header>
+    <div className="space-y-8">
+      <h1 className={ui.pageTitle}>Home</h1>
 
-      {groupsError && (
-        <p className={ui.error}>
-          Failed to load your groups. Check that the API and database are running.
-        </p>
-      )}
-      {overviewError && !groupsError && (
-        <p className={ui.error}>Some dashboard details could not be loaded.</p>
-      )}
-
-      {groupsLoading && groups.length === 0 && <GroupGridSkeleton />}
-
-      {!groupsLoading && !groupsError && groups.length === 0 && (
-        <div className={`${ui.emptyState} flex flex-col items-center`}>
-          <KabanChest className="w-40" />
-          <p className="font-heading mt-4 text-xl font-bold text-ink-900">Your kaban is empty</p>
-          <p className={`mt-2 max-w-sm ${ui.muted}`}>
-            Start a paluwagan with your group, or join one with an invite link from your organizer.
-          </p>
-          <Link to="/groups/new" className={`mt-6 ${ui.btnPrimary}`}>
-            Create your first paluwagan
-          </Link>
-        </div>
-      )}
-
-      {groups.length > 0 && metrics.length > 0 && (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {metrics.map((metric) => (
-            <StatCard key={metric.label} {...metric} />
-          ))}
-        </div>
-      )}
-
-      {!groupsLoading && !groupsError && overviewData && overviewData.attention.length > 0 && (
-        <section>
-          <SectionHeader
-            title="Needs action"
-            subtitle={`${overviewData.attention.length} item${overviewData.attention.length === 1 ? "" : "s"}`}
-          />
-          <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            {overviewData.attention.map((item) => (
-              <li key={item.id}>
-                <AttentionItem item={item} />
+      {waiting.length > 0 && (
+        <section aria-labelledby="waiting-heading" className="rounded-3xl border-2 border-sun-200 bg-sun-50 p-5">
+          <h2 id="waiting-heading" className="text-xs font-bold uppercase tracking-wide text-sun-800">
+            Waiting on you
+          </h2>
+          <ul className="mt-2 divide-y divide-sun-200">
+            {waiting.map((w, i) => (
+              <li key={i}>
+                <Link to={`/groups/${w.groupId}`} className="flex min-h-12 items-center gap-3 py-2 text-sm font-semibold text-ink-900">
+                  <w.icon className="h-4 w-4 shrink-0 text-sun-800" aria-hidden />
+                  <span className="flex-1">{w.text}</span>
+                  <ChevronRight className="h-4 w-4 text-ink-400" aria-hidden />
+                </Link>
               </li>
             ))}
           </ul>
         </section>
       )}
 
-      {ongoing.length > 0 && (
-        <section>
-          <SectionHeader title="Your groups" subtitle={`${ongoing.length} active or forming`} />
-          <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {ongoing.map((group) => (
-              <li key={group.id}>
-                <GroupTile group={group} onPrefetch={prefetchGroup} />
-              </li>
-            ))}
+      {data.due.length > 0 && (
+        <section aria-labelledby="due-heading">
+          <h2 id="due-heading" className={`${ui.sectionHeading} mb-3`}>
+            Due soon
+          </h2>
+          <ul className="divide-y divide-ink-100 overflow-hidden rounded-3xl border border-ink-200 bg-white">
+            {data.due.map((item) => {
+              const hint = item.dueDate ? dueHint(item.dueDate) : null;
+              return (
+                <li key={`${item.groupId}-${item.kind}`} className="flex items-center gap-3 px-4 py-3">
+                  <HandCoins className={`h-5 w-5 shrink-0 ${item.kind === "DEBT" ? "text-danger-700" : "text-brand-700"}`} aria-hidden />
+                  <span className="min-w-0 flex-1">
+                    {/* What and where on one line; when on the next. The round is on the group page. */}
+                    <span className="block truncate text-sm font-bold tabular-nums text-ink-900">
+                      {formatPeso(item.amount)}
+                      {item.kind === "DEBT" && <span className="font-semibold text-danger-700"> debt</span>}
+                      <span className="font-semibold text-ink-600"> · {item.groupName}</span>
+                    </span>
+                    {hint && (
+                      <span className={`block text-xs ${hint.overdue ? "font-semibold text-danger-700" : "text-ink-500"}`}>
+                        {hint.overdue ? `${hint.label[0].toUpperCase()}${hint.label.slice(1)}` : `Due ${hint.label}`}
+                      </span>
+                    )}
+                  </span>
+                  <Link
+                    to={`/groups/${item.groupId}?pay=${item.kind === "DEBT" ? "debt" : "contribution"}`}
+                    className={`${ui.btnPrimarySm} min-h-9`}
+                  >
+                    Pay
+                  </Link>
+                </li>
+              );
+            })}
           </ul>
         </section>
       )}
 
-      <section className={ui.sectionCard}>
-        <SectionHeader
-          title="Recent activity"
-          subtitle={
-            notificationsData?.unreadCount
-              ? `${notificationsData.unreadCount} unread`
-              : "Latest updates across your groups"
-          }
-          action={
-            <Link to="/notifications" className={ui.link}>
-              View all
-            </Link>
-          }
-        />
-        {notificationsLoading ? (
-          <div className="space-y-3" aria-hidden>
-            {[0, 1, 2].map((i) => (
-              <div key={i} className={`${ui.skeleton} h-12`} />
-            ))}
-          </div>
-        ) : recentActivity.length === 0 ? (
-          <p className={`${ui.muted} text-sm`}>No updates yet.</p>
-        ) : (
-          <ul className="-mx-3 divide-y divide-ink-100">
-            {recentActivity.map((item) => (
-              <li key={item.id}>
-                <ActivityRow
-                  item={item}
-                  onNavigate={(link) => handleActivityNavigate(link, item.id, item.isUnread)}
-                />
+      <section aria-labelledby="groups-heading">
+        <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+          <h2 id="groups-heading" className={ui.sectionHeading}>
+            Your paluwagans
+          </h2>
+          {start}
+        </div>
+        <ul className="space-y-3">
+          {data.groups.map((g) => {
+            const complete = g.state === "COMPLETED" || g.state === "COMPLETED_WITH_OUTSTANDING_DEBT";
+            const shown = badges(g);
+            return (
+              <li key={g.id}>
+                <Link
+                  to={`/groups/${g.id}`}
+                  className="flex items-center gap-4 rounded-3xl border border-ink-200 bg-white p-5 shadow-card transition-colors hover:border-brand-300"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-bold uppercase tracking-wide text-ink-500">
+                      {formatPeso(g.contribution)} {g.frequencyLabel.toLowerCase()}
+                    </p>
+                    <p className="font-heading mt-0.5 flex items-center gap-2 text-lg font-bold text-ink-900">
+                      {complete && <CompleteSeal size="sm" />}
+                      <span className="truncate">{g.name}</span>
+                    </p>
+                    {shown.length > 0 && (
+                      <ul className="mt-2 flex flex-wrap gap-1.5">
+                        {shown.map((b) => (
+                          <li key={b.text} className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${b.tone}`}>
+                            <b.icon className="h-3.5 w-3.5" aria-hidden />
+                            {b.text}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                  <ChevronRight className="h-5 w-5 shrink-0 text-ink-400" aria-hidden />
+                </Link>
               </li>
-            ))}
-          </ul>
-        )}
+            );
+          })}
+        </ul>
       </section>
 
-      {past.length > 0 && (
-        <section>
-          <button
-            type="button"
-            onClick={() => setPastExpanded((v) => !v)}
-            aria-expanded={past.length <= 2 || pastExpanded}
-            className="mb-4 flex w-full items-center justify-between gap-3 text-left"
-          >
-            <div>
-              <h2 className={ui.sectionHeader}>
-                Completed{past.length > 1 ? ` (${past.length})` : ""}
-              </h2>
-              <p className={ui.sectionSubtitle}>Past paluwagans</p>
-            </div>
-            {past.length > 2 && (
-              <span className={`${ui.link} shrink-0`}>{pastExpanded ? "Hide" : "Show all"}</span>
-            )}
-          </button>
-          {(past.length <= 2 || pastExpanded) && (
-            <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              {past.map((group) => (
-                <li key={group.id}>
-                  <GroupTile group={group} onPrefetch={prefetchGroup} muted />
-                </li>
-              ))}
-            </ul>
-          )}
+      {recent.length > 0 && (
+        <section aria-labelledby="recent-heading">
+          <div className="mb-3 flex items-end justify-between">
+            <h2 id="recent-heading" className={ui.sectionHeading}>
+              Recent
+            </h2>
+            <Link to="/notifications" className={ui.link}>
+              See all
+            </Link>
+          </div>
+          <ul className="divide-y divide-ink-100 overflow-hidden rounded-3xl border border-ink-200 bg-white">
+            {recent.map((n) => (
+              <li key={n.id}>
+                <Link to={n.link ?? "/notifications"} className="flex items-start gap-3 px-4 py-3 hover:bg-ink-50">
+                  <NotificationIcon kind={n.kind} size="sm" />
+                  <span className="min-w-0 flex-1">
+                    <span className={`block truncate text-sm text-ink-900 ${n.isUnread ? "font-bold" : "font-semibold"}`}>{n.title}</span>
+                    <span className="block truncate text-xs text-ink-500">{n.groupName}</span>
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
         </section>
       )}
     </div>

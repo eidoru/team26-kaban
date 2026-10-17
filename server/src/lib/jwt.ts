@@ -2,7 +2,6 @@ import jwt, { type SignOptions } from "jsonwebtoken";
 import crypto from "crypto";
 
 const accessSecret = process.env.JWT_ACCESS_SECRET ?? "dev-access-secret";
-const refreshSecret = process.env.JWT_REFRESH_SECRET ?? "dev-refresh-secret";
 const accessExpiresIn = process.env.JWT_ACCESS_EXPIRES_IN ?? "15m";
 const refreshExpiresIn = process.env.JWT_REFRESH_EXPIRES_IN ?? "7d";
 
@@ -15,17 +14,11 @@ export function signAccessToken(payload: TokenPayload): string {
   return jwt.sign(payload, accessSecret, { expiresIn: accessExpiresIn as SignOptions["expiresIn"] });
 }
 
-export function signRefreshToken(payload: TokenPayload): string {
-  return jwt.sign(payload, refreshSecret, { expiresIn: refreshExpiresIn as SignOptions["expiresIn"] });
-}
 
 export function verifyAccessToken(token: string): TokenPayload {
   return jwt.verify(token, accessSecret) as TokenPayload;
 }
 
-export function verifyRefreshToken(token: string): TokenPayload {
-  return jwt.verify(token, refreshSecret) as TokenPayload;
-}
 
 export function generateOpaqueToken(): string {
   return crypto.randomBytes(48).toString("hex");

@@ -1,41 +1,86 @@
 import { Prisma } from "@prisma/client";
-import { prisma } from "../lib/prisma.js";
 
-export async function writeAuditLog(params: {
-  groupId?: string;
-  actorId?: string;
-  action: string;
-  entityType: string;
-  entityId: string;
-  metadata?: Record<string, unknown>;
-}) {
-  await prisma.auditLog.create({
+type Db = Prisma.TransactionClient;
+
+/** Every audited action (R-AUD-01). Dotted names group them for filters. */
+export type AuditAction =
+  | "group.created"
+  | "group.edited"
+  | "group.cancelled"
+  | "group.launched"
+  | "group.activated"
+  | "invite_link.created"
+  | "member.joined"
+  | "member.left"
+  | "member.kicked"
+  | "placeholder.added"
+  | "placeholder.deleted"
+  | "claim_link.created"
+  | "placeholder.claimed"
+  | "order.changed"
+  | "order.shuffled"
+  | "order.reset"
+  | "submission.created"
+  | "submission.approved"
+  | "submission.denied"
+  | "submission.cancelled"
+  | "round.closed"
+  | "round.opened"
+  | "payout.processed"
+  | "payout.handed_over"
+  | "payout.confirmed"
+  | "debt.created"
+  | "debt.interest_charged"
+  | "debt.deducted"
+  | "debt.repaid"
+  | "group.completed"
+  | "dispute.raised"
+  | "dispute.approved"
+  | "dispute.denied"
+  | "dispute.cancelled"
+  | "dispute.expired"
+  | "refund.recorded"
+  | "swap.requested"
+  | "swap.accepted"
+  | "swap.declined"
+  | "swap.approved"
+  | "swap.denied"
+  | "swap.cancelled"
+  | "swap.expired"
+  | "reminder.sent";
+
+/**
+ * Append one immutable entry (R-AUD-02, R-AUD-04). Amounts are centavos. `actorUserId` is null for
+ * system actions. Write it in the same transaction as the change it records.
+ */
+export async function audit(
+  db: Db,
+  entry: {
+    groupId: string;
+    actorUserId: string | null;
+    action: AuditAction;
+    targetSlotId?: string | null;
+    /** The target slot's name now; entries keep it even if the slot is later removed. */
+    targetName?: string | null;
+    amounts?: Record<string, number>;
+    before?: Record<string, unknown>;
+    after?: Record<string, unknown>;
+    proofAttached?: boolean;
+    selfApproved?: boolean;
+  },
+) {
+  await db.auditEntry.create({
     data: {
-      groupId: params.groupId,
-      actorId: params.actorId,
-      action: params.action,
-      entityType: params.entityType,
-      entityId: params.entityId,
-      metadata: (params.metadata ?? undefined) as Prisma.InputJsonValue | undefined,
+      groupId: entry.groupId,
+      actorUserId: entry.actorUserId,
+      action: entry.action,
+      targetSlotId: entry.targetSlotId ?? null,
+      targetName: entry.targetName ?? null,
+      amounts: entry.amounts as Prisma.InputJsonValue | undefined,
+      before: entry.before as Prisma.InputJsonValue | undefined,
+      after: entry.after as Prisma.InputJsonValue | undefined,
+      proofAttached: entry.proofAttached,
+      selfApproved: entry.selfApproved ?? false,
     },
   });
-}
-
-export async function createNotification(params: {
-  userId: string;
-  groupId?: string;
-  type:
-    | "member_left"
-    | "chair_claimed"
-    | "contribution_confirmed"
-    | "contribution_due"
-    | "turn_to_receive"
-    | "dispute_raised"
-    | "dispute_resolved"
-    | "general";
-  title: string;
-  body: string;
-  link?: string;
-}) {
-  await prisma.notification.create({ data: params });
 }

@@ -1,178 +1,95 @@
-import { ContributionStatus, GroupStatus, ObligationStatus, RoundStatus } from "@prisma/client";
-import { createNotification } from "../lib/audit.js";
+import { REMINDER_DAYS_BEFORE } from "../domain/constants.js";
+import { formatPeso } from "../domain/money.js";
+import { daysBetween } from "../domain/schedule.js";
+import { audit } from "../lib/audit.js";
+import { conflict, notFound } from "../lib/errors.js";
 import { prisma } from "../lib/prisma.js";
-import { getGroupInterestRoundContexts, getObligationTotalRemaining, toShortfallInterestTerms } from "./shortfallInterest.js";
-import { startOfUtcDay } from "./schedule.js";
+import { todayInManila, toCalendarDate } from "../lib/today.js";
+import { notifyUsers } from "./notifications.js";
+import { periodTotals } from "./submissions.js";
+import { slotName, withGroupLock } from "./common.js";
 import { formatDisplayDate } from "../lib/dates.js";
 
-function addDays(date: Date, days: number): Date {
-  const result = new Date(date);
-  result.setUTCDate(result.getUTCDate() + days);
-  return result;
-}
+type ReminderKind = "BEFORE_PAYOUT" | "PAYOUT_DAY" | "MANUAL" | "RECEIPT";
 
-async function notifyOnce(params: {
-  userId: string;
-  groupId: string;
-  type: "contribution_due" | "turn_to_receive" | "general";
-  title: string;
-  body: string;
-  link: string;
-}) {
-  const since = startOfUtcDay(new Date());
-  const existing = await prisma.notification.findFirst({
-    where: {
-      userId: params.userId,
-      groupId: params.groupId,
-      type: params.type,
-      // Match on body, not title: titles are reused across distinct reminders
-      // (e.g. every "outstanding debt" notice for a group shares one title),
-      // while the body carries the round-specific detail that actually tells
-      // two reminders apart. Matching on title alone silently swallowed every
-      // obligation reminder after the first for members who owed on more than
-      // one round in the same group.
-      body: params.body,
-      createdAt: { gte: since },
-    },
+/**
+ * §12: remind everyone not fully paid, `REMINDER_DAYS_BEFORE` days before the payout date and on
+ * the day itself (the organizer for placeholders). Each reminder goes once per slot and round; a
+ * missed run catches up, since "before" means any day inside the window. `today` and `onlyGroupId`
+ * are for demo tools and tests.
+ */
+export async function sendDueReminders(today = todayInManila(), onlyGroupId?: string) {
+  const rounds = await prisma.round.findMany({
+    where: { status: "OPEN", group: { state: "ACTIVE" }, ...(onlyGroupId ? { groupId: onlyGroupId } : {}) },
+    include: { group: true },
   });
-  if (existing) return false;
-
-  await createNotification({
-    userId: params.userId,
-    groupId: params.groupId,
-    type: params.type,
-    title: params.title,
-    body: params.body,
-    link: params.link,
-  });
-  return true;
-}
-
-export async function sendDueReminders(): Promise<{ sent: number }> {
-  const today = startOfUtcDay(new Date());
-  const tomorrow = addDays(today, 1);
   let sent = 0;
-
-  const activeGroups = await prisma.group.findMany({
-    where: { status: GroupStatus.active },
-    select: { id: true, name: true, contributionAmount: true },
-  });
-
-  for (const group of activeGroups) {
-    const currentRound = await prisma.round.findFirst({
-      where: { groupId: group.id, status: RoundStatus.current },
-      include: {
-        contributions: {
-          include: { membership: { select: { userId: true, displayName: true } } },
-        },
-      },
-    });
-    if (!currentRound) continue;
-
-    const dueDate = startOfUtcDay(currentRound.dueDate);
-    const link = `/groups/${group.id}`;
-    const isDueTomorrow = dueDate.getTime() === tomorrow.getTime();
-    const isOverdue = dueDate.getTime() < today.getTime();
-
-    if (isDueTomorrow || isOverdue) {
-      for (const c of currentRound.contributions) {
-        if (c.status === ContributionStatus.confirmed || !c.membership.userId) continue;
-
-        const title = isOverdue
-          ? `${group.name}: contribution overdue`
-          : `${group.name}: contribution due tomorrow`;
-        const body = isOverdue
-          ? `Round ${currentRound.number} was due ${formatDisplayDate(currentRound.dueDate)}. Please report or settle your payment.`
-          : `Round ${currentRound.number} is due tomorrow (₱${Number(group.contributionAmount).toLocaleString()}).`;
-
-        if (
-          await notifyOnce({
-            userId: c.membership.userId!,
-            groupId: group.id,
-            type: "contribution_due",
-            title,
-            body,
-            link,
-          })
-        ) {
-          sent++;
-        }
-      }
-    }
-
-    const recipient = await prisma.membership.findUnique({
-      where: { id: currentRound.recipientMembershipId },
-      select: { userId: true, displayName: true },
-    });
-    if (recipient?.userId && isDueTomorrow) {
-      if (
-        await notifyOnce({
-          userId: recipient.userId,
-          groupId: group.id,
-          type: "turn_to_receive",
-          title: `${group.name}: your payout round`,
-          body: `Round ${currentRound.number} closes tomorrow — you are scheduled to receive the pot.`,
-          link,
-        })
-      ) {
-        sent++;
-      }
-    }
-  }
-
-  const openObligations = await prisma.obligation.findMany({
-    where: {
-      status: { in: [ObligationStatus.unsettled, ObligationStatus.partially_settled] },
-      debtorMembership: { userId: { not: null } },
-    },
-    include: {
-      debtorMembership: { select: { userId: true, displayName: true } },
-      sourceRound: {
-        include: {
-          group: {
-            select: {
-              id: true,
-              name: true,
-              shortfallInterestRatePercent: true,
-              frequency: true,
-              frequencyDays: true,
-            },
-          },
-        },
-      },
-    },
-  });
-
-  const roundContextByGroup = await getGroupInterestRoundContexts(
-    prisma,
-    [...new Set(openObligations.map((o) => o.sourceRound.group.id))],
-  );
-
-  for (const o of openObligations) {
-    const userId = o.debtorMembership.userId!;
-    const group = o.sourceRound.group;
-    const terms = toShortfallInterestTerms(group);
-    const groupRoundContext = roundContextByGroup.get(group.id) ?? {
-      lastClosedRoundNumber: 0,
-      currentRoundNumber: null,
-    };
-    const remaining = getObligationTotalRemaining(o, terms, {
-      sourceRoundNumber: o.sourceRound.number,
-      ...groupRoundContext,
-    });
-    if (
-      await notifyOnce({
-        userId,
-        groupId: group.id,
-        type: "general",
-        title: `${group.name}: outstanding debt`,
-        body: `You still owe ₱${Number(remaining).toLocaleString()} from round ${o.sourceRound.number}.`,
-        link: `/groups/${group.id}`,
-      })
-    ) {
+  for (const round of rounds) {
+    const daysLeft = daysBetween(today, toCalendarDate(round.payoutDate));
+    const kind: ReminderKind | null =
+      daysLeft === 0 ? "PAYOUT_DAY" : daysLeft > 0 && daysLeft <= REMINDER_DAYS_BEFORE ? "BEFORE_PAYOUT" : null;
+    if (!kind) continue;
+    const slots = await prisma.slot.findMany({ where: { groupId: round.groupId }, include: { user: true } });
+    for (const slot of slots) {
+      const already = await prisma.reminderSent.findFirst({ where: { roundId: round.id, slotId: slot.id, kind } });
+      if (already) continue;
+      const { approved } = await periodTotals(prisma, slot.id, round.id);
+      const unpaid = Number(round.group.contribution) - approved;
+      if (unpaid <= 0) continue;
+      await prisma.$transaction(async (tx) => {
+        await tx.reminderSent.create({ data: { roundId: round.id, slotId: slot.id, kind } });
+        await notifyUsers(tx, [slot.userId ?? round.group.organizerId], {
+          groupId: round.groupId,
+          kind: kind === "PAYOUT_DAY" ? "reminder.payout_day" : "reminder.due",
+          title:
+            kind === "PAYOUT_DAY"
+              ? `Payout day: ${formatPeso(unpaid)} still unpaid${slot.userId ? "" : ` for ${slotName(slot)}`}`
+              : `${formatPeso(unpaid)} due in ${daysLeft} day${daysLeft === 1 ? "" : "s"}${slot.userId ? "" : ` for ${slotName(slot)}`}`,
+          body: `${round.group.name}, round ${round.number}. Anything still unpaid after today becomes a debt.`,
+        });
+      });
       sent++;
     }
   }
+  return { remindersSent: sent };
+}
 
-  return { sent };
+/** §15.1: the organizer nudges one member who hasn't fully paid this round. Once a day per member. */
+export async function sendManualReminder(groupId: string, organizerUserId: string, slotId: string) {
+  return withGroupLock(groupId, async (tx, group) => {
+    const round = await tx.round.findFirst({ where: { groupId, status: "OPEN" } });
+    if (!round) throw conflict("No contribution period is open.", "NO_OPEN_PERIOD");
+    const slot = await tx.slot.findFirst({ where: { id: slotId, groupId }, include: { user: true } });
+    if (!slot) throw notFound("Slot");
+    if (!slot.userId || slot.userId === organizerUserId) throw conflict("Only members with an account can be reminded.", "NO_ACCOUNT");
+    const { approved } = await periodTotals(tx, slot.id, round.id);
+    const unpaid = Number(group.contribution) - approved;
+    if (unpaid <= 0) throw conflict(`${slotName(slot)} is already paid up.`, "PAID");
+    const recent = await tx.reminderSent.findFirst({
+      where: { roundId: round.id, slotId, kind: "MANUAL", sentAt: { gt: new Date(Date.now() - 24 * 3_600_000) } },
+    });
+    if (recent) throw conflict(`You reminded ${slotName(slot)} in the last day already.`, "ALREADY_REMINDED");
+    await tx.reminderSent.create({ data: { roundId: round.id, slotId, kind: "MANUAL" } });
+    await notifyUsers(tx, [slot.userId], {
+      groupId,
+      kind: "reminder.manual",
+      title: `Reminder from ${group.name}: ${formatPeso(unpaid)} to pay`,
+      body: `Round ${round.number} pays out on ${formatDisplayDate(round.payoutDate)}. The organizer sent this reminder.`,
+    });
+    await audit(tx, {
+      groupId,
+      actorUserId: organizerUserId,
+      action: "reminder.sent",
+      targetSlotId: slot.id,
+      targetName: slotName(slot),
+      amounts: { unpaid },
+      after: { round: round.number },
+    });
+  });
+}
+
+/** When each slot was last reminded this round, for the organizer's "Reminded" label. */
+export async function lastRemindedAt(roundId: string) {
+  const rows = await prisma.reminderSent.groupBy({ by: ["slotId"], where: { roundId, kind: "MANUAL" }, _max: { sentAt: true } });
+  return new Map(rows.map((r) => [r.slotId, r._max.sentAt?.toISOString() ?? null]));
 }

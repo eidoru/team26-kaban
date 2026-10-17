@@ -1,240 +1,234 @@
-import { ContributionStatus, DisputeStatus, GroupStatus } from "@prisma/client";
-import { createNotification, writeAuditLog } from "../lib/audit.js";
-import { prisma } from "../lib/prisma.js";
-import { GroupError } from "./groups.js";
+import { DISPUTE_REASON_MAX_LENGTH, NOTE_MAX_LENGTH } from "../domain/constants.js";
+import { formatPeso } from "../domain/money.js";
+import { disputeAmountError, refundFor } from "../domain/submissions.js";
+import { audit } from "../lib/audit.js";
+import { AppError, badRequest, conflict, forbidden, notFound } from "../lib/errors.js";
+import { notifyUsers } from "./notifications.js";
+import { periodTotals } from "./submissions.js";
+import { slotName, withGroupLock, type Db } from "./common.js";
 
-export class DisputeError extends GroupError {}
-
-export function canRaiseContributionDispute(opts: {
-  groupStarted: boolean;
-  isManager: boolean;
-  viewerMembershipId: string;
-  contributionMembershipId: string;
-  contributionStatus: string;
-  hasOpenDispute: boolean;
-}): boolean {
-  if (!opts.groupStarted) return false;
-  if (opts.isManager) return false;
-  if (opts.viewerMembershipId !== opts.contributionMembershipId) return false;
-  if (opts.hasOpenDispute) return false;
-  if (
-    opts.contributionStatus !== ContributionStatus.reported &&
-    opts.contributionStatus !== ContributionStatus.confirmed
-  ) {
-    return false;
-  }
-  return true;
+function requiredText(text: string, max: number, missing: string, label: string) {
+  const value = text.trim();
+  if (!value) throw badRequest(missing);
+  if (value.length > max) throw badRequest(`${label} can be up to ${max} characters.`);
+  return value;
 }
 
-export function serializeDispute(d: {
-  id: string;
-  contributionId: string;
-  raisedById: string;
-  status: DisputeStatus;
-  note: string | null;
-  proofUrl: string | null;
-  resolution: string | null;
-  resolvedAt: Date | null;
-  createdAt: Date;
-}) {
-  return {
-    id: d.id,
-    contributionId: d.contributionId,
-    raisedById: d.raisedById,
-    status: d.status,
-    note: d.note,
-    proofUrl: d.proofUrl,
-    resolution: d.resolution,
-    resolvedAt: d.resolvedAt?.toISOString() ?? null,
-    createdAt: d.createdAt.toISOString(),
-  };
-}
-
-export async function getGroupDisputes(groupId: string) {
-  const disputes = await prisma.dispute.findMany({
-    where: { contribution: { round: { groupId } } },
-    include: {
-      contribution: {
-        include: {
-          membership: { select: { displayName: true, userId: true } },
-          round: { select: { number: true, id: true } },
-        },
-      },
-      raisedBy: { select: { displayName: true } },
-    },
-    orderBy: [{ status: "asc" }, { createdAt: "desc" }],
-  });
-
-  return disputes.map((d) => ({
-    ...serializeDispute(d),
-    raisedByName: d.raisedBy.displayName,
-    memberDisplayName: d.contribution.membership.displayName,
-    roundNumber: d.contribution.round.number,
-    contributionStatus: d.contribution.status,
-    contributionAmount: d.contribution.amount.toString(),
-  }));
-}
-
+/**
+ * R-DSP-01 / R-DSP-04: ask to change an approved contribution to `proposedAmount`, while its period
+ * is still open. The slot holder disputes their own; the organizer can for themselves and for
+ * placeholders (as with submissions, R-SUB-02). One open dispute per submission.
+ */
 export async function raiseDispute(
   groupId: string,
-  contributionId: string,
-  raiserMembershipId: string,
   actorUserId: string,
-  input: { note?: string; proofUrl?: string },
+  input: { submissionId: string; proposedAmount: number; reason: string },
 ) {
-  const contribution = await prisma.contribution.findUnique({
-    where: { id: contributionId },
-    include: {
-      membership: true,
-      round: { include: { group: true } },
-      disputes: { where: { status: DisputeStatus.open } },
-    },
-  });
-
-  if (!contribution || contribution.round.groupId !== groupId) {
-    throw new DisputeError(404, "Contribution not found");
-  }
-
-  const group = contribution.round.group;
-  if (group.status !== GroupStatus.active && group.status !== GroupStatus.completed) {
-    throw new DisputeError(409, "Disputes can only be raised after the cycle has started");
-  }
-
-  if (
-    contribution.status !== ContributionStatus.reported &&
-    contribution.status !== ContributionStatus.confirmed
-  ) {
-    throw new DisputeError(409, "Disputes can only be raised on reported or confirmed contributions");
-  }
-
-  if (contribution.disputes.length > 0) {
-    throw new DisputeError(409, "An open dispute already exists for this contribution");
-  }
-
-  const raiser = await prisma.membership.findFirst({
-    where: { id: raiserMembershipId, groupId },
-  });
-  if (!raiser) {
-    throw new DisputeError(404, "Membership not found");
-  }
-  if (raiser.isManager) {
-    throw new DisputeError(403, "Managers cannot raise disputes");
-  }
-  if (contribution.membershipId !== raiserMembershipId) {
-    throw new DisputeError(403, "You can only dispute your own contribution");
-  }
-
-  const dispute = await prisma.dispute.create({
-    data: {
-      contributionId,
-      raisedById: raiserMembershipId,
-      note: input.note ?? null,
-      proofUrl: input.proofUrl ?? null,
-    },
-  });
-
-  await writeAuditLog({
-    groupId,
-    actorId: actorUserId,
-    action: "dispute.raised",
-    entityType: "dispute",
-    entityId: dispute.id,
-    metadata: {
-      contributionId,
-      membershipId: contribution.membershipId,
-      memberDisplayName: contribution.membership.displayName,
-      roundNumber: contribution.round.number,
-      note: input.note,
-    },
-  });
-
-  const managerMembership = await prisma.membership.findFirst({
-    where: { groupId, isManager: true, userId: { not: null } },
-  });
-  if (managerMembership?.userId && managerMembership.userId !== actorUserId) {
-    await createNotification({
-      userId: managerMembership.userId,
-      groupId,
-      type: "dispute_raised",
-      title: `${group.name}: dispute raised`,
-      body: `A payment dispute was raised for round ${contribution.round.number} (${contribution.membership.displayName}).`,
-      link: `/groups/${groupId}`,
+  const reason = requiredText(input.reason, DISPUTE_REASON_MAX_LENGTH, "Say what's wrong.", "The reason");
+  return withGroupLock(groupId, async (tx, group) => {
+    const submission = await tx.submission.findFirst({
+      where: { id: input.submissionId, groupId },
+      include: { slot: { include: { user: true } }, round: true, disputes: { where: { status: "PENDING" } } },
     });
-  }
+    if (!submission) throw notFound("Payment");
+    const actor = await tx.slot.findFirstOrThrow({ where: { groupId, userId: actorUserId } });
+    const ownSlot = submission.slotId === actor.id;
+    if (!ownSlot && !(actor.isOrganizer && !submission.slot.userId)) {
+      throw forbidden("You can report problems with your own slot's payments only.");
+    }
+    if (submission.status !== "APPROVED" || submission.appliedAs !== "CONTRIBUTION") {
+      throw conflict("Only approved contributions can be reported.", "NOT_DISPUTABLE");
+    }
+    if (submission.round?.status !== "OPEN") {
+      throw conflict("Problem reports close when the period's payout happens.", "PERIOD_CLOSED");
+    }
+    if (submission.disputes.length > 0) throw conflict("This payment already has an open dispute.", "ALREADY_DISPUTED");
 
-  return dispute;
+    const current = Number(submission.effectiveAmount ?? submission.amount);
+    const { approved } = await periodTotals(tx, submission.slotId, submission.roundId!);
+    const error = disputeAmountError(input.proposedAmount, current, approved, Number(group.contribution));
+    if (error) throw new AppError(400, error, "BAD_AMOUNT", { proposedAmount: error });
+
+    const dispute = await tx.dispute.create({
+      data: {
+        groupId,
+        submissionId: submission.id,
+        slotId: submission.slotId,
+        raisedById: actorUserId,
+        previousAmount: BigInt(current),
+        proposedAmount: BigInt(input.proposedAmount),
+        reason,
+      },
+    });
+    await audit(tx, {
+      groupId,
+      actorUserId,
+      action: "dispute.raised",
+      targetSlotId: submission.slotId,
+      targetName: slotName(submission.slot),
+      before: { amount: current },
+      after: { amount: input.proposedAmount, reason, round: submission.round.number },
+    });
+    if (!actor.isOrganizer) {
+      await notifyUsers(tx, [group.organizerId], {
+        groupId,
+        kind: "dispute.raised",
+        title: `${slotName(submission.slot)} reports a problem with a ${formatPeso(current)} payment`,
+        body: `They ask to change it to ${formatPeso(input.proposedAmount)}. Resolve it before the payout date.`,
+      });
+    }
+    return dispute;
+  });
 }
 
-export async function resolveDispute(
+/**
+ * R-DSP-02 / R-DSP-03: the organizer approves (the payment's amount changes; a decrease is recorded
+ * as a refund owed to the member) or denies with a reason.
+ */
+export async function reviewDispute(
   groupId: string,
+  organizerUserId: string,
   disputeId: string,
-  actorUserId: string,
-  resolution: string,
+  decision: { approve: true } | { approve: false; note: string },
 ) {
-  const dispute = await prisma.dispute.findUnique({
-    where: { id: disputeId },
-    include: {
-      contribution: {
-        include: {
-          membership: true,
-          round: { include: { group: true } },
-        },
+  const note = decision.approve
+    ? null
+    : requiredText(decision.note, NOTE_MAX_LENGTH, "Say why, so the member understands.", "The reason");
+  return withGroupLock(groupId, async (tx, group) => {
+    const dispute = await tx.dispute.findFirst({
+      where: { id: disputeId, groupId },
+      include: { submission: { include: { round: true } }, slot: { include: { user: true } } },
+    });
+    if (!dispute) throw notFound("Problem report");
+    if (dispute.status !== "PENDING") throw conflict("This report was already handled.", "ALREADY_REVIEWED");
+    const previous = Number(dispute.previousAmount);
+    const proposed = Number(dispute.proposedAmount);
+    let refund = 0;
+
+    if (decision.approve) {
+      // Other approvals since it was raised may have used up room for an increase (R-DEC-13).
+      const { approved } = await periodTotals(tx, dispute.slotId, dispute.submission.roundId!);
+      const current = Number(dispute.submission.effectiveAmount ?? dispute.submission.amount);
+      const error = disputeAmountError(proposed, current, approved, Number(group.contribution));
+      if (error) throw conflict(`${error} Deny this report instead.`, "BAD_AMOUNT");
+      await tx.submission.update({ where: { id: dispute.submissionId }, data: { effectiveAmount: BigInt(proposed) } });
+      refund = refundFor(current, proposed);
+      if (refund > 0) {
+        await tx.refund.create({ data: { groupId, slotId: dispute.slotId, disputeId: dispute.id, amount: BigInt(refund) } });
+      }
+    }
+    await tx.dispute.update({
+      where: { id: dispute.id },
+      data: {
+        status: decision.approve ? "APPROVED" : "DENIED",
+        reviewedById: organizerUserId,
+        reviewedAt: new Date(),
+        reviewNote: note,
       },
-      raisedBy: { select: { userId: true, displayName: true } },
-    },
-  });
-
-  if (!dispute || dispute.contribution.round.groupId !== groupId) {
-    throw new DisputeError(404, "Dispute not found");
-  }
-
-  if (dispute.status !== DisputeStatus.open) {
-    throw new DisputeError(409, "This dispute is already resolved");
-  }
-
-  const now = new Date();
-  const updated = await prisma.dispute.update({
-    where: { id: disputeId },
-    data: {
-      status: DisputeStatus.resolved,
-      resolution,
-      resolvedAt: now,
-    },
-  });
-
-  await writeAuditLog({
-    groupId,
-    actorId: actorUserId,
-    action: "dispute.resolved",
-    entityType: "dispute",
-    entityId: dispute.id,
-    metadata: {
-      contributionId: dispute.contributionId,
-      membershipId: dispute.contribution.membershipId,
-      memberDisplayName: dispute.contribution.membership.displayName,
-      roundNumber: dispute.contribution.round.number,
-      resolution,
-    },
-  });
-
-  const notifyUserIds = new Set<string>();
-  if (dispute.raisedBy.userId) notifyUserIds.add(dispute.raisedBy.userId);
-  if (dispute.contribution.membership.userId) {
-    notifyUserIds.add(dispute.contribution.membership.userId);
-  }
-  notifyUserIds.delete(actorUserId);
-
-  const groupName = dispute.contribution.round.group.name;
-  for (const userId of notifyUserIds) {
-    await createNotification({
-      userId,
+    });
+    await audit(tx, {
       groupId,
-      type: "dispute_resolved",
-      title: `${groupName}: dispute resolved`,
-      body: `The dispute for round ${dispute.contribution.round.number} was resolved by the manager.`,
-      link: `/groups/${groupId}`,
+      actorUserId: organizerUserId,
+      action: decision.approve ? "dispute.approved" : "dispute.denied",
+      targetSlotId: dispute.slotId,
+      targetName: slotName(dispute.slot),
+      before: { amount: previous },
+      after: decision.approve ? { amount: proposed } : { reason: note },
+      selfApproved: decision.approve && dispute.raisedById === organizerUserId,
+    });
+    if (refund > 0) {
+      await audit(tx, {
+        groupId,
+        actorUserId: organizerUserId,
+        action: "refund.recorded",
+        targetSlotId: dispute.slotId,
+        targetName: slotName(dispute.slot),
+        amounts: { refund },
+        after: { round: dispute.submission.round?.number },
+      });
+    }
+    if (dispute.raisedById !== organizerUserId) {
+      await notifyUsers(tx, [dispute.raisedById], {
+        groupId,
+        kind: decision.approve ? "dispute.approved" : "dispute.denied",
+        title: decision.approve
+          ? `Your payment is now ${formatPeso(proposed)}`
+          : `Your report about ${formatPeso(previous)} wasn't accepted`,
+        body: decision.approve
+          ? refund > 0
+            ? `The organizer owes you a ${formatPeso(refund)} refund.`
+            : "The correction is recorded."
+          : `Reason: ${note}`,
+      });
+    }
+  });
+}
+
+/** The person who raised a dispute can withdraw it while it's pending. */
+export async function cancelDispute(groupId: string, userId: string, disputeId: string) {
+  return withGroupLock(groupId, async (tx) => {
+    const dispute = await tx.dispute.findFirst({ where: { id: disputeId, groupId }, include: { slot: { include: { user: true } } } });
+    if (!dispute) throw notFound("Problem report");
+    if (dispute.raisedById !== userId) throw forbidden("Only whoever raised it can withdraw it.");
+    if (dispute.status !== "PENDING") throw conflict("Only pending reports can be withdrawn.", "ALREADY_REVIEWED");
+    await tx.dispute.update({ where: { id: dispute.id }, data: { status: "CANCELLED", reviewedAt: new Date() } });
+    await audit(tx, {
+      groupId,
+      actorUserId: userId,
+      action: "dispute.cancelled",
+      targetSlotId: dispute.slotId,
+      targetName: slotName(dispute.slot),
+    });
+  });
+}
+
+/** R-DEC-21: when a period closes, its pending disputes expire and the approved amounts stand. */
+export async function expireDisputes(db: Db, groupId: string, roundId: string, roundNumber: number) {
+  const pending = await db.dispute.findMany({
+    where: { groupId, status: "PENDING", submission: { roundId } },
+    include: { slot: { include: { user: true } }, group: { select: { name: true } } },
+  });
+  for (const dispute of pending) {
+    await db.dispute.update({ where: { id: dispute.id }, data: { status: "EXPIRED", reviewedAt: new Date() } });
+    await audit(db, {
+      groupId,
+      actorUserId: null,
+      action: "dispute.expired",
+      targetSlotId: dispute.slotId,
+      targetName: slotName(dispute.slot),
+      before: { amount: Number(dispute.previousAmount) },
+      after: { proposed: Number(dispute.proposedAmount), round: roundNumber },
+    });
+    await notifyUsers(db, [dispute.raisedById], {
+      groupId,
+      kind: "dispute.expired",
+      title: `Your problem report expired with round ${roundNumber}`,
+      body: `It wasn't resolved before the payout, so ${formatPeso(Number(dispute.previousAmount))} stands. You can still pay anything missing toward your debt.`,
     });
   }
+}
 
-  return updated;
+/** Disputes this viewer may see: all for the organizer, their own slot's for a member (as submissions). */
+export async function visibleDisputes(db: Db, groupId: string, viewer: { userId: string; slotId: string; isOrganizer: boolean }) {
+  const rows = await db.dispute.findMany({
+    where: { groupId, ...(viewer.isOrganizer ? {} : { slotId: viewer.slotId }) },
+    include: { refund: true, submission: { include: { round: { select: { number: true } } } } },
+    orderBy: { createdAt: "asc" },
+  });
+  return rows.map((d) => ({
+    id: d.id,
+    submissionId: d.submissionId,
+    slotId: d.slotId,
+    round: d.submission.round?.number ?? null,
+    previousAmount: Number(d.previousAmount),
+    proposedAmount: Number(d.proposedAmount),
+    reason: d.reason,
+    status: d.status,
+    createdAt: d.createdAt.toISOString(),
+    reviewedAt: d.reviewedAt?.toISOString() ?? null,
+    reviewNote: d.reviewNote,
+    /** Raised by the viewer, who may withdraw it while pending. */
+    mine: d.raisedById === viewer.userId,
+    refund: d.refund ? Number(d.refund.amount) : null,
+  }));
 }

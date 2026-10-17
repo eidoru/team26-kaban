@@ -1,9 +1,9 @@
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bell, ChevronDown, House, LogOut, UserRound, Wallet, type LucideIcon } from "lucide-react";
+import { Bell, ChevronDown, House, LogOut, UserRound, type LucideIcon } from "lucide-react";
 import { api } from "../api/client";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/useAuth";
 import { prefetchRealtimeToken } from "../lib/homeQueries";
 import { useNotificationsRealtime } from "../lib/useGroupRealtime";
 import { navLinkClass, ui } from "../lib/ui";
@@ -16,7 +16,7 @@ function UnreadBadge({ count, className = "" }: { count: number; className?: str
   if (count <= 0) return null;
   return (
     <span
-      className={`inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-danger-600 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white ${className}`}
+      className={`inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-danger-600 px-1.5 py-0.5 text-[11px] font-bold leading-none text-white ${className}`}
     >
       {count > 99 ? "99+" : count}
     </span>
@@ -129,16 +129,18 @@ export function AppLayout() {
   const unreadCount = notificationsData?.unreadCount ?? 0;
   const navItems: NavItem[] = [
     { to: "/home", label: "Home", shortLabel: "Home", icon: House },
-    { to: "/notifications", label: "Notifications", shortLabel: "Alerts", icon: Bell, badge: unreadCount },
-    { to: "/manager/obligations", label: "Owed to you", shortLabel: "Owed", icon: Wallet },
+    { to: "/notifications", label: "Alerts", shortLabel: "Alerts", icon: Bell, badge: unreadCount },
     { to: "/profile", label: "Profile", shortLabel: "Profile", icon: UserRound },
   ];
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-cream">
+    <div className="min-h-screen overflow-x-clip bg-cream">
       <header className="sticky top-0 z-40 border-b border-ink-200 bg-cream/90 backdrop-blur">
-        <div className={`mx-auto flex h-16 w-full min-w-0 ${ui.page} items-center justify-between gap-4 px-4 sm:px-6`}>
-          <KabanLogo to="/home" />
+        {/* Equal side columns keep the nav centered whatever the logo and account name widths. */}
+        <div className={`mx-auto grid h-16 w-full min-w-0 ${ui.page} grid-cols-[1fr_auto_1fr] items-center gap-4 px-4 sm:px-6`}>
+          <div className="justify-self-start">
+            <KabanLogo to="/home" />
+          </div>
           <nav aria-label="Main" className="hidden items-center gap-1 md:flex">
             {navItems
               .filter((item) => item.to !== "/profile")
@@ -150,11 +152,16 @@ export function AppLayout() {
                 </NavLink>
               ))}
           </nav>
-          <AccountMenu name={user?.displayName} onLogout={() => void handleLogout()} />
+          <div className="col-start-3 min-w-0 justify-self-end">
+            <AccountMenu name={user?.displayName} onLogout={() => void handleLogout()} />
+          </div>
         </div>
       </header>
 
-      <main className={`mx-auto min-w-0 px-4 pb-28 pt-8 sm:px-6 md:pb-12 md:pt-10 ${ui.page}`}>
+      {/* The bottom padding clears the phone nav, plus an ActionBar while one is open (it sets the variable). */}
+      <main
+        className={`mx-auto min-w-0 px-4 pt-8 pb-[calc(7rem+var(--action-bar-height,0px))] sm:px-6 md:pt-10 md:pb-[calc(3rem+var(--action-bar-height,0px))] ${ui.page}`}
+      >
         <Outlet />
       </main>
 
@@ -162,13 +169,13 @@ export function AppLayout() {
         aria-label="Main"
         className="fixed inset-x-0 bottom-0 z-40 border-t border-ink-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
       >
-        <ul className="grid grid-cols-4">
+        <ul className="grid grid-cols-3">
           {navItems.map((item) => (
             <li key={item.to}>
               <NavLink
                 to={item.to}
                 className={({ isActive }) =>
-                  `relative flex flex-col items-center gap-0.5 px-1 pb-2 pt-2 text-[11px] font-bold transition-colors ${
+                  `relative flex flex-col items-center gap-0.5 px-1 pb-2 pt-2 text-xs font-bold transition-colors ${
                     isActive ? "text-brand-700" : "text-ink-500 hover:text-ink-700"
                   }`
                 }

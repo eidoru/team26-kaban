@@ -1,4 +1,5 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { AuthContext } from "./useAuth";
 import {
   api,
   clearAuth,
@@ -8,22 +9,6 @@ import {
   storeAuth,
   type User,
 } from "../api/client";
-
-interface AuthContextValue {
-  user: User | null;
-  loading: boolean;
-  login: (email: string, password: string, remember?: boolean) => Promise<void>;
-  register: (input: {
-    email: string;
-    password: string;
-    displayName: string;
-    contact?: string;
-  }) => Promise<void>;
-  logout: () => Promise<void>;
-  refreshUser: () => Promise<void>;
-}
-
-const AuthContext = createContext<AuthContextValue | null>(null);
 
 function initialLoadingState(): boolean {
   // Always revalidate stored tokens before rendering protected routes.
@@ -40,18 +25,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const tokens = getStoredTokens();
-    if (!tokens) {
-      setLoading(false);
-      return;
-    }
-
-    refreshUser()
+    // Without a stored session, loading already starts false (initialLoadingState).
+    if (!getStoredTokens()) return;
+    // State is set in the promise callbacks, once the session check answers.
+    restoreSession()
+      .then(setUser)
       .catch(() => {
-        // refreshUser handles auth clearing for 401 responses only.
+        // restoreSession clears auth for 401 responses only; keep the stored user otherwise.
       })
       .finally(() => setLoading(false));
-  }, [refreshUser]);
+  }, []);
 
   const login = useCallback(async (email: string, password: string, remember = true) => {
     clearAuth();
@@ -100,8 +83,3 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
-export function useAuth() {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
-  return ctx;
-}

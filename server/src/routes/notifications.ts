@@ -5,7 +5,6 @@ import {
   listUserNotifications,
   markAllNotificationsRead,
   markNotificationRead,
-  NotificationError,
 } from "../services/notifications.js";
 
 const router = Router();
@@ -43,10 +42,6 @@ router.patch("/:id", async (req, res, next) => {
       },
     });
   } catch (err) {
-    if (err instanceof NotificationError) {
-      res.status(err.status).json({ error: err.message });
-      return;
-    }
     next(err);
   }
 });

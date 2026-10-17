@@ -112,7 +112,8 @@ port = 54324
 # sender_name = "Admin"
 
 [storage]
-enabled = false
+# Proof-of-payment images (R-DEC-08). The bucket is created by a Prisma migration.
+enabled = true
 # The maximum file size allowed (e.g. "5MB", "500KB").
 file_size_limit = "50MiB"
 

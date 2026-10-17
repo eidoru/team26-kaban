@@ -5,6 +5,10 @@
   --font-sans: "Nunito", ui-sans-serif, system-ui, sans-serif;
   --font-heading: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
 
+  /* One step up from Tailwind's 12px/14px: Nunito runs small, and users found the default hard to read. */
+  --text-xs: 0.8125rem;
+  --text-sm: 0.9375rem;
+
   --color-cream: #fff9f0;
 
   --color-brand-50: #eefbf4;

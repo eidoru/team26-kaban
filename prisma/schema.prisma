@@ -1,3 +1,6 @@
+// Paluwagan process rewrite. Spec: docs/PRODUCT_SPEC.md (rule IDs in comments).
+// Money is integer centavos in BigInt columns (R-AMT-03); convert to number at the service boundary.
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -8,67 +11,77 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-enum GroupStatus {
-  forming
-  active
-  completed
+/// §3
+enum GroupState {
+  LOBBY
+  LAUNCHED
+  ACTIVE
+  COMPLETED
+  COMPLETED_WITH_OUTSTANDING_DEBT
+  CANCELLED
 }
 
-enum GroupFrequency {
-  weekly
-  biweekly
-  monthly
-  custom
+/// R-SET-04
+enum Frequency {
+  WEEKLY
+  BI_WEEKLY
+  TWICE_MONTHLY
+  MONTHLY
+  CUSTOM
+}
+
+/// R-SET-03
+enum AmountMode {
+  CONTRIBUTION
+  POT
 }
 
 enum RoundStatus {
-  scheduled
-  current
-  closed
+  UPCOMING
+  OPEN
+  CLOSED
 }
 
-enum ContributionStatus {
-  pending
-  reported
-  confirmed
+/// R-SUB-01
+enum SubmissionType {
+  CONTRIBUTION
+  DEBT_PAYMENT
 }
 
-enum ContributionSource {
-  organizer
-  member
+/// R-SUB-03, R-SUB-04
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  DENIED
+  CANCELLED
+  /// A dispute left pending when its period closed (R-DEC-21).
+  EXPIRED
 }
 
-enum ObligationStatus {
-  unsettled
-  partially_settled
-  settled
+/// R-PAY-05, R-DEC-07
+enum PayoutStatus {
+  AWAITING_HANDOVER
+  HANDED_OVER
+  CONFIRMED
 }
 
-enum InviteTokenType {
-  group_invite
-  membership_claim
+/// §8: every change to a slot's debt is one row.
+enum DebtEntryKind {
+  SHORTFALL_COVERED
+  INTEREST_CHARGED
+  REPAYMENT
+  PAYOUT_DEDUCTION
 }
 
-enum DisputeStatus {
-  open
-  resolved
-}
-
-enum SettlementClaimStatus {
-  pending
-  confirmed
-  rejected
-}
-
-enum NotificationType {
-  member_left
-  chair_claimed
-  contribution_confirmed
-  contribution_due
-  turn_to_receive
-  dispute_raised
-  dispute_resolved
-  general
+/// R-SWP-02, R-SWP-04
+enum SwapStatus {
+  AWAITING_TARGET
+  AWAITING_ORGANIZER
+  APPROVED
+  DECLINED
+  DENIED
+  EXPIRED
+  CANCELLED
 }
 
 model User {
@@ -80,11 +93,11 @@ model User {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
-  memberships    Membership[]
-  refreshTokens  RefreshToken[]
-  notifications  Notification[]
-  auditLogs      AuditLog[]     @relation("AuditActor")
-  managedGroups  Group[]        @relation("ManagedGroups")
+  refreshTokens   RefreshToken[]
+  notifications   Notification[]
+  organizedGroups Group[]        @relation("Organizer")
+  slots           Slot[]
+  auditEntries    AuditEntry[]
 
   @@map("users")
 }
@@ -102,226 +115,359 @@ model RefreshToken {
 }
 
 model Group {
-  id                 String         @id @default(uuid())
-  name               String
-  status             GroupStatus    @default(forming)
-  contributionAmount Decimal        @map("contribution_amount") @db.Decimal(12, 2)
-  frequency          GroupFrequency
-  frequencyDays      Int?           @map("frequency_days")
-  slotCount          Int            @map("slot_count")
-  startDate                  DateTime?      @map("start_date") @db.Date
-  shortfallInterestRatePercent Decimal      @default(0) @map("shortfall_interest_rate_percent") @db.Decimal(5, 2)
-  managerId          String         @map("manager_id")
-  createdAt          DateTime       @default(now()) @map("created_at")
-  updatedAt          DateTime       @updatedAt @map("updated_at")
+  id           String     @id @default(uuid())
+  organizerId  String     @map("organizer_id")
+  /// R-SET-01: unique among this organizer's non-cancelled paluwagans, checked by the service.
+  name         String
+  state        GroupState @default(LOBBY)
+  slotCount    Int        @map("slot_count")
+  amountMode   AmountMode @map("amount_mode")
+  contribution BigInt
+  pot          BigInt
+  /// Pot mode: what the organizer typed, kept so slot changes recompute from it (R-LOB-10).
+  enteredPot   BigInt?    @map("entered_pot")
+  frequency    Frequency
+  /// CUSTOM only (R-FRQ-05).
+  intervalDays Int?       @map("interval_days")
+  startDate    DateTime   @map("start_date") @db.Date
+  /// Hundredths of a percent; 0 means no shortfall interest (R-SET-06).
+  interestRate Int        @default(0) @map("interest_rate_bp")
+  launchedAt   DateTime?  @map("launched_at")
+  activatedAt  DateTime?  @map("activated_at")
+  completedAt  DateTime?  @map("completed_at")
+  cancelledAt  DateTime?  @map("cancelled_at")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
 
-  manager      User          @relation("ManagedGroups", fields: [managerId], references: [id])
-  memberships  Membership[]
-  rounds       Round[]
-  inviteTokens InviteToken[]
-  auditLogs    AuditLog[]
+  organizer     User           @relation("Organizer", fields: [organizerId], references: [id])
+  slots         Slot[]
+  inviteLinks   InviteLink[]
+  rounds        Round[]
+  submissions   Submission[]
+  disputes      Dispute[]
+  refunds       Refund[]
+  debtEntries   DebtEntry[]
+  swaps         Swap[]
+  auditEntries  AuditEntry[]
   notifications Notification[]
 
+  @@index([organizerId])
+  @@index([state])
   @@map("groups")
 }
 
-model Membership {
-  id          String  @id @default(uuid())
-  groupId     String  @map("group_id")
-  userId      String? @map("user_id")
-  displayName String  @map("display_name")
-  contact     String?
-  turnNumber  Int?    @map("turn_number")
-  isManager   Boolean @default(false) @map("is_manager")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+/// One position in the paluwagan, held by a user or a placeholder. History (submissions, debt,
+/// payouts) belongs to the slot, so a claimer inherits all of it (R-CLM-06). Empty slots have no row.
+model Slot {
+  id                 String    @id @default(uuid())
+  groupId            String    @map("group_id")
+  /// Null while a placeholder.
+  userId             String?   @map("user_id")
+  isOrganizer        Boolean   @default(false) @map("is_organizer")
+  placeholderName    String?   @map("placeholder_name")
+  placeholderContact String?   @map("placeholder_contact")
+  /// Payout position; null until the order is arranged (R-ORD-01).
+  position           Int?
+  /// When a user claimed this placeholder. Records before it are labeled inherited (R-CLM-06).
+  claimedAt          DateTime? @map("claimed_at")
+  /// Cached balance, the sum of this slot's DebtEntry rows.
+  debtPrincipal      BigInt    @default(0) @map("debt_principal")
+  debtInterest       BigInt    @default(0) @map("debt_interest")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
 
-  group         Group          @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  user          User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
-  contributions Contribution[]
-  obligations   Obligation[]   @relation("DebtorMembership")
-  roundsWon     Round[]        @relation("RoundRecipient")
-  inviteTokens  InviteToken[]
-  disputes      Dispute[]
-  settlementClaims SettlementClaim[] @relation("SettlementClaimDebtor")
+  group           Group             @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user            User?             @relation(fields: [userId], references: [id])
+  claimLinks      ClaimLink[]
+  roundsReceiving Round[]           @relation("RoundRecipient")
+  periodResults   RoundSlotResult[]
+  submissions     Submission[]
+  disputes        Dispute[]
+  refunds         Refund[]
+  debtEntries     DebtEntry[]
+  swapsRequested  Swap[]            @relation("SwapRequester")
+  swapsTargeted   Swap[]            @relation("SwapTarget")
+  reminders       ReminderSent[]
 
+  /// R-INV-07: one slot per user per paluwagan.
   @@unique([groupId, userId])
-  @@unique([groupId, turnNumber])
-  @@map("memberships")
+  @@unique([groupId, position])
+  @@map("slots")
 }
 
-model InviteToken {
-  id                 String          @id @default(uuid())
-  token              String          @unique @default(uuid())
-  type               InviteTokenType
-  groupId            String          @map("group_id")
-  targetMembershipId String?         @map("target_membership_id")
-  expiresAt          DateTime?       @map("expires_at")
-  revokedAt          DateTime?       @map("revoked_at")
-  createdAt          DateTime        @default(now()) @map("created_at")
+/// R-LOB-01, R-INV-05: reusable while the group is in LOBBY. Permanent: never replaced or turned off.
+model InviteLink {
+  id        String    @id @default(uuid())
+  groupId   String    @map("group_id")
+  token     String    @unique @default(uuid())
+  createdAt DateTime  @default(now()) @map("created_at")
+  revokedAt DateTime? @map("revoked_at")
 
-  group            Group       @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  targetMembership Membership? @relation(fields: [targetMembershipId], references: [id], onDelete: Cascade)
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
 
-  @@map("invite_tokens")
+  @@index([groupId])
+  @@map("invite_links")
 }
 
+/// R-LOB-03, R-CLM-02: single-use. One permanent link per placeholder, until claimed.
+model ClaimLink {
+  id              String    @id @default(uuid())
+  slotId          String    @map("slot_id")
+  token           String    @unique @default(uuid())
+  createdAt       DateTime  @default(now()) @map("created_at")
+  revokedAt       DateTime? @map("revoked_at")
+  claimedAt       DateTime? @map("claimed_at")
+  claimedByUserId String?   @map("claimed_by_user_id")
+
+  slot Slot @relation(fields: [slotId], references: [id], onDelete: Cascade)
+
+  @@index([slotId])
+  @@map("claim_links")
+}
+
+/// Round k = Contribution Period k + Payout k (§2). Created at launch from the locked order.
 model Round {
-  id                    String      @id @default(uuid())
-  groupId               String      @map("group_id")
-  number                Int
-  recipientMembershipId String      @map("recipient_membership_id")
-  dueDate               DateTime    @map("due_date") @db.Date
-  status                RoundStatus @default(scheduled)
-  closedAt              DateTime?   @map("closed_at")
-  createdAt             DateTime    @default(now()) @map("created_at")
+  id              String      @id @default(uuid())
+  groupId         String      @map("group_id")
+  number          Int
+  periodStart     DateTime    @map("period_start") @db.Date
+  payoutDate      DateTime    @map("payout_date") @db.Date
+  /// Changes only through an approved swap (R-SWP-02).
+  recipientSlotId String      @map("recipient_slot_id")
+  status          RoundStatus @default(UPCOMING)
+  closedAt        DateTime?   @map("closed_at")
 
-  group               Group          @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  recipientMembership Membership     @relation("RoundRecipient", fields: [recipientMembershipId], references: [id])
-  contributions       Contribution[]
-  obligations         Obligation[]
+  group       Group             @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  recipient   Slot              @relation("RoundRecipient", fields: [recipientSlotId], references: [id])
+  results     RoundSlotResult[]
+  payout      Payout?
+  submissions Submission[]
+  debtEntries DebtEntry[]
+  reminders   ReminderSent[]
 
   @@unique([groupId, number])
+  @@index([status, payoutDate])
   @@map("rounds")
 }
 
-model Contribution {
-  id           String             @id @default(uuid())
-  roundId      String             @map("round_id")
-  membershipId String             @map("membership_id")
-  amount       Decimal            @db.Decimal(12, 2)
-  status       ContributionStatus @default(pending)
-  source       ContributionSource
-  proofUrl     String?            @map("proof_url")
-  note         String?
-  reportedAt   DateTime?          @map("reported_at")
-  confirmedAt  DateTime?          @map("confirmed_at")
-  createdAt    DateTime           @default(now()) @map("created_at")
-  updatedAt    DateTime           @updatedAt @map("updated_at")
+/// Each slot's outcome when a period closes (§7 steps 1–2): kept for summaries, exports and history.
+model RoundSlotResult {
+  id                 String @id @default(uuid())
+  roundId            String @map("round_id")
+  slotId             String @map("slot_id")
+  due                BigInt
+  /// Approved contribution at close; pending ones don't count (R-DEC-04).
+  approved           BigInt
+  shortfall          BigInt
+  coveredByOrganizer BigInt @map("covered_by_organizer")
 
-  round       Round     @relation(fields: [roundId], references: [id], onDelete: Cascade)
-  membership  Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
-  disputes    Dispute[]
+  round Round @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  slot  Slot  @relation(fields: [slotId], references: [id], onDelete: Cascade)
 
-  @@unique([roundId, membershipId])
-  @@map("contributions")
+  @@unique([roundId, slotId])
+  @@map("round_slot_results")
 }
 
-model Obligation {
-  id                 String           @id @default(uuid())
-  debtorMembershipId String           @map("debtor_membership_id")
-  sourceRoundId      String           @map("source_round_id")
-  amount             Decimal          @db.Decimal(12, 2)
-  settledAmount          Decimal          @default(0) @map("settled_amount") @db.Decimal(12, 2)
-  interestSettledAmount  Decimal          @default(0) @map("interest_settled_amount") @db.Decimal(12, 2)
-  status                 ObligationStatus @default(unsettled)
-  externalCoverageNote   String?          @map("external_coverage_note")
-  createdAt          DateTime         @default(now()) @map("created_at")
-  updatedAt          DateTime         @updatedAt @map("updated_at")
+/// §7 steps 3–5.
+model Payout {
+  id                String       @id @default(uuid())
+  roundId           String       @unique @map("round_id")
+  gross             BigInt
+  ownShortfall      BigInt       @map("own_shortfall")
+  interestDeducted  BigInt       @map("interest_deducted")
+  principalDeducted BigInt       @map("principal_deducted")
+  net               BigInt
+  status            PayoutStatus @default(AWAITING_HANDOVER)
+  handedOverAt      DateTime?    @map("handed_over_at")
+  handedOverById    String?      @map("handed_over_by_id")
+  proofPath         String?      @map("proof_path")
+  confirmedAt       DateTime?    @map("confirmed_at")
+  confirmedById     String?      @map("confirmed_by_id")
+  /// R-DEC-07
+  autoConfirmed     Boolean      @default(false) @map("auto_confirmed")
 
-  debtorMembership Membership        @relation("DebtorMembership", fields: [debtorMembershipId], references: [id])
-  sourceRound      Round             @relation(fields: [sourceRoundId], references: [id])
-  catchUpAgreement CatchUpAgreement?
-  settlements      Settlement[]
+  round Round @relation(fields: [roundId], references: [id], onDelete: Cascade)
 
-  @@map("obligations")
+  @@map("payouts")
 }
 
-model CatchUpAgreement {
-  id             String    @id @default(uuid())
-  obligationId   String    @unique @map("obligation_id")
-  amountOwed     Decimal   @map("amount_owed") @db.Decimal(12, 2)
-  targetDate     DateTime? @map("target_date") @db.Date
-  createdAt      DateTime  @default(now()) @map("created_at")
+/// §6.1. The organizer submits for placeholders and for themselves (R-SUB-02); every submission is
+/// reviewed (R-SUB-03).
+model Submission {
+  id              String          @id @default(uuid())
+  groupId         String          @map("group_id")
+  slotId          String          @map("slot_id")
+  /// The period, for CONTRIBUTION submissions.
+  roundId         String?         @map("round_id")
+  type            SubmissionType
+  amount          BigInt
+  /// What the submission counts as once approved. A contribution approved after its period closed
+  /// applies as a debt repayment (R-DBT-06, R-DEC-04).
+  appliedAs       SubmissionType? @map("applied_as")
+  /// The amount in effect after any approved disputes (R-DSP-02); equals `amount` until then.
+  effectiveAmount BigInt?         @map("effective_amount")
+  status          ReviewStatus    @default(PENDING)
+  proofPath       String?         @map("proof_path")
+  note            String?
+  submittedById   String          @map("submitted_by_id")
+  submittedAt     DateTime        @default(now()) @map("submitted_at")
+  reviewedById    String?         @map("reviewed_by_id")
+  reviewedAt      DateTime?       @map("reviewed_at")
+  denialReason    String?         @map("denial_reason")
+  /// R-SUB-09
+  selfApproved    Boolean         @default(false) @map("self_approved")
 
-  obligation Obligation @relation(fields: [obligationId], references: [id], onDelete: Cascade)
+  group    Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  slot     Slot      @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  round    Round?    @relation(fields: [roundId], references: [id])
+  disputes Dispute[]
 
-  @@map("catch_up_agreements")
+  @@index([groupId, status, submittedAt])
+  @@index([slotId, roundId])
+  @@map("submissions")
 }
 
-model Settlement {
-  id           String   @id @default(uuid())
-  obligationId String   @map("obligation_id")
-  amount       Decimal  @db.Decimal(12, 2)
-  note         String?
-  createdAt    DateTime @default(now()) @map("created_at")
-
-  obligation Obligation @relation(fields: [obligationId], references: [id], onDelete: Cascade)
-
-  @@map("settlements")
-}
-
-/**
- * A member's self-reported claim to have paid down their own outstanding debt. Does not move
- * money on its own — only when a manager confirms it does it get applied (via the same FIFO
- * settlement logic used for manager-direct settlements), producing ordinary Settlement rows.
- * Scoped to the debtor rather than a single Obligation because confirmation settles FIFO across
- * all of that member's open obligations, same as a manager-direct settlement does.
- */
-model SettlementClaim {
-  id                 String                 @id @default(uuid())
-  debtorMembershipId String                 @map("debtor_membership_id")
-  amount             Decimal                @db.Decimal(12, 2)
-  note               String?
-  proofUrl           String?                @map("proof_url")
-  status             SettlementClaimStatus  @default(pending)
-  reviewNote         String?                @map("review_note")
-  reviewedAt         DateTime?              @map("reviewed_at")
-  createdAt          DateTime               @default(now()) @map("created_at")
-  updatedAt          DateTime               @updatedAt @map("updated_at")
-
-  debtorMembership Membership @relation("SettlementClaimDebtor", fields: [debtorMembershipId], references: [id], onDelete: Cascade)
-
-  @@index([debtorMembershipId, status])
-  @@map("settlement_claims")
-}
-
+/// §6.2: a request to change an approved contribution submission to `proposedAmount`.
 model Dispute {
-  id             String        @id @default(uuid())
-  contributionId String        @map("contribution_id")
-  raisedById     String        @map("raised_by_id")
-  status         DisputeStatus @default(open)
-  note           String?
-  proofUrl       String?       @map("proof_url")
-  resolution     String?
-  resolvedAt     DateTime?     @map("resolved_at")
-  createdAt      DateTime      @default(now()) @map("created_at")
+  id             String       @id @default(uuid())
+  groupId        String       @map("group_id")
+  submissionId   String       @map("submission_id")
+  slotId         String       @map("slot_id")
+  raisedById     String       @map("raised_by_id")
+  /// The submission's amount when the dispute was raised; the correction is from this to proposedAmount.
+  previousAmount BigInt       @map("previous_amount")
+  proposedAmount BigInt       @map("proposed_amount")
+  reason         String
+  status         ReviewStatus @default(PENDING)
+  createdAt      DateTime     @default(now()) @map("created_at")
+  reviewedById   String?      @map("reviewed_by_id")
+  reviewedAt     DateTime?    @map("reviewed_at")
+  reviewNote     String?      @map("review_note")
 
-  contribution Contribution @relation(fields: [contributionId], references: [id], onDelete: Cascade)
-  raisedBy     Membership   @relation(fields: [raisedById], references: [id])
+  group      Group      @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  submission Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  slot       Slot       @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  refund     Refund?
 
+  @@index([groupId, status])
   @@map("disputes")
 }
 
-model AuditLog {
-  id         String   @id @default(uuid())
-  groupId    String?  @map("group_id")
-  actorId    String?  @map("actor_id")
-  action     String
-  entityType String   @map("entity_type")
-  entityId   String   @map("entity_id")
-  metadata   Json?
-  createdAt  DateTime @default(now()) @map("created_at")
+/// R-DSP-03: an approved reduction, owed from the organizer to the member.
+model Refund {
+  id        String   @id @default(uuid())
+  groupId   String   @map("group_id")
+  slotId    String   @map("slot_id")
+  disputeId String   @unique @map("dispute_id")
+  amount    BigInt
+  createdAt DateTime @default(now()) @map("created_at")
 
-  group Group? @relation(fields: [groupId], references: [id], onDelete: SetNull)
-  actor User?  @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+  group   Group   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  slot    Slot    @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  dispute Dispute @relation(fields: [disputeId], references: [id], onDelete: Cascade)
 
-  @@map("audit_logs")
+  @@map("refunds")
 }
 
+/// Append-only debt ledger (§8). Positive deltas add debt; repayments and deductions are negative.
+model DebtEntry {
+  id             String        @id @default(uuid())
+  groupId        String        @map("group_id")
+  slotId         String        @map("slot_id")
+  kind           DebtEntryKind
+  principalDelta BigInt        @map("principal_delta")
+  interestDelta  BigInt        @map("interest_delta")
+  roundId        String?       @map("round_id")
+  submissionId   String?       @map("submission_id")
+  createdAt      DateTime      @default(now()) @map("created_at")
+
+  group Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  slot  Slot   @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  round Round? @relation(fields: [roundId], references: [id])
+
+  @@index([slotId, createdAt])
+  @@map("debt_entries")
+}
+
+/// §9
+model Swap {
+  id                String     @id @default(uuid())
+  groupId           String     @map("group_id")
+  requesterSlotId   String     @map("requester_slot_id")
+  targetSlotId      String     @map("target_slot_id")
+  status            SwapStatus @default(AWAITING_TARGET)
+  createdAt         DateTime   @default(now()) @map("created_at")
+  expiresAt         DateTime?  @map("expires_at")
+  targetRespondedAt DateTime?  @map("target_responded_at")
+  reviewedAt        DateTime?  @map("reviewed_at")
+  reviewNote        String?    @map("review_note")
+
+  group     Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  requester Slot  @relation("SwapRequester", fields: [requesterSlotId], references: [id], onDelete: Cascade)
+  target    Slot  @relation("SwapTarget", fields: [targetSlotId], references: [id], onDelete: Cascade)
+
+  @@index([groupId, status])
+  @@map("swaps")
+}
+
+/// §13. Immutable: a database trigger rejects UPDATE and DELETE (R-AUD-02). Public to members (R-AUD-03).
+model AuditEntry {
+  id            String   @id @default(uuid())
+  groupId       String   @map("group_id")
+  /// Null for system actions (period close, auto-activation, auto-confirm).
+  actorUserId   String?  @map("actor_user_id")
+  action        String
+  /// No foreign key: a slot can be removed in the lobby, but its history stays.
+  targetSlotId  String?  @map("target_slot_id")
+  /// The slot's name when this happened, so entries read correctly after it's gone.
+  targetName    String?  @map("target_name")
+  /// Amounts in centavos, keyed by meaning ({ amount, net, interest, ... }).
+  amounts       Json?
+  before        Json?
+  after         Json?
+  proofAttached Boolean? @map("proof_attached")
+  selfApproved  Boolean  @default(false) @map("self_approved")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  group Group @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  actor User? @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([groupId, createdAt])
+  @@map("audit_entries")
+}
+
+/// §12. `kind` is a string so new events don't need a migration.
 model Notification {
-  id        String           @id @default(uuid())
-  userId    String           @map("user_id")
-  groupId   String?          @map("group_id")
-  type      NotificationType
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  groupId   String?   @map("group_id")
+  kind      String
   title     String
   body      String
   link      String?
-  readAt    DateTime?        @map("read_at")
-  createdAt DateTime         @default(now()) @map("created_at")
+  data      Json?
+  readAt    DateTime? @map("read_at")
+  createdAt DateTime  @default(now()) @map("created_at")
 
   user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  group Group? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  group Group? @relation(fields: [groupId], references: [id], onDelete: Cascade)
 
+  @@index([userId, readAt, createdAt])
   @@map("notifications")
+}
+
+/// Reminders already sent, so the cron never sends one twice (§12).
+model ReminderSent {
+  id      String   @id @default(uuid())
+  roundId String   @map("round_id")
+  slotId  String   @map("slot_id")
+  /// "BEFORE_PAYOUT", "PAYOUT_DAY", "MANUAL" (the organizer's send-reminder) or "RECEIPT" (confirm a payout).
+  kind    String
+  sentAt  DateTime @default(now()) @map("sent_at")
+
+  round Round @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  slot  Slot  @relation(fields: [slotId], references: [id], onDelete: Cascade)
+
+  @@index([roundId, slotId, kind])
+  @@map("reminders_sent")
 }

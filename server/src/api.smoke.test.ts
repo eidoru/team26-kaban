@@ -9,8 +9,8 @@ describe("API smoke", () => {
     expect(res.body).toMatchObject({ status: "ok", service: "kaban-api" });
   });
 
-  it("GET /api/v1/groups requires authentication", async () => {
-    const res = await request(app).get("/api/v1/groups");
+  it("GET /api/v1/groups/home requires authentication", async () => {
+    const res = await request(app).get("/api/v1/groups/home");
     expect(res.status).toBe(401);
   });
 
@@ -24,13 +24,18 @@ describe("API smoke", () => {
     expect(res.status).toBe(401);
   });
 
-  it("GET /api/v1/home/overview requires authentication", async () => {
-    const res = await request(app).get("/api/v1/home/overview");
+  it("POST /api/v1/groups requires authentication", async () => {
+    const res = await request(app).post("/api/v1/groups").send({});
     expect(res.status).toBe(401);
   });
 
-  it("GET /api/v1/auth/me/activity requires authentication", async () => {
-    const res = await request(app).get("/api/v1/auth/me/activity");
+  it("POST /api/v1/invites/:token/join requires authentication", async () => {
+    const res = await request(app).post("/api/v1/invites/some-token/join");
+    expect(res.status).toBe(401);
+  });
+
+  it("POST /api/v1/claims/:token/claim requires authentication", async () => {
+    const res = await request(app).post("/api/v1/claims/some-token/claim");
     expect(res.status).toBe(401);
   });
 
@@ -55,72 +60,35 @@ describe("API smoke", () => {
 });
 
 describe("Cron security", () => {
-  it("rejects close-rounds without cron secret", async () => {
-    const res = await request(app).get("/api/v1/cron/close-rounds");
+  it("rejects the daily job without cron secret", async () => {
+    const res = await request(app).get("/api/v1/cron/daily");
     expect(res.status).toBe(403);
   });
 
-  it("rejects close-rounds with wrong secret", async () => {
+  it("rejects the daily job with the wrong secret", async () => {
     const res = await request(app)
-      .get("/api/v1/cron/close-rounds")
+      .get("/api/v1/cron/daily")
       .set("Authorization", "Bearer wrong-secret");
     expect(res.status).toBe(403);
   });
-
-  it("rejects send-reminders without cron secret", async () => {
-    const res = await request(app).get("/api/v1/cron/send-reminders");
-    expect(res.status).toBe(403);
-  });
-
-  it("rejects cron advance-round without cron secret", async () => {
-    const res = await request(app).post(
-      "/api/v1/cron/groups/00000000-0000-0000-0000-000000000001/advance-round",
-    );
-    expect(res.status).toBe(403);
-  });
 });
 
-describe("Cron advance-round environment gate", () => {
+describe("Demo tools environment gate", () => {
   afterEach(() => {
     vi.unstubAllEnvs();
   });
 
-  it("returns 404 on Vercel production", async () => {
-    vi.stubEnv("CRON_SECRET", "test-cron-secret");
-    vi.stubEnv("VERCEL_ENV", "production");
-
-    const res = await request(app)
-      .post("/api/v1/cron/groups/00000000-0000-0000-0000-000000000001/advance-round")
-      .set("Authorization", "Bearer test-cron-secret");
-
-    expect(res.status).toBe(404);
-  });
-});
-
-describe("Groups advance-round environment gate", () => {
-  afterEach(() => {
-    vi.unstubAllEnvs();
-  });
+  const path = "/api/v1/dev/groups/00000000-0000-0000-0000-000000000001/activate-now";
 
   it("is reachable on Vercel production when ALLOW_DEMO_TOOLS=true", async () => {
     vi.stubEnv("VERCEL_ENV", "production");
     vi.stubEnv("ALLOW_DEMO_TOOLS", "true");
-
-    const res = await request(app).post(
-      "/api/v1/groups/00000000-0000-0000-0000-000000000001/advance-round",
-    );
-
     // Past the environment gate; the auth check is what rejects this anonymous request.
-    expect(res.status).toBe(401);
+    expect((await request(app).post(path)).status).toBe(401);
   });
 
   it("returns 404 on Vercel production", async () => {
     vi.stubEnv("VERCEL_ENV", "production");
-
-    const res = await request(app).post(
-      "/api/v1/groups/00000000-0000-0000-0000-000000000001/advance-round",
-    );
-
-    expect(res.status).toBe(404);
+    expect((await request(app).post(path)).status).toBe(404);
   });
 });
