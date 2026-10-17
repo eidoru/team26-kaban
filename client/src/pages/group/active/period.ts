@@ -37,15 +37,6 @@ export function debtReportable(detail: GroupDetail, slotId: string) {
   return submissionCap(owedBy(detail, slotId), 0, pending);
 }
 
-/**
- * The Debts view has something to show: someone owes, a payment toward a debt is in review, or
- * (for the organizer) a refund is owed back (R-DSP-03).
- */
-export function hasDebtsView(detail: GroupDetail) {
-  const owing = detail.slots.some((s) => owedBy(detail, s.id) > 0 || pendingTowardDebt(detail, s.id).length > 0);
-  return owing || (detail.viewer.isOrganizer && detail.disputes.some((d) => d.refund));
-}
-
 /** Payouts this viewer has to act on, oldest first: hand over (organizer), or confirm receipt (recipient). */
 export function payoutsToActOnFor(detail: GroupDetail) {
   const viewer = detail.viewer;
