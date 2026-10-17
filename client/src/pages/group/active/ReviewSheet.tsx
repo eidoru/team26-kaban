@@ -1,14 +1,14 @@
 import { useState } from "react";
 import { ArrowRight, ChevronLeft, ChevronRight, CircleCheck, CircleX, ExternalLink, ImageOff, TriangleAlert } from "lucide-react";
 import { NOTE_MAX_LENGTH } from "@domain/constants";
-import { periodStatus, refundFor } from "@domain/submissions";
+import { periodStatus, refundFor, roundsLabel } from "@domain/submissions";
 import type { DisputeView, GroupDetail, SubmissionView } from "../../../api/client";
 import { Avatar } from "../../../components/Avatar";
 import { Sheet } from "../../../components/flow/Sheet";
 import { SheetDone } from "../../../components/flow/SheetDone";
 import { formatPeso } from "../../../lib/money";
 import { ui } from "../../../lib/ui";
-import { owedBy, reviewItems, stackOf, type ReviewItem } from "./period";
+import { isAhead, owedBy, reviewItems, stackOf, standingOf, type Payment, type ReviewItem } from "./period";
 
 const sentAt = (iso: string) =>
   new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
@@ -171,7 +171,8 @@ export function ReviewSheet({
                         </>
                       ) : (
                         <>
-                          {q.item.round ? `Round ${q.item.round}` : "Debt payment"}
+                          {q.item.round ? roundsOf(q.item) : "Debt payment"}
+                          {q.item.parts.length === 1 && isAhead(detail, q.item) && " (paid ahead)"}
                           {order && order.of > 1 && ` · ${order.number} of ${order.of}`} ·{" "}
                           {q.item.proofUrl ? "proof attached" : "no proof"}
                         </>
@@ -260,7 +261,9 @@ export function ReviewSheet({
   const title = isDispute
     ? `${slot?.name ?? "Member"} reports a problem with a ${formatPeso(current.item.previousAmount)} payment`
     : `${slot?.name ?? "Member"} paid ${formatPeso(current.item.amount)}`;
-  const subtitle = `${current.item.round ? `Round ${current.item.round} · ` : ""}${
+  const ahead = !isDispute && current.item.parts.length === 1 && isAhead(detail, current.item);
+  const roundText = isDispute ? `Round ${current.item.round}` : roundsOf(current.item);
+  const subtitle = `${current.item.round ? `${roundText}${ahead ? " (paid ahead)" : ""} · ` : ""}${
     order && order.of > 1 ? `Payment ${order.number} of ${order.of} · ` : ""
   }${sentAt(
     isDispute ? current.item.createdAt : current.item.submittedAt,
@@ -347,7 +350,7 @@ export function ReviewSheet({
               </p>
             )}
             {current.kind === "dispute" ? (
-              <DisputeBody dispute={current.item} name={name} />
+              <DisputeBody detail={detail} dispute={current.item} name={name} />
             ) : (
               <PaymentBody detail={detail} payment={current.item} name={name} />
             )}
@@ -420,10 +423,9 @@ function FinishedStep({
   const slot = detail.slots.find((s) => s.id === finished.slotId);
   const approvedCount = finished.states.filter((x) => x === "approved").length;
   const deniedCount = finished.states.length - approvedCount;
-  const standing =
-    finished.round !== null && finished.round === detail.period?.number
-      ? detail.period.slots.find((s) => s.slotId === finished.slotId)
-      : undefined;
+  // The open round, or one paid ahead (R-DEC-31); a closed round's payments went to debt.
+  const standing = finished.round !== null ? standingOf(detail, finished.slotId, finished.round) : null;
+  const roundWord = finished.round === detail.period?.number ? "this round" : `for round ${finished.round}`;
   const title = slot?.isViewer ? "Your payments: all reviewed" : `${slot?.name ?? "Member"}: all reviewed`;
   const count = finished.states.length;
 
@@ -475,8 +477,8 @@ function FinishedStep({
         {standing && (
           <p className="text-sm text-ink-600">
             {standing.approved >= standing.due
-              ? "Paid in full this round."
-              : `${formatPeso(standing.approved)} of ${formatPeso(standing.due)} paid this round.`}
+              ? `Paid in full ${roundWord}.`
+              : `${formatPeso(standing.approved)} of ${formatPeso(standing.due)} paid ${roundWord}.`}
           </p>
         )}
       </div>
@@ -484,8 +486,10 @@ function FinishedStep({
   );
 }
 
-function DisputeBody({ dispute, name }: { dispute: DisputeView; name: string }) {
+function DisputeBody({ detail, dispute, name }: { detail: GroupDetail; dispute: DisputeView; name: string }) {
   const refund = refundFor(dispute.previousAmount, dispute.proposedAmount);
+  // R-DEC-32: a payment made ahead is short for its own round.
+  const roundWord = dispute.round === detail.period?.number ? "this round" : `for round ${dispute.round}`;
   return (
     <>
       <p className="flex items-center justify-center gap-3 rounded-2xl bg-ink-50 px-4 py-4 font-heading text-2xl font-bold tabular-nums text-ink-900">
@@ -501,7 +505,7 @@ function DisputeBody({ dispute, name }: { dispute: DisputeView; name: string }) 
         After approval:{" "}
         <b>
           {refund > 0
-            ? `you owe ${name} a ${formatPeso(refund)} refund, and they're ${formatPeso(refund)} short this round`
+            ? `you owe ${name} a ${formatPeso(refund)} refund, and they're ${formatPeso(refund)} short ${roundWord}`
             : `${formatPeso(dispute.proposedAmount - dispute.previousAmount)} more counts from ${name}`}
         </b>
       </p>
@@ -510,9 +514,43 @@ function DisputeBody({ dispute, name }: { dispute: DisputeView; name: string }) 
   );
 }
 
-function PaymentBody({ detail, payment, name }: { detail: GroupDetail; payment: SubmissionView; name: string }) {
-  const thisRound = payment.type === "CONTRIBUTION" && payment.round === detail.period?.number;
-  const standing = thisRound ? detail.period?.slots.find((s) => s.slotId === payment.slotId) : undefined;
+/** "Round 3", or "Rounds 1–4" for a payment split across rounds (R-DEC-33). */
+function roundsOf(payment: Payment) {
+  const label = roundsLabel(payment.parts.map((p) => p.round ?? 0));
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+/** R-DEC-33: where each round of a split payment stands once it's approved. */
+function PartsAfter({ detail, payment }: { detail: GroupDetail; payment: Payment }) {
+  return (
+    <ul aria-label="After approval" className="divide-y divide-ink-100 rounded-2xl bg-ink-50 px-4 text-sm">
+      {payment.parts.map((part) => {
+        const standing = standingOf(detail, part.slotId, part.round ?? undefined);
+        const total = standing ? standing.approved + part.amount : 0;
+        return (
+          <li key={part.id} className="flex justify-between gap-3 py-2">
+            <span className="text-ink-700">
+              Round {part.round} · <span className="tabular-nums">{formatPeso(part.amount)}</span>
+            </span>
+            <span className="text-right font-semibold text-ink-900 tabular-nums">
+              {!standing
+                ? "toward debt (closed)"
+                : periodStatus(standing.due, total, 0).status === "PAID"
+                  ? "paid up"
+                  : `${formatPeso(total)} of ${formatPeso(standing.due)}`}
+            </span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function PaymentBody({ detail, payment, name }: { detail: GroupDetail; payment: Payment; name: string }) {
+  // The open round, or a later one it was paid ahead for (R-DEC-31); a closed round's goes to debt.
+  const counted =
+    payment.type === "CONTRIBUTION" && (payment.round === detail.period?.number || isAhead(detail, payment));
+  const standing = counted ? standingOf(detail, payment.slotId, payment.round ?? undefined) : null;
   const after = standing ? periodStatus(standing.due, standing.approved + payment.amount, 0).status : null;
   const owed = owedBy(detail, payment.slotId);
   return (
@@ -542,25 +580,32 @@ function PaymentBody({ detail, payment, name }: { detail: GroupDetail; payment: 
           {payment.note}
         </p>
       )}
-      <p className="text-sm text-ink-600">
-        {standing && after ? (
-          <>
-            After approval:{" "}
-            <b>{after === "PAID" ? "paid up" : `${formatPeso(standing.approved + payment.amount)} of ${formatPeso(standing.due)} paid`}</b>
-          </>
-        ) : payment.amount > owed ? (
-          // R-DEC-19: the server refuses it; say so before the organizer tries.
-          <>
-            {owed > 0 ? `${name} only owes ${formatPeso(owed)} now` : `${name} doesn't owe anything now`}, so this can&apos;t be
-            approved. Deny it instead.
-          </>
-        ) : (
-          <>
-            {payment.type === "CONTRIBUTION" ? `Round ${payment.round} has closed, so this` : "This"} goes toward {name}&apos;s{" "}
-            {formatPeso(owed)} debt, interest first.
-          </>
-        )}
-      </p>
+      {payment.parts.length > 1 ? (
+        <PartsAfter detail={detail} payment={payment} />
+      ) : (
+        <p className="text-sm text-ink-600">
+          {standing && after ? (
+            <>
+              After approval:{" "}
+              <b>
+                {after === "PAID" ? "paid up" : `${formatPeso(standing.approved + payment.amount)} of ${formatPeso(standing.due)} paid`}
+                {payment.round !== detail.period?.number && ` for round ${payment.round}`}
+              </b>
+            </>
+          ) : payment.amount > owed ? (
+            // R-DEC-19: the server refuses it; say so before the organizer tries.
+            <>
+              {owed > 0 ? `${name} only owes ${formatPeso(owed)} now` : `${name} doesn't owe anything now`}, so this can&apos;t be
+              approved. Deny it instead.
+            </>
+          ) : (
+            <>
+              {payment.type === "CONTRIBUTION" ? `Round ${payment.round} has closed, so this` : "This"} goes toward {name}&apos;s{" "}
+              {formatPeso(owed)} debt, interest first.
+            </>
+          )}
+        </p>
+      )}
     </>
   );
 }

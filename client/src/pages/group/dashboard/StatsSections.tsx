@@ -130,16 +130,46 @@ export function MoneyOverview({ stats }: { stats: GroupStats }) {
 const BAR_MAX = 120;
 
 /**
- * §15.1 history and trends: how much of each closed round's pot came in on time (one series:
- * no legend, the figure caption names it), and each member's record. Hidden until a round has closed.
+ * Bars for rounds still to close are outlined, not filled: their share can still grow (R-DEC-31).
+ * The outline keeps them at 3:1 against the card, which a pale fill alone wouldn't.
+ */
+const COLLECTION = [
+  { key: "closed", label: "By the payout", color: "bg-brand-600" },
+  { key: "later", label: "So far: this round, and rounds paid ahead", color: "border-2 border-brand-600 bg-brand-100" },
+] as const;
+
+/** "Round 3 (open)", "Round 4 (paid ahead)" or "Round 2", for the tooltip and the table. */
+function barLabel(c: GroupStats["collection"][number]) {
+  return `Round ${c.round}${c.status === "OPEN" ? " (open)" : c.status === "UPCOMING" ? " (paid ahead)" : ""}`;
+}
+
+/**
+ * §15.1 history and trends: how much of each round's pot came in, and each member's record. Closed
+ * rounds show what was approved by the payout; the open round what's approved so far, and later
+ * rounds what was paid ahead (R-DEC-31), in a lighter shade with a legend. Hidden until there's a
+ * bar to show; the member record waits for a closed round.
  */
 export function Trends({ stats }: { stats: GroupStats }) {
   if (stats.collection.length === 0) return null;
+  const hasLater = stats.collection.some((c) => c.status !== "CLOSED");
+  const hasClosed = stats.collection.some((c) => c.status === "CLOSED");
   return (
     <section aria-label="How rounds went" className="space-y-4">
       <figure className="rounded-3xl border border-ink-200 bg-white p-5">
         <figcaption className="text-sm font-bold text-ink-900">Collected by each payout</figcaption>
-        <p className="text-xs text-ink-500">Share of the pot approved before the payout date. The rest the organizer covered.</p>
+        <p className="text-xs text-ink-500">
+          Share of the pot approved before the payout date.{hasClosed && " The rest the organizer covered."}
+        </p>
+        {hasLater && (
+          <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-600" aria-label="Legend">
+            {COLLECTION.filter((k) => hasClosed || k.key === "later").map((k) => (
+              <li key={k.key} className="flex items-center gap-1.5">
+                <span className={`h-2.5 w-2.5 rounded-sm ${k.color}`} aria-hidden />
+                {k.label}
+              </li>
+            ))}
+          </ul>
+        )}
         <div className="mt-4 flex h-[150px] items-end gap-[2px] border-b border-ink-200" role="list" aria-label="Collected by round">
           {stats.collection.map((c, index) => {
             const pct = Math.round(c.rate * 100);
@@ -151,12 +181,14 @@ export function Trends({ stats }: { stats: GroupStats }) {
                 <span
                   className={`pointer-events-none absolute bottom-full z-10 mb-1 hidden whitespace-nowrap rounded-lg bg-ink-900 px-2 py-1 text-xs font-semibold text-white group-focus-within:block group-hover:block ${side}`}
                 >
-                  Round {c.round}: {pct}% ({formatPeso(c.approved)} of {formatPeso(c.expected)})
+                  {barLabel(c)}: {pct}% ({formatPeso(c.approved)} of {formatPeso(c.expected)})
                 </span>
                 <button
                   type="button"
-                  aria-label={`Round ${c.round}: ${pct}% collected`}
-                  className="w-full max-w-6 rounded-t bg-brand-600 focus:outline-none focus-visible:ring-4 focus-visible:ring-brand-500/30"
+                  aria-label={`${barLabel(c)}: ${pct}% collected${c.status === "CLOSED" ? "" : " so far"}`}
+                  className={`w-full max-w-6 rounded-t ${
+                    c.status === "CLOSED" ? COLLECTION[0].color : `${COLLECTION[1].color} border-b-0`
+                  } focus:outline-none focus-visible:ring-4 focus-visible:ring-brand-500/30`}
                   style={{ height: `${Math.max(2, (c.rate * BAR_MAX))}px` }}
                 />
               </div>
@@ -187,7 +219,12 @@ export function Trends({ stats }: { stats: GroupStats }) {
             <tbody className="tabular-nums text-ink-800">
               {stats.collection.map((c) => (
                 <tr key={c.round} className="border-t border-ink-100">
-                  <td className="py-1">{c.round}</td>
+                  <td className="py-1">
+                    {c.round}
+                    {c.status !== "CLOSED" && (
+                      <span className="text-ink-500">{c.status === "OPEN" ? " (open)" : " (paid ahead)"}</span>
+                    )}
+                  </td>
                   <td className="py-1 text-right">{formatPeso(c.approved)}</td>
                   <td className="py-1 text-right">{formatPeso(c.expected)}</td>
                   <td className="py-1 text-right">{Math.round(c.rate * 100)}%</td>
@@ -197,7 +234,7 @@ export function Trends({ stats }: { stats: GroupStats }) {
           </table>
         </details>
       </figure>
-      <Reliability stats={stats} />
+      {hasClosed && <Reliability stats={stats} />}
     </section>
   );
 }

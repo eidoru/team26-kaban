@@ -150,6 +150,16 @@ export interface PeriodView {
   slots: PeriodSlot[];
 }
 
+/** R-DEC-31: what one slot has paid ahead for one round that hasn't opened. Amounts in centavos. */
+export interface AheadRound {
+  slotId: string;
+  round: number;
+  approved: number;
+  pending: number;
+  /** R-DEC-29: pending correction increases, which hold room like pending payments. */
+  pendingIncrease: number;
+}
+
 export interface SubmissionView {
   id: string;
   slotId: string;
@@ -170,6 +180,8 @@ export interface SubmissionView {
   reviewedAt: string | null;
   denialReason: string | null;
   selfApproved: boolean;
+  /** R-DEC-33: shared by the parts of one payment split across rounds (one submission per round); null otherwise. */
+  batchId: string | null;
 }
 
 /** A request to change an approved contribution (§6.2). Amounts in centavos. */
@@ -245,7 +257,18 @@ export type Health = "ON_TRACK" | "AT_RISK" | "SHORT";
 export interface GroupStats {
   openRound: { number: number; periodStart: string; payoutDate: string; health: Health; projectedPayout: number | null } | null;
   money: { collected: number; paidOut: number; toPayOut: number; coveredByOrganizer: number; owedToOrganizer: number; refunds: number };
-  collection: { round: number; payoutDate: string; approved: number; expected: number; rate: number }[];
+  /**
+   * Approved share of each pot: final for closed rounds; for the open round so far, and for later
+   * rounds what was paid ahead (R-DEC-31), up to the last one with any.
+   */
+  collection: {
+    round: number;
+    payoutDate: string;
+    status: "CLOSED" | "OPEN" | "UPCOMING";
+    approved: number;
+    expected: number;
+    rate: number;
+  }[];
   reliability: { slotId: string; name: string; onTime: number; partial: number; missed: number }[];
   myTurn: {
     round: number;
@@ -311,7 +334,12 @@ export interface GroupDetail {
   schedule: ScheduleRound[];
   /** The open contribution period; null outside ACTIVE. */
   period: PeriodView | null;
-  /** Submissions the viewer may see (this period's, pending, debt payments): all for the organizer, their own slot's otherwise. */
+  /** R-DEC-31: what's been paid ahead, per slot and upcoming round (only rounds with something in them). */
+  ahead: AheadRound[];
+  /**
+   * Submissions the viewer may see (this period's, paid ahead, pending, debt payments): all for the
+   * organizer, their own slot's otherwise.
+   */
   submissions: SubmissionView[];
   /** Disputes the viewer may see, oldest first. */
   disputes: DisputeView[];
@@ -640,7 +668,13 @@ export const api = {
     send<{ path: string; token: string }>("POST", `/groups/${id}/proofs`, { contentType }),
   submitPayment: (
     id: string,
-    body: { slotId: string; type: "CONTRIBUTION" | "DEBT_PAYMENT"; amount: number; proofPath?: string; note?: string },
+    body: {
+      slotId: string;
+      type: "CONTRIBUTION" | "DEBT_PAYMENT";
+      amount: number;
+      proofPath?: string;
+      note?: string;
+    },
   ) => send<GroupDetail>("POST", `/groups/${id}/submissions`, body),
   raiseDispute: (id: string, body: { submissionId: string; proposedAmount: number; reason: string }) =>
     send<GroupDetail>("POST", `/groups/${id}/disputes`, body),

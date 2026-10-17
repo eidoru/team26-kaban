@@ -11,7 +11,8 @@ import { ui } from "../../../lib/ui";
 import { standingOf } from "./period";
 
 /**
- * R-DSP-01: ask to change an approved contribution, while its period is open (R-DSP-04). Lower is a
+ * R-DSP-01: ask to change an approved contribution, while its period is open or, for one paid
+ * ahead, still to come (R-DSP-04, R-DEC-32). Lower is a
  * correction or a refund request; higher can't take the period past the contribution (R-DEC-13).
  */
 export function DisputeSheet({
@@ -41,7 +42,9 @@ function DisputeForm({
   onSubmit: (input: { submissionId: string; proposedAmount: number; reason: string }) => Promise<boolean>;
 }) {
   const current = submission.effectiveAmount ?? submission.amount;
-  const standing = standingOf(detail, submission.slotId);
+  const standing = standingOf(detail, submission.slotId, submission.round ?? undefined);
+  // R-DEC-32: a report expires at its own round's payout, which for one paid ahead is a later one.
+  const payoutDate = detail.schedule.find((r) => r.number === submission.round)?.payoutDate ?? detail.period?.payoutDate;
   const [amountText, setAmountText] = useState(pesoInputValue(current));
   const [reason, setReason] = useState("");
   const [sending, setSending] = useState(false);
@@ -57,7 +60,8 @@ function DisputeForm({
   const reasonError =
     reason.trim().length > DISPUTE_REASON_MAX_LENGTH ? `Up to ${DISPUTE_REASON_MAX_LENGTH} characters.` : null;
   const refund = Number.isNaN(value) ? 0 : refundFor(current, value);
-  const payout = detail.period ? `before the ${formatDueDate(detail.period.payoutDate)} payout` : "before the payout";
+  const forRound = submission.round === detail.period?.number ? "this round" : `round ${submission.round}`;
+  const payout = payoutDate ? `before the ${formatDueDate(payoutDate)} payout` : "before the payout";
 
   async function submit() {
     if (amountError || reasonError || !reason.trim() || sending) return;
@@ -113,7 +117,7 @@ function DisputeForm({
         {refund > 0 && !amountError && (
           <p className="rounded-2xl bg-sun-50 px-4 py-3 text-sm text-sun-900">
             If approved, {detail.group.organizerName} owes you a <b>{formatPeso(refund)}</b> refund, and you&apos;ll be{" "}
-            {formatPeso(refund)} short for this round unless you pay it again.
+            {formatPeso(refund)} short for {forRound} unless you pay it again.
           </p>
         )}
         <div>

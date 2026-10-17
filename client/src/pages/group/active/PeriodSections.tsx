@@ -1,10 +1,11 @@
 import { Check, Clock, ImageOff, Paperclip } from "lucide-react";
 import type { DisputeView, GroupDetail, GroupStats, PayoutView, PeriodSlot, SlotView, SubmissionView } from "../../../api/client";
+import { roundsLabel } from "@domain/submissions";
 import { Avatar } from "../../../components/Avatar";
 import { daysUntil, formatLocalDate, formatMonthDay } from "../../../lib/dates";
 import { formatPeso } from "../../../lib/money";
 import { ui } from "../../../lib/ui";
-import { latestDispute } from "./period";
+import { asPayments, isAhead, latestDispute, payRooms } from "./period";
 import { HealthChip } from "../dashboard/StatsSections";
 
 type StageState = "done" | "active" | "todo";
@@ -185,7 +186,8 @@ function StatusChip({ standing }: { standing: PeriodSlot }) {
 /**
  * Everyone's standing this round, in payout order (R-SUB-07, R-DEC-06). The viewer's own row is
  * always tappable to pay, whatever the Now panel is showing; the organizer's placeholder rows too,
- * to record their payments (R-SUB-02).
+ * to record their payments (R-SUB-02). Once that slot has paid this round in full (approved), the
+ * same row pays ahead (R-DEC-31); every row says what its slot has paid ahead (R-DEC-06).
  */
 export function PeriodStatusList({
   detail,
@@ -214,6 +216,14 @@ export function PeriodStatusList({
             onRecord &&
             (slot.isViewer || (detail.viewer.isOrganizer && slot.kind === "PLACEHOLDER")) &&
             standing.status !== "PAID";
+          // R-DEC-31: only once this round is approved in full, and paying ahead is open to the slot.
+          const payableAhead =
+            onRecord &&
+            (slot.isViewer || (detail.viewer.isOrganizer && slot.kind === "PLACEHOLDER")) &&
+            standing.status === "PAID" &&
+            payRooms(detail, slot.id).ahead > 0;
+          const paidAhead = detail.ahead.filter((a) => a.slotId === slot.id && a.approved + a.pending > 0);
+          const aheadTotal = paidAhead.reduce((total, a) => total + a.approved + a.pending, 0);
           const body = (
             <>
               <Avatar name={slot.name} size="md" placeholder={slot.kind === "PLACEHOLDER"} />
@@ -223,9 +233,16 @@ export function PeriodStatusList({
                 </span>
                 <span className="block text-xs text-ink-500 tabular-nums">
                   {standing.status === "PAID"
-                    ? formatPeso(standing.approved)
+                    ? // The button takes the place of the Paid chip, so the line says it.
+                      `${payableAhead ? "Paid " : ""}${formatPeso(standing.approved)}`
                     : `${formatPeso(standing.approved)} of ${formatPeso(standing.due)}`}
                 </span>
+                {aheadTotal > 0 && (
+                  <span className="block text-xs text-brand-700 tabular-nums">
+                    {formatPeso(aheadTotal)} paid ahead for {roundsLabel(paidAhead.map((a) => a.round))}
+                    {paidAhead.some((a) => a.pending > 0) && ", some in review"}
+                  </span>
+                )}
               </span>
             </>
           );
@@ -244,6 +261,10 @@ export function PeriodStatusList({
               {recordable ? (
                 <button type="button" onClick={() => onRecord(slot)} className={`${ui.btnSecondarySm} ${TRAILING}`}>
                   {slot.isViewer && !detail.viewer.isOrganizer ? "Report" : "Record"}
+                </button>
+              ) : payableAhead ? (
+                <button type="button" onClick={() => onRecord(slot)} className={`${ui.btnSecondarySm} ${TRAILING}`}>
+                  {slot.isViewer && !detail.viewer.isOrganizer ? "Pay ahead" : "Record ahead"}
                 </button>
               ) : remindable ? (
                 <button
@@ -275,7 +296,7 @@ const SUBMISSION_LABELS: Record<SubmissionView["status"], { text: string; tone: 
 
 /**
  * What the viewer reported, newest first: Withdraw on pending ones (R-SUB-04), Dispute on approved
- * contributions while their period is open (§6.2), and each dispute's outcome.
+ * contributions while their period is open or still to come (§6.2, R-DEC-32), and each dispute's outcome.
  */
 export function MyPayments({
   detail,
@@ -290,7 +311,13 @@ export function MyPayments({
   onDispute: (submission: SubmissionView) => void;
   onWithdrawDispute: (dispute: DisputeView) => void;
 }) {
-  const mine = detail.submissions.filter((s) => s.mine).sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
+  // A split payment is one row until approved; then each round's part stands alone, so each can be
+  // corrected on its own (R-DEC-33, R-DEC-32).
+  const rows = detail.submissions.filter((s) => s.mine).sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
+  const mine = [
+    ...asPayments(detail, rows.filter((s) => s.status !== "APPROVED")),
+    ...rows.filter((s) => s.status === "APPROVED").map((s) => ({ ...s, parts: [s] })),
+  ].sort((a, b) => b.submittedAt.localeCompare(a.submittedAt) || (b.round ?? 0) - (a.round ?? 0));
   if (mine.length === 0) return null;
   const nameOf = (slotId: string) => detail.slots.find((s) => s.id === slotId);
   return (
@@ -307,7 +334,7 @@ export function MyPayments({
           const disputable =
             s.status === "APPROVED" &&
             s.appliedAs === "CONTRIBUTION" &&
-            s.round === detail.period?.number &&
+            (s.round === detail.period?.number || isAhead(detail, s)) &&
             dispute?.status !== "PENDING";
           return (
             <li key={s.id} className="px-4 py-3">
@@ -319,6 +346,13 @@ export function MyPayments({
                     {!slot?.isViewer && <span className="font-semibold text-ink-600"> for {slot?.name}</span>}
                     {(s.type === "DEBT_PAYMENT" || s.appliedAs === "DEBT_PAYMENT") && (
                       <span className="font-semibold text-ink-600"> toward debt</span>
+                    )}
+                    {(s.parts.length > 1 || isAhead(detail, s)) && (
+                      <span className="font-semibold text-ink-600">
+                        {s.parts.length > 1
+                          ? ` for ${roundsLabel(s.parts.map((p) => p.round ?? 0))}`
+                          : ` ahead for round ${s.round}`}
+                      </span>
                     )}
                   </span>
                   <span className={`flex items-center gap-1 text-xs font-semibold ${label.tone}`}>
