@@ -12,7 +12,7 @@ import {
 } from "../lib/jwt.js";
 import { requireAuth } from "../middleware/auth.js";
 import { validateBody } from "../middleware/validate.js";
-import { getUserActivityStats } from "../services/userActivity.js";
+import { emailField, newPasswordField, optionalText, requiredText } from "../lib/validation.js";
 
 const router = Router();
 
@@ -24,15 +24,15 @@ const authLimiter = rateLimit({
 });
 
 const registerSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(8),
-  displayName: z.string().min(1).max(100),
-  contact: z.string().max(200).optional(),
+  email: emailField,
+  password: newPasswordField,
+  displayName: requiredText("Display name", 100),
+  contact: optionalText("Contact", 200).optional(),
 });
 
 const loginSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(1),
+  email: emailField,
+  password: z.string().min(1, "Enter your password"),
 });
 
 const refreshSchema = z.object({
@@ -40,18 +40,18 @@ const refreshSchema = z.object({
 });
 
 const updateProfileSchema = z.object({
-  displayName: z.string().min(1).max(100).optional(),
-  contact: z.string().max(200).nullable().optional(),
+  displayName: requiredText("Display name", 100).optional(),
+  contact: optionalText("Contact", 200).nullable().optional(),
 });
 
 const changeEmailSchema = z.object({
-  currentPassword: z.string().min(1),
-  newEmail: z.string().email(),
+  currentPassword: z.string().min(1, "Enter your current password"),
+  newEmail: emailField,
 });
 
 const changePasswordSchema = z.object({
-  currentPassword: z.string().min(1),
-  newPassword: z.string().min(8),
+  currentPassword: z.string().min(1, "Enter your current password"),
+  newPassword: newPasswordField,
 });
 
 async function verifyCurrentPassword(userId: string, password: string) {
@@ -202,15 +202,6 @@ router.get("/me", requireAuth, async (req, res, next) => {
       select: { id: true, email: true, displayName: true, contact: true, createdAt: true },
     });
     res.json({ user });
-  } catch (err) {
-    next(err);
-  }
-});
-
-router.get("/me/activity", requireAuth, async (req, res, next) => {
-  try {
-    const activity = await getUserActivityStats(req.user!.id);
-    res.json({ activity });
   } catch (err) {
     next(err);
   }

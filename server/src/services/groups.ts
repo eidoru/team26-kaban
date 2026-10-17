@@ -1,274 +1,337 @@
-import { Group, GroupStatus, Membership, Prisma, RoundStatus } from "@prisma/client";
-import { createNotification, writeAuditLog } from "../lib/audit.js";
-import { resolveAppOrigin } from "../lib/origin.js";
+import type { Group } from "@prisma/client";
+import { canTransition } from "../domain/lifecycle.js";
+import { debtBreakdown } from "../domain/debt.js";
+import { buildSchedule } from "../domain/schedule.js";
+import {
+  earliestStartDate,
+  frequencyLabel,
+  launchBlockers,
+  settingChanges,
+  setupErrors,
+  toSettings,
+  type SetupErrors,
+  type SetupInput,
+} from "../domain/setup.js";
+import { audit } from "../lib/audit.js";
+import { AppError, conflict } from "../lib/errors.js";
 import { prisma } from "../lib/prisma.js";
-import { getCompletedGroupCardStats } from "./groupCardStats.js";
+import { fromCalendarDate, todayInManila, toCalendarDate } from "../lib/today.js";
+import { notifyUsers } from "./notifications.js";
+import { openPeriodView, visibleSubmissions } from "./submissions.js";
+import { visibleDisputes } from "./disputes.js";
+import { visibleSwaps } from "./swaps.js";
+import { proofViewUrls } from "../lib/storage.js";
+import { assertState, memberUserIds, resetOrder, settingsOf, slotName, withGroupLock, type Db } from "./common.js";
 
-export class GroupError extends Error {
-  status: number;
-
-  constructor(status: number, message: string) {
-    super(message);
-    this.status = status;
+/** A 400 that carries per-field messages, shown under each form field. */
+export class SetupValidationError extends AppError {
+  constructor(fields: SetupErrors) {
+    super(400, Object.values(fields)[0] ?? "Check the form", "INVALID_SETUP", fields);
   }
 }
 
-/** A completed paluwagan's roster is closed: placeholder seats can no longer be claimed. */
-export const CLAIM_CLOSED_MESSAGE = "This paluwagan has finished, so this seat can no longer be claimed.";
-
-export async function countFilledSlots(groupId: string): Promise<number> {
-  return prisma.membership.count({ where: { groupId } });
-}
-
-export function shouldResetPayoutOrder(opts: {
-  groupStatus: GroupStatus;
-  filledCount: number;
-  slotCount: number;
-  assignedTurnCount: number;
-}): boolean {
-  return (
-    opts.groupStatus === GroupStatus.forming &&
-    opts.filledCount < opts.slotCount &&
-    opts.assignedTurnCount > 0
-  );
-}
-
-type GroupDb = Pick<Prisma.TransactionClient, "group" | "membership">;
-
-/** Clears turn numbers when the forming roster drops below capacity after order was set. */
-export async function resetPayoutOrderIfRosterIncomplete(
-  db: GroupDb,
-  groupId: string,
-): Promise<boolean> {
-  const group = await db.group.findUnique({ where: { id: groupId } });
-  if (!group) return false;
-
-  const [filledCount, assignedTurnCount] = await Promise.all([
-    db.membership.count({ where: { groupId } }),
-    db.membership.count({ where: { groupId, turnNumber: { not: null } } }),
-  ]);
-
-  if (
-    !shouldResetPayoutOrder({
-      groupStatus: group.status,
-      filledCount,
-      slotCount: group.slotCount,
-      assignedTurnCount,
-    })
-  ) {
-    return false;
-  }
-
-  await db.membership.updateMany({
-    where: { groupId },
-    data: { turnNumber: null },
-  });
-
-  return true;
-}
-
-export async function getMembership(userId: string, groupId: string): Promise<Membership | null> {
-  return prisma.membership.findFirst({ where: { userId, groupId } });
-}
-
-export async function requireMembership(userId: string, groupId: string): Promise<Membership> {
-  const membership = await getMembership(userId, groupId);
-  if (!membership) throw new GroupError(403, "You are not a member of this group");
-  return membership;
-}
-
-export async function requireManager(userId: string, groupId: string): Promise<Membership> {
-  const membership = await requireMembership(userId, groupId);
-  if (!membership.isManager) throw new GroupError(403, "Manager access required");
-  return membership;
-}
-
-export function assertForming(group: Group): void {
-  if (group.status !== GroupStatus.forming) {
-    throw new GroupError(409, "This action is only allowed while the group is forming");
-  }
-}
-
-export async function getGroupOrThrow(groupId: string): Promise<Group> {
-  const group = await prisma.group.findUnique({ where: { id: groupId } });
-  if (!group) throw new GroupError(404, "Group not found");
-  return group;
-}
-
-/** Deletes a forming group, notifies joined members, and writes an audit entry first. */
-export async function deleteFormingGroup(groupId: string, actorId: string): Promise<void> {
-  const group = await getGroupOrThrow(groupId);
-  assertForming(group);
-  await requireManager(actorId, groupId);
-
-  const otherMembers = await prisma.membership.findMany({
+/** R-SET-01, R-DEC-15: case-insensitive, among the organizer's paluwagans that aren't cancelled. */
+async function assertNameAvailable(db: Db, organizerId: string, name: string, exceptGroupId?: string) {
+  const clash = await db.group.findFirst({
     where: {
-      groupId,
-      userId: { not: null },
-      NOT: { userId: actorId },
+      organizerId,
+      state: { not: "CANCELLED" },
+      name: { equals: name.trim(), mode: "insensitive" },
+      ...(exceptGroupId ? { id: { not: exceptGroupId } } : {}),
     },
-    select: { userId: true },
+    select: { id: true },
   });
+  if (clash) throw new SetupValidationError({ name: "You already have a paluwagan with this name." });
+}
 
-  await writeAuditLog({
-    groupId,
-    actorId,
-    action: "group.deleted",
-    entityType: "group",
-    entityId: groupId,
-    metadata: { name: group.name },
-  });
+function settingsData(input: SetupInput) {
+  const settings = toSettings(input);
+  return {
+    settings,
+    data: {
+      name: settings.name,
+      slotCount: settings.slotCount,
+      amountMode: settings.amountMode,
+      contribution: BigInt(settings.contribution),
+      pot: BigInt(settings.pot),
+      enteredPot: settings.enteredPot == null ? null : BigInt(settings.enteredPot),
+      frequency: settings.frequency,
+      intervalDays: settings.intervalDays,
+      startDate: fromCalendarDate(settings.startDate),
+      interestRate: settings.interestRate,
+    },
+  };
+}
 
-  for (const member of otherMembers) {
-    if (!member.userId) continue;
-    await createNotification({
-      userId: member.userId,
-      groupId,
-      type: "general",
-      title: `${group.name} was cancelled`,
-      body: "The organizer cancelled this paluwagan while it was still forming.",
-      link: "/home",
+/** §4: the group starts in LOBBY with the organizer in one slot. */
+export async function createGroup(userId: string, input: SetupInput) {
+  const errors = setupErrors(input, todayInManila());
+  if (Object.keys(errors).length > 0) throw new SetupValidationError(errors);
+  const { data } = settingsData(input);
+
+  return prisma.$transaction(async (tx) => {
+    await assertNameAvailable(tx, userId, input.name);
+    const group = await tx.group.create({
+      data: { ...data, organizerId: userId, slots: { create: { userId, isOrganizer: true } } },
     });
-  }
-
-  await prisma.group.delete({ where: { id: groupId } });
+    await audit(tx, {
+      groupId: group.id,
+      actorUserId: userId,
+      action: "group.created",
+      after: { ...toSettings(input) },
+    });
+    return group;
+  });
 }
 
-export async function listUserGroups(userId: string) {
-  const memberships = await prisma.membership.findMany({
-    where: { userId },
-    include: {
-      group: {
-        select: {
-          id: true,
-          name: true,
-          status: true,
-          contributionAmount: true,
-          frequency: true,
-          frequencyDays: true,
-          slotCount: true,
-          startDate: true,
-          shortfallInterestRatePercent: true,
-          _count: { select: { memberships: true } },
-        },
-      },
-    },
-    orderBy: { updatedAt: "desc" },
+/** R-LOB-09 / R-LOB-10 / R-LOB-11: edit any setting in the lobby; everyone hears what changed. */
+export async function editGroup(groupId: string, actorUserId: string, input: SetupInput) {
+  return withGroupLock(groupId, async (tx, group) => {
+    assertState(group, ["LOBBY"], "Settings are locked once the paluwagan launches.");
+    const occupied = await tx.slot.count({ where: { groupId } });
+    const errors = setupErrors(input, todayInManila(), occupied);
+    if (Object.keys(errors).length > 0) throw new SetupValidationError(errors);
+    await assertNameAvailable(tx, actorUserId, input.name, groupId);
+
+    const before = settingsOf(group);
+    const { settings: after, data } = settingsData(input);
+    const changes = settingChanges(before, after);
+    if (changes.length === 0) return { group, changes };
+
+    const updated = await tx.group.update({ where: { id: groupId }, data });
+    if (after.slotCount !== before.slotCount) await resetOrder(tx, group, actorUserId, "Slot count changed");
+
+    await audit(tx, {
+      groupId,
+      actorUserId,
+      action: "group.edited",
+      before: Object.fromEntries(changes.map((c) => [c.field, c.before])),
+      after: Object.fromEntries(changes.map((c) => [c.field, c.after])),
+    });
+    const others = (await memberUserIds(tx, groupId)).filter((id) => id !== actorUserId);
+    await notifyUsers(tx, others, {
+      groupId,
+      kind: "group.edited",
+      title: "Details changed",
+      body: changes.map((c) => `${c.label}: ${c.before} → ${c.after}`).join("\n"),
+      data: { changes },
+    });
+    return { group: updated, changes };
   });
+}
 
-  const completedIds = memberships
-    .filter((m) => m.group.status === GroupStatus.completed)
-    .map((m) => m.groupId);
-  const completedStats = await getCompletedGroupCardStats(completedIds);
-
-  // For active groups, the current round and the round that pays out to the viewer, so the
-  // home card can say how many rounds until their turn.
-  const activeMemberships = memberships.filter((m) => m.group.status === GroupStatus.active);
-  const activeRounds =
-    activeMemberships.length === 0
-      ? []
-      : await prisma.round.findMany({
-          where: {
-            groupId: { in: activeMemberships.map((m) => m.groupId) },
-            OR: [
-              { status: RoundStatus.current },
-              { recipientMembershipId: { in: activeMemberships.map((m) => m.id) } },
-            ],
-          },
-          select: { groupId: true, number: true, status: true, recipientMembershipId: true },
-        });
-  const currentRoundByGroup = new Map<string, number>();
-  const payoutRoundByMembership = new Map<string, number>();
-  for (const round of activeRounds) {
-    if (round.status === RoundStatus.current) currentRoundByGroup.set(round.groupId, round.number);
-    payoutRoundByMembership.set(round.recipientMembershipId, round.number);
-  }
-
-  return memberships.map((m) => {
-    const base = {
-      ...serializeGroup(
-        m.group,
-        m.group._count.memberships,
-        m.isManager ? "manager" : "member",
-      ),
-      membershipId: m.id,
-    };
-    if (m.group.status === GroupStatus.active) {
-      return {
-        ...base,
-        currentRoundNumber: currentRoundByGroup.get(m.groupId) ?? null,
-        myPayoutRoundNumber: payoutRoundByMembership.get(m.id) ?? null,
-      };
+/** R-LOB-06, R-DEC-03: only from LOBBY. */
+export async function cancelGroup(groupId: string, actorUserId: string) {
+  return withGroupLock(groupId, async (tx, group) => {
+    if (!canTransition(group.state, "CANCELLED")) {
+      throw conflict("A paluwagan can only be cancelled before it launches.", "WRONG_STATE");
     }
-    if (m.group.status !== GroupStatus.completed) return base;
-    const stats = completedStats.get(m.groupId);
-    if (!stats) return base;
-    return {
-      ...base,
-      totalCollected: stats.totalCollected,
-      outstandingDebt: stats.outstandingDebt,
-    };
+    const updated = await tx.group.update({
+      where: { id: groupId },
+      data: { state: "CANCELLED", cancelledAt: new Date() },
+    });
+    await audit(tx, { groupId, actorUserId, action: "group.cancelled" });
+    const others = (await memberUserIds(tx, groupId)).filter((id) => id !== actorUserId);
+    await notifyUsers(tx, others, {
+      groupId,
+      kind: "group.cancelled",
+      title: `${group.name} was cancelled`,
+      body: "The organizer cancelled this paluwagan before it launched.",
+    });
+    return updated;
   });
 }
 
-export function serializeGroup(
-  group: Pick<
-    Group,
-    | "id"
-    | "name"
-    | "status"
-    | "contributionAmount"
-    | "frequency"
-    | "frequencyDays"
-    | "slotCount"
-    | "startDate"
-    | "shortfallInterestRatePercent"
-  >,
-  filledCount: number,
-  role?: "manager" | "member",
-) {
+
+function summary(group: Group) {
+  const settings = settingsOf(group);
   return {
     id: group.id,
     name: group.name,
-    status: group.status,
-    contributionAmount: group.contributionAmount.toString(),
-    frequency: group.frequency,
-    frequencyDays: group.frequencyDays,
+    state: group.state,
     slotCount: group.slotCount,
-    startDate: group.startDate,
-    shortfallInterestRatePercent: group.shortfallInterestRatePercent.toString(),
-    filledCount,
-    openSlots: Math.max(0, group.slotCount - filledCount),
-    role,
+    amountMode: group.amountMode,
+    contribution: settings.contribution,
+    pot: settings.pot,
+    enteredPot: settings.enteredPot,
+    potAdjustedFrom: settings.potAdjustedFrom,
+    frequency: group.frequency,
+    intervalDays: group.intervalDays,
+    frequencyLabel: frequencyLabel(group.frequency, group.intervalDays),
+    startDate: settings.startDate,
+    interestRate: group.interestRate,
+    createdAt: group.createdAt.toISOString(),
+    launchedAt: group.launchedAt?.toISOString() ?? null,
+    activatedAt: group.activatedAt?.toISOString() ?? null,
+    completedAt: group.completedAt?.toISOString() ?? null,
+    cancelledAt: group.cancelledAt?.toISOString() ?? null,
   };
 }
 
-export function serializeMember(m: Membership & { user?: { displayName: string; email: string } | null }) {
+/** The public face of a group, for invite landing pages (R-INV-01). */
+export function publicSummary(group: Group & { organizer: { displayName: string } }, occupied: number) {
+  return { ...summary(group), organizerName: group.organizer.displayName, occupied };
+}
+
+/**
+ * Everything one paluwagan page needs, for this viewer. Links (invite, claim) and placeholder
+ * contacts are organizer-only; everything else is visible to every member (R-DEC-06).
+ */
+export async function groupDetail(groupId: string, viewerUserId: string, appOrigin: string) {
+  const group = await prisma.group.findUniqueOrThrow({
+    where: { id: groupId },
+    include: {
+      organizer: { select: { displayName: true } },
+      slots: {
+        include: {
+          user: { select: { displayName: true } },
+          claimLinks: { where: { revokedAt: null, claimedAt: null }, orderBy: { createdAt: "desc" }, take: 1 },
+        },
+        orderBy: [{ position: "asc" }, { createdAt: "asc" }],
+      },
+      inviteLinks: { where: { revokedAt: null }, orderBy: { createdAt: "desc" }, take: 1 },
+      rounds: { orderBy: { number: "asc" } },
+    },
+  });
+  const viewer = group.slots.find((s) => s.userId === viewerUserId)!;
+  const isOrganizer = viewer.isOrganizer;
+  const settings = settingsOf(group);
+  const today = todayInManila();
+
+  // Every debt change, so each slot's debt can show what each round added (only after launch),
+  // fetched alongside the open period.
+  const [debtEntries, period] = await Promise.all([
+    group.rounds.length > 0
+      ? prisma.debtEntry.findMany({
+          where: { groupId },
+          orderBy: { createdAt: "asc" },
+          select: { slotId: true, kind: true, principalDelta: true, interestDelta: true, round: { select: { number: true } } },
+        })
+      : [],
+    openPeriodView(prisma, groupId, settings.contribution),
+  ]);
+  const breakdownOf = (slotId: string) =>
+    debtBreakdown(
+      debtEntries
+        .filter((e) => e.slotId === slotId)
+        .map((e) => ({
+          kind: e.kind,
+          round: e.round?.number ?? null,
+          principalDelta: Number(e.principalDelta),
+          interestDelta: Number(e.interestDelta),
+        })),
+    );
+
+  const slots = group.slots.map((slot) => ({
+    id: slot.id,
+    kind: slot.userId ? ("MEMBER" as const) : ("PLACEHOLDER" as const),
+    name: slotName(slot),
+    isOrganizer: slot.isOrganizer,
+    isViewer: slot.id === viewer.id,
+    position: slot.position,
+    claimedAt: slot.claimedAt?.toISOString() ?? null,
+    /** What this slot owes the organizer (§8). Everyone sees everyone's (R-DEC-06). */
+    debt: { principal: Number(slot.debtPrincipal), interest: Number(slot.debtInterest), ...breakdownOf(slot.id) },
+    contact: isOrganizer && !slot.userId ? slot.placeholderContact : null,
+    claimLink:
+      isOrganizer && !slot.userId && slot.claimLinks[0]
+        ? { url: `${appOrigin}/claim/${slot.claimLinks[0].token}`, createdAt: slot.claimLinks[0].createdAt.toISOString() }
+        : null,
+  }));
+
+  // Before launch the schedule is a preview from the settings; afterwards it's the stored rounds.
+  const bySlotPosition = new Map(group.slots.filter((s) => s.position != null).map((s) => [s.position!, s.id]));
+  const schedule =
+    group.rounds.length > 0
+      ? group.rounds.map((r) => ({
+          number: r.number,
+          periodStart: toCalendarDate(r.periodStart),
+          payoutDate: toCalendarDate(r.payoutDate),
+          recipientSlotId: r.recipientSlotId,
+          status: r.status,
+        }))
+      : buildSchedule(settings.startDate, settings.frequency, settings.slotCount, settings.intervalDays ?? undefined).map(
+          (r) => ({ ...r, recipientSlotId: bySlotPosition.get(r.number) ?? null, status: "UPCOMING" as const }),
+        );
+
+  const viewerScope = { userId: viewerUserId, slotId: viewer.id, isOrganizer };
+  const started = !(group.state === "LOBBY" || group.state === "LAUNCHED" || group.state === "CANCELLED");
+  const submissions = !started
+    ? []
+    : await visibleSubmissions(prisma, groupId, period?.roundId ?? null, {
+          userId: viewerUserId,
+          slotId: viewer.id,
+          isOrganizer,
+        });
+  const payouts = await payoutsView(groupId, viewer.id, isOrganizer);
+  const disputes = started ? await visibleDisputes(prisma, groupId, viewerScope) : [];
+  const swaps = started ? await visibleSwaps(prisma, groupId, viewerScope) : [];
+
   return {
-    id: m.id,
-    displayName: m.displayName,
-    contact: m.contact,
-    isManager: m.isManager,
-    isPlaceholder: m.userId === null,
-    userId: m.userId,
-    turnNumber: m.turnNumber,
+    group: { ...summary(group), organizerName: group.organizer.displayName },
+    viewer: { slotId: viewer.id, isOrganizer },
+    slots,
+    openSlots: group.slotCount - group.slots.length,
+    inviteLink:
+      isOrganizer && group.state === "LOBBY" && group.inviteLinks[0]
+        ? { url: `${appOrigin}/invite/${group.inviteLinks[0].token}`, createdAt: group.inviteLinks[0].createdAt.toISOString() }
+        : null,
+    schedule,
+    /** The open contribution period and each slot's standing in it (R-SUB-07); null outside ACTIVE. */
+    period,
+    submissions,
+    /** Disputes the viewer may see (§6.2), oldest first, with any refund they created. */
+    disputes,
+    /** Turn swaps the viewer may see (§9): all for the organizer, their own for a member. Newest first. */
+    swaps,
+    payouts,
+    launch:
+      group.state === "LOBBY"
+        ? {
+            blockers: launchBlockers({
+              slotCount: group.slotCount,
+              occupied: group.slots.length,
+              ordered: group.slots.every((s) => s.position != null),
+              startDate: settings.startDate,
+              today,
+            }),
+            earliestStartDate: earliestStartDate(today),
+          }
+        : null,
   };
 }
 
-const INVITE_TTL_DAYS = 30;
-
-export function inviteExpiry(): Date {
-  const d = new Date();
-  d.setDate(d.getDate() + INVITE_TTL_DAYS);
-  return d;
-}
-
-export function inviteUrl(
-  type: "group_invite" | "membership_claim",
-  token: string,
-  origin?: string,
-): string {
-  const path = type === "group_invite" ? "invite" : "claim";
-  const base = origin ?? resolveAppOrigin();
-  return `${base}/${path}/${token}`;
+/**
+ * Every processed payout (§7), newest first, with its breakdown. Handover proof photos follow the
+ * R-DEC-17 rule: the recipient and the organizer only.
+ */
+async function payoutsView(groupId: string, viewerSlotId: string, isOrganizer: boolean) {
+  const rounds = await prisma.round.findMany({
+    where: { groupId, payout: { isNot: null } },
+    include: { payout: true },
+    orderBy: { number: "desc" },
+  });
+  const visibleProofs = rounds
+    .filter((r) => r.payout!.proofPath && (isOrganizer || r.recipientSlotId === viewerSlotId))
+    .map((r) => r.payout!.proofPath!);
+  const urls = await proofViewUrls(visibleProofs).catch(() => new Map<string, string>());
+  return rounds.map((r) => {
+    const p = r.payout!;
+    return {
+      round: r.number,
+      payoutDate: toCalendarDate(r.payoutDate),
+      recipientSlotId: r.recipientSlotId,
+      gross: Number(p.gross),
+      ownShortfall: Number(p.ownShortfall),
+      interestDeducted: Number(p.interestDeducted),
+      principalDeducted: Number(p.principalDeducted),
+      net: Number(p.net),
+      status: p.status,
+      handedOverAt: p.handedOverAt?.toISOString() ?? null,
+      confirmedAt: p.confirmedAt?.toISOString() ?? null,
+      autoConfirmed: p.autoConfirmed,
+      proofAttached: !!p.proofPath,
+      proofUrl: p.proofPath ? (urls.get(p.proofPath) ?? null) : null,
+    };
+  });
 }

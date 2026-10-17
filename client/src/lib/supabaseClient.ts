@@ -3,7 +3,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const supabasePublishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
 
-/** One shared client for Realtime — avoids duplicate GoTrueClient warnings. */
+/** One shared client (Realtime, and uploads to signed Storage URLs): avoids duplicate GoTrueClient warnings. */
 let realtimeClient: SupabaseClient | null = null;
 
 function getRealtimeClient(): SupabaseClient {
@@ -27,6 +27,11 @@ function getRealtimeClient(): SupabaseClient {
 
 export function isSupabaseRealtimeConfigured(): boolean {
   return Boolean(supabaseUrl && supabasePublishableKey);
+}
+
+/** For uploading to a signed URL the API handed out; the token is the only permission needed. */
+export function getSupabaseStorageClient(): SupabaseClient {
+  return getRealtimeClient();
 }
 
 export function getSupabaseRealtimeClient(accessToken: string): SupabaseClient {

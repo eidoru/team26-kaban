@@ -1,30 +1,11 @@
 import { type FormEvent, type ReactNode, useId, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { api, ApiError, patchSession, storeAuth } from "../api/client";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/useAuth";
 import { Avatar } from "../components/Avatar";
-import { StatCard } from "../components/StatCard";
 import { ToggleSwitch } from "../components/ToggleSwitch";
 import { demoToolsAvailable, useDemoToolsSetting } from "../lib/devTools";
 import { ui } from "../lib/ui";
-
-function formatPeso(amount: string | number): string {
-  return `₱${Number(amount).toLocaleString()}`;
-}
-
-function paluwaganBreakdown(stats: {
-  total: number;
-  active: number;
-  forming: number;
-  completed: number;
-}): string {
-  if (stats.total === 0) return "Join or create one to get started";
-  const parts: string[] = [];
-  if (stats.active > 0) parts.push(`${stats.active} active`);
-  if (stats.forming > 0) parts.push(`${stats.forming} forming`);
-  if (stats.completed > 0) parts.push(`${stats.completed} done`);
-  return parts.join(" · ");
-}
+import { LIMITS, isValidEmail } from "../lib/validation";
 
 function FormAlerts({ success, error }: { success?: string; error?: string }) {
   if (!success && !error) return null;
@@ -39,7 +20,6 @@ function FormAlerts({ success, error }: { success?: string; error?: string }) {
 function SecurityRow({
   title,
   value,
-  hint,
   open,
   onToggle,
   panelId,
@@ -47,7 +27,6 @@ function SecurityRow({
 }: {
   title: string;
   value: string;
-  hint?: string;
   open: boolean;
   onToggle: () => void;
   panelId: string;
@@ -59,11 +38,6 @@ function SecurityRow({
         <div className="min-w-0">
           <p className="text-sm font-bold text-ink-900">{title}</p>
           <p className="mt-0.5 truncate text-sm text-ink-600">{value}</p>
-          {hint && (
-            <p className={`mt-1 text-xs text-ink-500 ${open ? "invisible" : ""}`} aria-hidden={open}>
-              {hint}
-            </p>
-          )}
         </div>
         <button
           type="button"
@@ -115,11 +89,6 @@ export function ProfilePage() {
   const [passwordError, setPasswordError] = useState("");
   const [passwordSubmitting, setPasswordSubmitting] = useState(false);
 
-  const { data: activityData, isLoading: activityLoading } = useQuery({
-    queryKey: ["profile-activity"],
-    queryFn: () => api.getProfileActivity(),
-  });
-
 
   function resetEmailForm() {
     setEmailMessage("");
@@ -154,6 +123,10 @@ export function ProfilePage() {
     e.preventDefault();
     setProfileMessage("");
     setProfileError("");
+    if (!displayName.trim()) {
+      setProfileError("Enter a display name.");
+      return;
+    }
     setProfileSubmitting(true);
     try {
       await api.updateProfile({
@@ -177,6 +150,10 @@ export function ProfilePage() {
     const trimmed = newEmail.trim();
     if (!trimmed) {
       setEmailError("Enter a new email address.");
+      return;
+    }
+    if (!isValidEmail(trimmed)) {
+      setEmailError("Enter a valid email address.");
       return;
     }
     if (trimmed.toLowerCase() === user?.email.toLowerCase()) {
@@ -237,10 +214,7 @@ export function ProfilePage() {
 
   return (
     <div className={`${ui.page} space-y-8`}>
-      <div>
-        <h1 className={ui.pageTitle}>Profile</h1>
-        <p className={ui.pageSubtitle}>How you appear in groups and how you sign in</p>
-      </div>
+      <h1 className={ui.pageTitle}>Profile</h1>
 
       <div className="overflow-hidden rounded-3xl border border-ink-200 bg-white shadow-card">
         <div className="relative overflow-hidden bg-brand-700 p-6 text-white sm:p-8">
@@ -253,9 +227,6 @@ export function ProfilePage() {
               <p className="mt-0.5 truncate text-sm text-brand-100">{user?.contact || "No contact added"}</p>
             </div>
           </div>
-          <p className="relative mt-5 text-sm text-brand-50">
-            Your display name and contact are visible to members in your paluwagan groups.
-          </p>
         </div>
 
         <div className="p-6 sm:p-8">
@@ -270,7 +241,7 @@ export function ProfilePage() {
                   id="displayName"
                   type="text"
                   required
-                  maxLength={100}
+                  maxLength={LIMITS.name}
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
                   className={ui.input}
@@ -283,7 +254,7 @@ export function ProfilePage() {
                 <input
                   id="contact"
                   type="text"
-                  maxLength={200}
+                  maxLength={LIMITS.contact}
                   value={contact}
                   onChange={(e) => setContact(e.target.value)}
                   placeholder="Phone or messenger handle"
@@ -301,16 +272,12 @@ export function ProfilePage() {
       </div>
 
       <section>
-        <div className="mb-4">
-          <h2 className={ui.sectionHeading}>Account security</h2>
-          <p className={`mt-1 text-sm ${ui.muted}`}>Change sign-in details when you need to</p>
-        </div>
+        <h2 className={`${ui.sectionHeading} mb-4`}>Account security</h2>
 
         <div className="space-y-3">
           <SecurityRow
             title="Email address"
             value={user?.email ?? "…"}
-            hint="Used to sign in and receive notifications"
             open={emailOpen}
             onToggle={toggleEmailOpen}
             panelId={emailPanelId}
@@ -356,7 +323,6 @@ export function ProfilePage() {
           <SecurityRow
             title="Password"
             value="••••••••"
-            hint="Updating your password signs out other devices"
             open={passwordOpen}
             onToggle={togglePasswordOpen}
             panelId={passwordPanelId}
@@ -424,60 +390,9 @@ export function ProfilePage() {
         </div>
       </section>
 
-      <section>
-        <div className="mb-4">
-          <h2 className={ui.sectionHeading}>Your activity</h2>
-          <p className={`mt-1 text-sm ${ui.muted}`}>
-            Self-scoped — never an aggregated profile others can see
-          </p>
-        </div>
-
-        {activityLoading ? (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-hidden>
-            {[0, 1, 2, 3].map((i) => (
-              <div key={i} className={`${ui.skeleton} h-32`} />
-            ))}
-          </div>
-        ) : activityData ? (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <StatCard
-              label="Paluwagans"
-              value={String(activityData.activity.paluwagans.total)}
-              hint={paluwaganBreakdown(activityData.activity.paluwagans)}
-              icon="users"
-            />
-            <StatCard
-              label="Total contributed"
-              value={formatPeso(activityData.activity.totalContributed)}
-              hint="across all groups"
-              icon="wallet"
-            />
-            <StatCard
-              label="Total received"
-              value={formatPeso(activityData.activity.totalReceived)}
-              hint="payouts collected"
-              tone="success"
-              icon="check"
-            />
-            <StatCard
-              label="Outstanding"
-              value={formatPeso(activityData.activity.outstanding)}
-              hint={
-                Number(activityData.activity.outstanding) > 0 ? "you carry" : "all settled"
-              }
-              tone={Number(activityData.activity.outstanding) > 0 ? "danger" : "neutral"}
-              icon="alert"
-            />
-          </div>
-        ) : null}
-      </section>
-
       {demoToolsAvailable && (
         <section>
-          <div className="mb-4">
-            <h2 className={ui.sectionHeading}>Developer</h2>
-            <p className={`mt-1 text-sm ${ui.muted}`}>Testing aids. Only available on builds with demo tools enabled.</p>
-          </div>
+          <h2 className={`${ui.sectionHeading} mb-4`}>Developer</h2>
           <div className={`${ui.sectionCard} space-y-2`}>
             <ToggleSwitch
               id="showDemoTools"
@@ -485,10 +400,7 @@ export function ProfilePage() {
               onChange={setDemoToolsOn}
               label="Show demo tools"
             />
-            <p className="text-xs text-ink-500">
-              Adds an &ldquo;Advance round&rdquo; card to active groups you organize, to close rounds without waiting
-              for the due date. Saved in this browser only.
-            </p>
+            <p className="text-xs text-ink-500">Testing shortcuts, in this browser only.</p>
           </div>
         </section>
       )}

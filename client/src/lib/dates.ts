@@ -34,13 +34,36 @@ export function formatLocalDate(iso: string | null | undefined): string {
   return Number.isNaN(date.getTime()) ? iso : formatDay(date);
 }
 
-/** Relative hint for a due date: "today", "tomorrow", "in 3 days", "2 days overdue". */
-export function dueHint(value: string | null | undefined): { label: string; overdue: boolean } | null {
+/** Month and day only ("Jan 1"), where the year is already on screen. */
+export function formatMonthDay(value: string | null | undefined): string {
+  const date = parseDateOnly(value);
+  return date ? date.toLocaleDateString(undefined, { month: "short", day: "numeric" }) : (value ?? "");
+}
+
+/**
+ * A compact date for a date column: "Nov 15", or "Jan 1, 2027" outside the current year. Pass
+ * `withYear` to show the year anyway, so a column that crosses years reads the same on every row.
+ */
+export function formatShortDate(value: string | null | undefined, withYear = false): string {
+  const date = parseDateOnly(value);
+  if (!date) return value ?? "";
+  const showYear = withYear || date.getFullYear() !== new Date().getFullYear();
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric", ...(showYear ? { year: "numeric" } : {}) });
+}
+
+/** Whole days from today to a calendar date: 0 today, negative once it's past. */
+export function daysUntil(value: string | null | undefined): number | null {
   const date = parseDateOnly(value);
   if (!date) return null;
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const days = Math.round((date.getTime() - today.getTime()) / DAY_MS);
+  return Math.round((date.getTime() - today.getTime()) / DAY_MS);
+}
+
+/** Relative hint for a due date: "today", "tomorrow", "in 3 days", "2 days overdue". */
+export function dueHint(value: string | null | undefined): { label: string; overdue: boolean } | null {
+  const days = daysUntil(value);
+  if (days === null) return null;
   if (days === 0) return { label: "today", overdue: false };
   if (days === 1) return { label: "tomorrow", overdue: false };
   if (days > 1) return { label: `in ${days} days`, overdue: false };
@@ -56,4 +79,9 @@ export function formatDayHeading(date: Date): string {
   if (diffDays === 0) return "Today";
   if (diffDays === 1) return "Yesterday";
   return formatDay(date);
+}
+
+/** Today in the Philippines as YYYY-MM-DD: the day the server's date rules use. */
+export function todayInManila(now: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(now);
 }

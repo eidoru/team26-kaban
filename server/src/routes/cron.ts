@@ -1,73 +1,34 @@
 import { Router } from "express";
-import { requireCronSecret, requireCronTesting } from "../middleware/auth.js";
-import { writeAuditLog } from "../lib/audit.js";
-import { GroupError } from "../services/groups.js";
-import { forceAdvanceGroupRound, processDueRounds } from "../services/schedule.js";
+import { requireCronSecret } from "../middleware/auth.js";
+import { activateDueGroups } from "../services/launch.js";
+import { closeDueRounds, nudgeUnconfirmedPayouts } from "../services/payouts.js";
+import { expireStaleSwaps } from "../services/swaps.js";
 import { sendDueReminders } from "../services/reminders.js";
 
+/** Scheduled jobs (vercel.json). Each is idempotent, so a retry or a double run is harmless. */
 const router = Router();
-
 router.use(requireCronSecret);
 
-router.get("/close-rounds", async (_req, res, next) => {
+/**
+ * Once a day, just after midnight Manila: start every launched group whose start date has come
+ * (R-LCH-04), then close every period whose payout date has passed and process its payout (§7,
+ * R-DEC-18), expire timed-out swap requests (R-SWP-04), send payment reminders (§12), and nudge or
+ * auto-confirm payouts nobody has confirmed (R-DEC-07).
+ *
+ * Starting groups first matters after an outage: a group that should have started days ago is
+ * started and then caught up on every payout date it missed, in this same run, in order.
+ */
+router.get("/daily", async (_req, res, next) => {
   try {
-    const result = await processDueRounds();
-    await writeAuditLog({
-      action: "cron.close_rounds",
-      entityType: "cron",
-      entityId: "close-rounds",
-      metadata: { closed: result.closed },
-    });
-    res.json({ ok: true, ...result });
+    const groups = await activateDueGroups();
+    const rounds = await closeDueRounds();
+    const swaps = await expireStaleSwaps();
+    const reminders = await sendDueReminders();
+    const receipts = await nudgeUnconfirmedPayouts();
+    res.json({ ok: true, ...rounds, ...groups, ...swaps, ...reminders, ...receipts });
   } catch (err) {
     next(err);
   }
 });
-
-router.get("/open-rounds", async (_req, res) => {
-  // Rounds open automatically when the prior round closes or on activation.
-  res.json({ ok: true, opened: 0, message: "Rounds open on close or activation" });
-});
-
-router.get("/send-reminders", async (_req, res, next) => {
-  try {
-    const result = await sendDueReminders();
-    await writeAuditLog({
-      action: "cron.send_reminders",
-      entityType: "cron",
-      entityId: "send-reminders",
-      metadata: { sent: result.sent },
-    });
-    res.json({ ok: true, ...result });
-  } catch (err) {
-    next(err);
-  }
-});
-
-/** UAT: force-close the current round for one group (not available on Vercel production). */
-router.post(
-  "/groups/:id/advance-round",
-  requireCronTesting,
-  async (req, res, next) => {
-    try {
-      const groupId = String(req.params.id);
-      const result = await forceAdvanceGroupRound(groupId);
-      await writeAuditLog({
-        groupId,
-        action: "cron.advance_round",
-        entityType: "group",
-        entityId: groupId,
-        metadata: result,
-      });
-      res.json({ ok: true, ...result });
-    } catch (err) {
-      if (err instanceof GroupError) {
-        res.status(err.status).json({ error: err.message });
-        return;
-      }
-      next(err);
-    }
-  },
-);
 
 export default router;

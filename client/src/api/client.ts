@@ -1,3 +1,7 @@
+import type { AmountMode } from "@domain/amounts";
+import type { Frequency } from "@domain/schedule";
+import type { SetupErrors, SetupInput } from "@domain/setup";
+
 function resolveApiBase(): string {
   const configured = import.meta.env.VITE_API_URL as string | undefined;
   if (!configured) return "/api/v1";
@@ -27,359 +31,341 @@ export interface RealtimeTokenResponse {
   supabaseUrl: string;
 }
 
-export interface UserActivityStats {
-  paluwagans: {
-    total: number;
-    active: number;
-    forming: number;
-    completed: number;
-  };
-  totalContributed: string;
-  totalReceived: string;
-  outstanding: string;
-}
-
 export interface AuthResponse {
   user: User;
   accessToken: string;
   refreshToken: string;
 }
 
-export interface GroupSettingsInput {
-  name: string;
-  contributionAmount: number;
-  frequency: "weekly" | "biweekly" | "monthly" | "custom";
-  frequencyDays?: number;
-  slotCount: number;
-  startDate: string;
-  shortfallInterestRatePercent?: number;
-}
+export type GroupState = "LOBBY" | "LAUNCHED" | "ACTIVE" | "COMPLETED" | "COMPLETED_WITH_OUTSTANDING_DEBT" | "CANCELLED";
+export type { AmountMode, Frequency, SetupErrors, SetupInput };
 
+/** A paluwagan's settings. Money is integer centavos; dates are YYYY-MM-DD Manila calendar days. */
 export interface GroupSummary {
   id: string;
   name: string;
-  status: "forming" | "active" | "completed";
-  contributionAmount: string;
-  frequency: string;
-  frequencyDays?: number | null;
+  state: GroupState;
   slotCount: number;
-  startDate: string | null;
-  shortfallInterestRatePercent: string;
-  filledCount?: number;
-  openSlots?: number;
-  role: "manager" | "member";
-  membershipId: string;
-  totalCollected?: string;
-  outstandingDebt?: string;
-  /** Active groups only. */
-  currentRoundNumber?: number | null;
-  /** Active groups only: the round whose pot goes to the viewer. */
-  myPayoutRoundNumber?: number | null;
-}
-
-export interface GroupMember {
-  id: string;
-  displayName: string;
-  contact: string | null;
-  isManager: boolean;
-  isPlaceholder: boolean;
-  userId: string | null;
-  turnNumber: number | null;
-}
-
-export interface MemberReliability {
-  membershipId: string;
-  displayName: string;
-  isPlaceholder: boolean;
-  totalRounds: number;
-  confirmedFull: number;
-  partial: number;
-  missed: number;
-  openDisputes: number;
-  reliabilitySummary: string;
-}
-
-export interface DisputeEntry {
-  id: string;
-  contributionId: string;
-  raisedById: string;
-  status: "open" | "resolved";
-  note: string | null;
-  proofUrl: string | null;
-  resolution: string | null;
-  resolvedAt: string | null;
+  amountMode: AmountMode;
+  contribution: number;
+  pot: number;
+  enteredPot: number | null;
+  /** Pot mode: the pot was rounded up from this (R-AMT-02). */
+  potAdjustedFrom: number | null;
+  frequency: Frequency;
+  intervalDays: number | null;
+  frequencyLabel: string;
+  startDate: string;
+  /** Hundredths of a percent: 125 is 1.25%. */
+  interestRate: number;
   createdAt: string;
-  raisedByName: string;
-  memberDisplayName: string;
-  roundNumber: number;
-  contributionStatus: string;
-  contributionAmount: string;
-}
-
-export interface GroupDashboard {
-  groupStatus: string;
-  memberCount: number;
-  currentRound: {
-    number: number;
-    dueDate: string;
-    recipientName: string;
-    confirmedContributions: number;
-    pendingContributions: number;
-    overdueContributions: number;
-    isOverdue: boolean;
-  } | null;
-  pendingConfirmations: number;
-  openDisputes: number;
-  outstandingObligations: number;
-  totalOutstanding: string;
-  contributionAmount: string;
-}
-
-export interface CompletionSummary {
-  groupName: string;
+  launchedAt: string | null;
+  activatedAt: string | null;
   completedAt: string | null;
-  startDate: string | null;
-  contributionAmount: string;
-  frequency: string;
-  frequencyDays?: number | null;
-  shortfallInterestRatePercent: string;
-  memberCount: number;
-  roundsCompleted: number;
-  totalContributions: number;
-  confirmedContributions: number;
-  collectionRate: number;
-  potPerRound: string;
-  totalExpected: string;
-  totalCollected: string;
-  cycleDurationDays: number | null;
-  openDisputes: number;
-  resolvedDisputes: number;
-  unsettledObligations: number;
-  outstandingDebt: string;
-  payoutRecipients: {
-    roundNumber: number;
-    recipientName: string;
-    dueDate: string;
-    potAmount: string;
+  cancelledAt: string | null;
+}
+
+
+export interface SlotView {
+  id: string;
+  kind: "MEMBER" | "PLACEHOLDER";
+  name: string;
+  isOrganizer: boolean;
+  isViewer: boolean;
+  position: number | null;
+  /** When a user claimed this placeholder; earlier records are inherited. */
+  claimedAt: string | null;
+  /** Placeholder contact, organizer only. */
+  contact: string | null;
+  /** Live claim link, organizer only. */
+  claimLink: { url: string; createdAt: string } | null;
+  /**
+   * What this slot owes the organizer (§8), in centavos. Everyone sees everyone's (R-DEC-06).
+   * `rounds` is what each round's payout added; the rounds less `repaid` and `deducted` (taken
+   * from their payout) is what's owed now.
+   */
+  debt: {
+    principal: number;
+    interest: number;
+    rounds: { round: number; shortfall: number; interest: number }[];
+    repaid: number;
+    deducted: number;
+  };
+}
+
+/** A processed payout (§7). Amounts in centavos. */
+export interface PayoutView {
+  round: number;
+  payoutDate: string;
+  recipientSlotId: string;
+  gross: number;
+  ownShortfall: number;
+  interestDeducted: number;
+  principalDeducted: number;
+  net: number;
+  status: "AWAITING_HANDOVER" | "HANDED_OVER" | "CONFIRMED";
+  handedOverAt: string | null;
+  confirmedAt: string | null;
+  autoConfirmed: boolean;
+  proofAttached: boolean;
+  /** Handover photo, for the recipient and the organizer only. */
+  proofUrl: string | null;
+}
+
+export interface ScheduleRound {
+  number: number;
+  periodStart: string;
+  payoutDate: string;
+  recipientSlotId: string | null;
+  status: "UPCOMING" | "OPEN" | "CLOSED";
+}
+
+export type PeriodStatus = "PAID" | "PARTIAL" | "UNPAID";
+
+/** One slot's standing in the open period (R-SUB-07). Amounts in centavos. */
+export interface PeriodSlot {
+  slotId: string;
+  due: number;
+  approved: number;
+  pending: number;
+  status: PeriodStatus;
+  pendingReview: boolean;
+  /** Last time the organizer sent this slot a reminder this round. */
+  remindedAt: string | null;
+  /** Reminded within the last day; the next reminder waits. */
+  remindedRecently: boolean;
+}
+
+export interface PeriodView {
+  roundId: string;
+  number: number;
+  periodStart: string;
+  payoutDate: string;
+  recipientSlotId: string;
+  expected: number;
+  approvedTotal: number;
+  pendingTotal: number;
+  slots: PeriodSlot[];
+}
+
+export interface SubmissionView {
+  id: string;
+  slotId: string;
+  round: number | null;
+  type: "CONTRIBUTION" | "DEBT_PAYMENT";
+  /** How an approved submission counted; a late contribution counts as a DEBT_PAYMENT. */
+  appliedAs: "CONTRIBUTION" | "DEBT_PAYMENT" | null;
+  amount: number;
+  effectiveAmount: number | null;
+  status: "PENDING" | "APPROVED" | "DENIED" | "CANCELLED";
+  note: string | null;
+  proofAttached: boolean;
+  /** Short-lived link to the photo; only for the submitter's slot and the organizer. */
+  proofUrl: string | null;
+  submittedAt: string;
+  /** Reported by the viewer, who may withdraw it while pending. */
+  mine: boolean;
+  reviewedAt: string | null;
+  denialReason: string | null;
+  selfApproved: boolean;
+}
+
+/** A request to change an approved contribution (§6.2). Amounts in centavos. */
+export interface DisputeView {
+  id: string;
+  submissionId: string;
+  slotId: string;
+  round: number | null;
+  previousAmount: number;
+  proposedAmount: number;
+  reason: string;
+  status: "PENDING" | "APPROVED" | "DENIED" | "CANCELLED" | "EXPIRED";
+  createdAt: string;
+  reviewedAt: string | null;
+  reviewNote: string | null;
+  /** Raised by the viewer, who may withdraw it while pending. */
+  mine: boolean;
+  /** The refund an approved decrease created (R-DSP-03), owed by the organizer. */
+  refund: number | null;
+}
+
+/** A request to trade payout turns (§9). */
+export interface SwapView {
+  id: string;
+  requesterSlotId: string;
+  targetSlotId: string;
+  status: "AWAITING_TARGET" | "AWAITING_ORGANIZER" | "APPROVED" | "DECLINED" | "DENIED" | "EXPIRED" | "CANCELLED";
+  createdAt: string;
+  expiresAt: string | null;
+  reviewNote: string | null;
+}
+
+/** R-CMP-02: one member's totals, in centavos. */
+export interface MemberTotals {
+  slotId: string;
+  name: string;
+  position: number | null;
+  isOrganizer: boolean;
+  contributed: number;
+  received: number;
+  refunds: number;
+  coveredByOrganizer: number;
+  debtIncurred: number;
+  debtSettled: number;
+  debtOutstanding: number;
+}
+
+export interface GroupSummaryTotals {
+  members: MemberTotals[];
+  totals: { collected: number; paidOut: number; coveredByOrganizer: number; refunds: number; debtOutstanding: number };
+}
+
+export type ActivityCategory = "payments" | "debts" | "payouts" | "disputes" | "swaps" | "members" | "settings";
+
+/** One audit-log entry as members read it (§13). */
+export interface ActivityEntry {
+  id: string;
+  at: string;
+  action: string;
+  category: ActivityCategory;
+  actor: string;
+  /** Done by the app itself (a period closing, a reminder), not a person. */
+  system: boolean;
+  title: string;
+  detail: string | null;
+  proofAttached: boolean | null;
+  selfApproved: boolean;
+}
+
+export type Health = "ON_TRACK" | "AT_RISK" | "SHORT";
+
+/** §15.1 / §15.3 for one paluwagan. Amounts in centavos. */
+export interface GroupStats {
+  openRound: { number: number; periodStart: string; payoutDate: string; health: Health; projectedPayout: number | null } | null;
+  money: { collected: number; paidOut: number; toPayOut: number; coveredByOrganizer: number; owedToOrganizer: number; refunds: number };
+  collection: { round: number; payoutDate: string; approved: number; expected: number; rate: number }[];
+  reliability: { slotId: string; name: string; onTime: number; partial: number; missed: number }[];
+  myTurn: {
+    round: number;
+    payoutDate: string;
+    status: "UPCOMING" | "COLLECTING" | "AWAITING_HANDOVER" | "HANDED_OVER" | "CONFIRMED";
+    net: number | null;
+    /** What it would come to if paid out now, after this slot's shortfall and debt. */
+    projected: number | null;
+  } | null;
+}
+
+export interface HistoryEvent {
+  at: string;
+  round: number | null;
+  slotId: string;
+  name: string;
+  event: string;
+  amount: number | null;
+  principalDelta: number | null;
+  interestDelta: number | null;
+  status: string | null;
+  notes: string;
+  inherited: boolean;
+}
+
+/** §15.2: the member's home across every paluwagan. */
+export interface HomeDashboard {
+  groups: {
+    id: string;
+    name: string;
+    state: GroupState;
+    isOrganizer: boolean;
+    contribution: number;
+    frequencyLabel: string;
+    slotCount: number;
+    occupied: number;
+    startDate: string;
+    openRound: { number: number; payoutDate: string } | null;
+    myStanding: { due: number; approved: number; pending: number; reportable: number } | null;
+    myTurn: { round: number; payoutDate: string; paid: boolean } | null;
+    owed: number;
+    waiting: {
+      reviews: number;
+      swapsToAnswer: number;
+      payoutsToHandOver: number;
+      receiptsToConfirm: number;
+      placeholdersToRecord: number;
+      membersToRemind: number;
+    };
   }[];
-  memberReliability: MemberReliability[];
+  due: { groupId: string; groupName: string; kind: "CONTRIBUTION" | "DEBT"; amount: number; dueDate: string | null; round: number | null }[];
+}
+
+export type ExportKind = "statement" | "ledger" | "summary";
+export type ExportFormat = "pdf" | "csv";
+
+export interface GroupDetail {
+  group: GroupSummary & { organizerName: string };
+  viewer: { slotId: string; isOrganizer: boolean };
+  slots: SlotView[];
+  openSlots: number;
+  inviteLink: { url: string; createdAt: string } | null;
+  schedule: ScheduleRound[];
+  /** The open contribution period; null outside ACTIVE. */
+  period: PeriodView | null;
+  /** Submissions the viewer may see (this period's, pending, debt payments): all for the organizer, their own slot's otherwise. */
+  submissions: SubmissionView[];
+  /** Disputes the viewer may see, oldest first. */
+  disputes: DisputeView[];
+  /** Turn swaps the viewer may see, newest first. */
+  swaps: SwapView[];
+  /** Processed payouts, newest first. */
+  payouts: PayoutView[];
+  /** LOBBY only. */
+  launch: { blockers: string[]; earliestStartDate: string } | null;
+}
+
+export type PublicGroup = GroupSummary & { organizerName: string; occupied: number };
+
+export interface InviteLanding {
+  status: "OPEN" | "FULL" | "CLOSED" | "ALREADY_MEMBER";
+  group: PublicGroup;
+}
+
+export interface ClaimLanding {
+  status: "OPEN" | "CLAIMED" | "CLOSED" | "ALREADY_MEMBER";
+  group: PublicGroup;
+  placeholder: { slotId: string; name: string | null; position: number | null };
 }
 
 export interface NotificationItem {
   id: string;
   groupId: string | null;
   groupName: string | null;
-  type: string;
+  kind: string;
   title: string;
   body: string;
   link: string | null;
+  data: unknown;
   readAt: string | null;
   createdAt: string;
   isUnread: boolean;
 }
 
-export interface HomeAttentionItem {
-  id: string;
-  kind:
-    | "forming_ready"
-    | "forming_slots"
-    | "confirm_payments"
-    | "payment_due"
-    | "owed_outstanding";
-  title: string;
-  body: string;
-  link: string;
-  priority: "high" | "normal";
-}
-
-export interface HomeOverview {
-  stats: {
-    activeGroups: number;
-    formingGroups: number;
-    completedGroups: number;
-    unreadNotifications: number;
-    totalOwed: string | null;
-    pendingConfirmations: number;
-    paymentsDue: number;
-  };
-  attention: HomeAttentionItem[];
-}
-
-export interface ManagerObligationsOverview {
-  totalOutstanding: string;
-  groups: {
-    groupId: string;
-    groupName: string;
-    groupStatus: string;
-    count: number;
-    totalOutstanding: string;
-    items: {
-      id: string;
-      debtorMembershipId: string;
-      displayName: string;
-      isPlaceholder: boolean;
-      roundNumber: number;
-      remaining: string;
-    }[];
-  }[];
-}
-
-export interface RoundContribution {
-  id: string;
-  membershipId: string;
-  displayName?: string;
-  amount: string;
-  status: "pending" | "reported" | "confirmed";
-  source?: "member" | "organizer";
-  note?: string | null;
-  reportedAt?: string | null;
-  confirmedAt?: string | null;
-  isPlaceholder?: boolean;
-  canReport?: boolean;
-  canConfirm?: boolean;
-  canRecord?: boolean;
-  canDispute?: boolean;
-  expectedAmount?: string;
-  isPartial?: boolean;
-}
-
-export interface ObligationSettlement {
-  id: string;
-  amount: string;
-  note: string | null;
-  createdAt: string;
-}
-
-export interface ObligationEntry {
-  id: string;
-  debtorMembershipId: string;
-  sourceRoundId: string;
-  amount: string;
-  settledAmount: string;
-  interestSettledAmount: string;
-  principalRemaining: string;
-  accruedInterest: string;
-  remaining: string;
-  status: "unsettled" | "partially_settled" | "settled";
-  externalCoverageNote: string | null;
-  createdAt: string;
-  displayName: string;
-  isPlaceholder: boolean;
-  roundNumber: number;
-  roundDueDate: string;
-  hasPendingClaim: boolean;
-  settlements: ObligationSettlement[];
-}
-
-export interface SettlementClaimEntry {
-  id: string;
-  debtorMembershipId: string;
-  amount: string;
-  note: string | null;
-  proofUrl: string | null;
-  status: "pending" | "confirmed" | "rejected";
-  reviewNote: string | null;
-  reviewedAt: string | null;
-  createdAt: string;
-  memberDisplayName: string;
-  isPlaceholder: boolean;
-}
-
-export interface LedgerEntry extends RoundContribution {
-  displayName: string;
-  isPlaceholder: boolean;
-  roundNumber: number;
-  roundStatus: string;
-  roundDueDate: string;
-}
-
-export interface AuditLogEntry {
-  id: string;
-  action: string;
-  entityType: string;
-  entityId: string;
-  actorName: string;
-  createdAt: string;
-  title: string;
-  summary: string;
-  details: string[];
-  category: string;
-  categoryLabel: string;
-}
-
-export interface RoundSummary {
-  id: string;
-  number: number;
-  dueDate: string;
-  status: "scheduled" | "current" | "closed";
-  closedAt: string | null;
-  recipientMembershipId: string;
-  recipientName?: string;
-  contributions?: RoundContribution[];
-}
-
-export interface GroupDetail {
-  group: GroupSummary;
-  members: GroupMember[];
-  pending: {
-    payoutOrder: boolean;
-    startDateMissing: boolean;
-    openSlots: number;
-    unclaimedSeats: number;
-    cycleStarted: boolean;
-    canActivate: boolean;
-  };
-  currentRound: RoundSummary | null;
-  schedule: RoundSummary[];
-  issueCounts?: {
-    openDisputes: number;
-    unsettledObligations: number;
-  };
-  reliability?: MemberReliability[];
-}
-
-export interface InvitePreview {
-  invite: {
-    type: "group_invite" | "membership_claim";
-    token: string;
-    canJoin: boolean;
-    reason?: string;
-    /** The signed-in viewer already has a seat in this group. */
-    alreadyMember?: boolean;
-    expiresAt: string | null;
-  };
-  group: Omit<GroupSummary, "role" | "membershipId">;
-  manager: { displayName: string };
-  members: {
-    displayName: string;
-    isManager: boolean;
-    isPlaceholder: boolean;
-    turnNumber: number | null;
-  }[];
-  placeholder: {
-    displayName: string;
-    turnNumber: number | null;
-    contact: string | null;
-  } | null;
-}
-
-export interface InviteLink {
-  id: string;
-  type: "group_invite" | "membership_claim";
-  token: string;
-  expiresAt: string;
-  url: string;
-}
-
 class ApiError extends Error {
   status: number;
-  details?: unknown;
+  /** The server's machine-readable reason, e.g. "FULL" or "NOT_READY". */
+  code?: string;
+  /** Per-field messages for forms. */
+  fields?: Record<string, string>;
 
-  constructor(status: number, message: string, details?: unknown) {
+  constructor(status: number, message: string, code?: string, fields?: Record<string, string>) {
     super(message);
     this.status = status;
-    this.details = details;
+    this.code = code;
+    this.fields = fields;
   }
+}
+
+async function errorFrom(res: Response): Promise<ApiError> {
+  const body = (await res.json().catch(() => ({}))) as { error?: string; code?: string; fields?: Record<string, string> };
+  return new ApiError(res.status, body.error ?? `Request failed (${res.status})`, body.code, body.fields);
 }
 
 const AUTH_KEY = "kaban_auth";
@@ -532,19 +518,7 @@ async function publicPost<T>(path: string, body: unknown): Promise<T> {
     body: JSON.stringify(body),
   });
 
-  if (!res.ok) {
-    const text = await res.text();
-    let message = `Request failed (${res.status})`;
-    try {
-      const err = JSON.parse(text) as { error?: string; details?: unknown };
-      message = err.error ?? message;
-      throw new ApiError(res.status, message, err.details);
-    } catch (e) {
-      if (e instanceof ApiError) throw e;
-      throw new ApiError(res.status, message);
-    }
-  }
-
+  if (!res.ok) throw await errorFrom(res);
   return res.json() as Promise<T>;
 }
 
@@ -565,27 +539,13 @@ async function request<T>(path: string, options: RequestInit = {}, retry = true)
     if (newToken) {
       headers.set("Authorization", `Bearer ${newToken}`);
       const retryRes = await fetch(`${API_BASE}${path}`, { ...options, headers });
-      if (!retryRes.ok) {
-        const err = await retryRes.json().catch(() => ({}));
-        throw new ApiError(retryRes.status, err.error ?? "Request failed", err.details);
-      }
+      if (!retryRes.ok) throw await errorFrom(retryRes);
       if (retryRes.status === 204) return undefined as T;
       return retryRes.json() as Promise<T>;
     }
   }
 
-  if (!res.ok) {
-    const text = await res.text();
-    let message = `Request failed (${res.status})`;
-    try {
-      const err = JSON.parse(text) as { error?: string; details?: unknown };
-      message = err.error ?? message;
-      throw new ApiError(res.status, message, err.details);
-    } catch (e) {
-      if (e instanceof ApiError) throw e;
-      throw new ApiError(res.status, message);
-    }
-  }
+  if (!res.ok) throw await errorFrom(res);
 
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
@@ -598,10 +558,7 @@ async function publicRequest<T>(path: string, { withAuth = false }: { withAuth?:
   const res = await fetch(`${API_BASE}${path}`, {
     headers: tokens ? { Authorization: `Bearer ${tokens.accessToken}` } : undefined,
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new ApiError(res.status, err.error ?? "Request failed");
-  }
+  if (!res.ok) throw await errorFrom(res);
   return res.json() as Promise<T>;
 }
 
@@ -635,8 +592,6 @@ export const api = {
 
   getRealtimeToken: () => request<RealtimeTokenResponse>("/auth/realtime-token"),
 
-  getProfileActivity: () => request<{ activity: UserActivityStats }>("/auth/me/activity"),
-
   updateProfile: (body: { displayName?: string; contact?: string | null }) =>
     request<{ user: User }>("/auth/me", { method: "PATCH", body: JSON.stringify(body) }),
 
@@ -652,191 +607,119 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
-  groups: () => request<{ groups: GroupSummary[] }>("/groups"),
-
-  getHomeOverview: () => request<HomeOverview>("/home/overview"),
-
-  createGroup: (body: GroupSettingsInput) =>
-    request<{ group: GroupSummary; membershipId: string }>("/groups", {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
-
-  /** Pass TanStack Query's `signal` so `cancelQueries()` actually aborts an in-flight fetch
-   * instead of letting a stale response land on top of a fresher optimistic update. */
-  getGroup: (id: string, signal?: AbortSignal) => request<GroupDetail>(`/groups/${id}`, { signal }),
-
-
-  addPlaceholder: (groupId: string, body: { displayName: string; contact?: string }) =>
-    request<{ member: GroupMember }>(`/groups/${groupId}/members`, {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
-
-  updateMember: (groupId: string, memberId: string, body: { displayName?: string; contact?: string | null }) =>
-    request<{ member: GroupMember }>(`/groups/${groupId}/members/${memberId}`, {
-      method: "PATCH",
-      body: JSON.stringify(body),
-    }),
-
-  removeMember: (groupId: string, memberId: string) =>
-    request<void>(`/groups/${groupId}/members/${memberId}`, { method: "DELETE" }),
-
-  createInvite: (
-    groupId: string,
-    body: { type: "group_invite" | "membership_claim"; membershipId?: string },
-  ) =>
-    request<{ invite: InviteLink }>(`/groups/${groupId}/invites`, {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
-
-  leaveGroup: (groupId: string) =>
-    request<void>(`/groups/${groupId}/leave`, { method: "POST", body: JSON.stringify({}) }),
-
-  deleteGroup: (groupId: string) =>
-    request<void>(`/groups/${groupId}`, { method: "DELETE" }),
-
-  setPayoutOrder: (
-    groupId: string,
-    body:
-      | { method: "random" }
-      | { method: "manual"; order: { membershipId: string; turnNumber: number }[] },
-  ) =>
-    request<{ members: GroupMember[] }>(`/groups/${groupId}/payout-order`, {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
-
-  setStartDate: (groupId: string, startDate: string) =>
-    request<{ group: GroupSummary }>(`/groups/${groupId}/start-date`, {
-      method: "PATCH",
-      body: JSON.stringify({ startDate }),
-    }),
-
-  activateGroup: (groupId: string, body?: { startDate?: string }) =>
-    request<GroupDetail>(`/groups/${groupId}/activate`, {
-      method: "POST",
-      body: JSON.stringify(body ?? {}),
-    }),
-
-  /** Dev/demo only — closes the current round immediately (unavailable on Vercel production). */
-  advanceRound: (groupId: string) =>
-    request<{
-      ok: true;
-      closedRound: number;
-      openedRound: number | null;
-      completed: boolean;
-      group: GroupDetail;
-    }>(`/groups/${groupId}/advance-round`, { method: "POST", body: JSON.stringify({}) }),
-
-  getCurrentRound: (groupId: string) =>
-    request<{ currentRound: RoundSummary | null }>(`/groups/${groupId}/rounds/current`),
-
-  getSchedule: (groupId: string) =>
-    request<{ schedule: RoundSummary[] }>(`/groups/${groupId}/rounds`),
-
-  reportContribution: (groupId: string, contributionId: string, body?: { note?: string; amount?: number }) =>
-    request<{ contribution: RoundContribution }>(`/groups/${groupId}/contributions/${contributionId}/report`, {
-      method: "POST",
-      body: JSON.stringify(body ?? {}),
-    }),
-
-  confirmContribution: (groupId: string, contributionId: string) =>
-    request<{ contribution: RoundContribution }>(
-      `/groups/${groupId}/contributions/${contributionId}/confirm`,
-      { method: "POST", body: JSON.stringify({}) },
-    ),
-
-  recordContribution: (groupId: string, contributionId: string, body?: { note?: string; amount?: number }) =>
-    request<{ contribution: RoundContribution }>(`/groups/${groupId}/contributions/${contributionId}/record`, {
-      method: "POST",
-      body: JSON.stringify(body ?? {}),
-    }),
-
-  getObligations: (groupId: string) =>
-    request<{ obligations: ObligationEntry[] }>(`/groups/${groupId}/obligations`),
-
-  settleMemberDebts: (groupId: string, memberId: string, body: { amount: number; note?: string }) =>
-    request<{ applied: string; unapplied: string; slices: unknown[] }>(
-      `/groups/${groupId}/members/${memberId}/settle`,
-      { method: "POST", body: JSON.stringify(body) },
-    ),
-
-  coverObligationExternally: (groupId: string, obligationId: string, body: { note: string }) =>
-    request<{ obligationId: string; externalCoverageNote: string }>(
-      `/groups/${groupId}/obligations/${obligationId}/cover-externally`,
-      { method: "POST", body: JSON.stringify(body) },
-    ),
-
-  getSettlementClaims: (groupId: string) =>
-    request<{ claims: SettlementClaimEntry[] }>(`/groups/${groupId}/settlement-claims`),
-
-  submitSettlementClaim: (groupId: string, body: { amount: number; note?: string; proofUrl?: string }) =>
-    request<{ claim: SettlementClaimEntry }>(`/groups/${groupId}/settlement-claims`, {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
-
-  reviewSettlementClaim: (
-    groupId: string,
-    claimId: string,
-    body: { decision: "confirm" | "reject"; reviewNote?: string },
-  ) =>
-    request<{ claim: SettlementClaimEntry; settlement: { applied: string; unapplied: string } | null }>(
-      `/groups/${groupId}/settlement-claims/${claimId}/review`,
-      { method: "PATCH", body: JSON.stringify(body) },
-    ),
-
-  getLedger: (groupId: string) => request<{ entries: LedgerEntry[] }>(`/groups/${groupId}/ledger`),
-
-  getAuditLog: (groupId: string, before?: string) =>
-    request<{ entries: AuditLogEntry[]; hasMore: boolean }>(
-      `/groups/${groupId}/audit-log${before ? `?before=${encodeURIComponent(before)}` : ""}`,
-    ),
-
-  getDashboard: (groupId: string) =>
-    request<{ dashboard: GroupDashboard }>(`/groups/${groupId}/dashboard`),
-
-  getCompletionSummary: (groupId: string) =>
-    request<{ summary: CompletionSummary }>(`/groups/${groupId}/completion-summary`),
-
-  getDisputes: (groupId: string) => request<{ disputes: DisputeEntry[] }>(`/groups/${groupId}/disputes`),
-
-  raiseDispute: (groupId: string, contributionId: string, body: { note: string; proofUrl?: string }) =>
-    request<{ dispute: { id: string; status: string } }>(
-      `/groups/${groupId}/contributions/${contributionId}/disputes`,
-      { method: "POST", body: JSON.stringify(body) },
-    ),
-
-  resolveDispute: (groupId: string, disputeId: string, resolution: string) =>
-    request<{ dispute: { id: string; status: string } }>(
-      `/groups/${groupId}/disputes/${disputeId}/resolve`,
-      { method: "PATCH", body: JSON.stringify({ resolution }) },
-    ),
-
-  getManagerObligations: () =>
-    request<ManagerObligationsOverview>("/groups/manager/obligations"),
-
   getNotifications: () =>
     request<{ notifications: NotificationItem[]; unreadCount: number }>("/notifications"),
 
   markNotificationRead: (notificationId: string) =>
-    request<{ notification: { id: string; readAt: string | null } }>(
-      `/notifications/${notificationId}`,
-      { method: "PATCH", body: JSON.stringify({}) },
-    ),
+    request<{ notification: { id: string; readAt: string | null } }>(`/notifications/${notificationId}`, {
+      method: "PATCH",
+      body: JSON.stringify({}),
+    }),
 
   markAllNotificationsRead: () =>
     request<{ marked: number }>("/notifications/read-all", { method: "PATCH", body: JSON.stringify({}) }),
 
-  previewInvite: (token: string) => publicRequest<InvitePreview>(`/invites/${token}`, { withAuth: true }),
+  // --- Groups. Every change returns the fresh GroupDetail.
+  createGroup: (body: SetupInput) => send<GroupDetail>("POST", "/groups", body),
+  getGroup: (id: string, signal?: AbortSignal) => request<GroupDetail>(`/groups/${id}`, { signal }),
+  editGroup: (id: string, body: SetupInput) => send<GroupDetail>("PATCH", `/groups/${id}`, body),
+  cancelGroup: (id: string) => send<GroupDetail>("POST", `/groups/${id}/cancel`),
+  createInviteLink: (id: string) => send<GroupDetail>("POST", `/groups/${id}/invite-link`),
+  addPlaceholder: (id: string, body: { name: string; contact?: string }) =>
+    send<GroupDetail>("POST", `/groups/${id}/placeholders`, body),
+  removeSlot: (id: string, slotId: string) => send<GroupDetail>("DELETE", `/groups/${id}/slots/${slotId}`),
+  createClaimLink: (id: string, slotId: string) => send<GroupDetail>("POST", `/groups/${id}/slots/${slotId}/claim-link`),
+  setOrder: (id: string, slotIds: string[]) => send<GroupDetail>("PUT", `/groups/${id}/order`, { slotIds }),
+  shuffleOrder: (id: string) => send<GroupDetail>("POST", `/groups/${id}/order/shuffle`),
+  launch: (id: string) => send<GroupDetail>("POST", `/groups/${id}/launch`),
+  leaveGroup: (id: string) => send<{ ok: true }>("POST", `/groups/${id}/leave`),
+  // --- Payments (§6.1). Upload a proof first (requestProofUpload, then lib/proofUpload), then submit.
+  requestProofUpload: (id: string, contentType: string) =>
+    send<{ path: string; token: string }>("POST", `/groups/${id}/proofs`, { contentType }),
+  submitPayment: (
+    id: string,
+    body: { slotId: string; type: "CONTRIBUTION" | "DEBT_PAYMENT"; amount: number; proofPath?: string; note?: string },
+  ) => send<GroupDetail>("POST", `/groups/${id}/submissions`, body),
+  raiseDispute: (id: string, body: { submissionId: string; proposedAmount: number; reason: string }) =>
+    send<GroupDetail>("POST", `/groups/${id}/disputes`, body),
+  approveDispute: (id: string, disputeId: string) => send<GroupDetail>("POST", `/groups/${id}/disputes/${disputeId}/approve`),
+  denyDispute: (id: string, disputeId: string, note: string) =>
+    send<GroupDetail>("POST", `/groups/${id}/disputes/${disputeId}/deny`, { note }),
+  cancelDispute: (id: string, disputeId: string) => send<GroupDetail>("POST", `/groups/${id}/disputes/${disputeId}/cancel`),
+  requestSwap: (id: string, body: { targetSlotId: string; requesterSlotId?: string }) =>
+    send<GroupDetail>("POST", `/groups/${id}/swaps`, body),
+  acceptSwap: (id: string, swapId: string) => send<GroupDetail>("POST", `/groups/${id}/swaps/${swapId}/accept`),
+  declineSwap: (id: string, swapId: string) => send<GroupDetail>("POST", `/groups/${id}/swaps/${swapId}/decline`),
+  approveSwap: (id: string, swapId: string) => send<GroupDetail>("POST", `/groups/${id}/swaps/${swapId}/approve`),
+  denySwap: (id: string, swapId: string, note: string) => send<GroupDetail>("POST", `/groups/${id}/swaps/${swapId}/deny`, { note }),
+  cancelSwap: (id: string, swapId: string) => send<GroupDetail>("POST", `/groups/${id}/swaps/${swapId}/cancel`),
+  markHandedOver: (id: string, round: number, proofPath?: string) =>
+    send<GroupDetail>("POST", `/groups/${id}/rounds/${round}/handover`, { proofPath }),
+  confirmReceipt: (id: string, round: number) => send<GroupDetail>("POST", `/groups/${id}/rounds/${round}/confirm-receipt`),
+  approveSubmission: (id: string, submissionId: string) =>
+    send<GroupDetail>("POST", `/groups/${id}/submissions/${submissionId}/approve`),
+  denySubmission: (id: string, submissionId: string, reason: string) =>
+    send<GroupDetail>("POST", `/groups/${id}/submissions/${submissionId}/deny`, { reason }),
+  cancelSubmission: (id: string, submissionId: string) =>
+    send<GroupDetail>("POST", `/groups/${id}/submissions/${submissionId}/cancel`),
+  // --- Activity (§13) and reminders (§12).
+  activity: (id: string, options: { before?: string; category?: ActivityCategory } = {}) => {
+    const query = new URLSearchParams();
+    if (options.before) query.set("before", options.before);
+    if (options.category) query.set("category", options.category);
+    const qs = query.toString();
+    return request<{ entries: ActivityEntry[]; hasMore: boolean }>(`/groups/${id}/activity${qs ? `?${qs}` : ""}`);
+  },
+  remindSlot: (id: string, slotId: string) => send<GroupDetail>("POST", `/groups/${id}/slots/${slotId}/remind`),
 
-  resolveInvite: (token: string) =>
-    request<{ groupId: string; membershipId: string; alreadyMember?: boolean }>(
-      `/invites/${token}/resolve`,
-      { method: "POST", body: JSON.stringify({}) },
+  // --- Dashboards (§15).
+  home: () => request<HomeDashboard>("/groups/home"),
+  stats: (id: string) => request<GroupStats>(`/groups/${id}/stats`),
+  history: (id: string, slotId?: string) =>
+    request<{ slotId: string; claimedAt: string | null; events: HistoryEvent[] }>(
+      `/groups/${id}/history${slotId ? `?slot=${encodeURIComponent(slotId)}` : ""}`,
     ),
+
+  // --- Records (§10, §14).
+  summary: (id: string) => request<GroupSummaryTotals>(`/groups/${id}/summary`),
+  /** Downloads a statement, the ledger or the summary as a file (the browser saves it). */
+  downloadExport: async (id: string, kind: ExportKind, format: ExportFormat, slotId?: string) => {
+    const query = slotId ? `?slot=${encodeURIComponent(slotId)}` : "";
+    const { blob, filename } = await requestFile(`/groups/${id}/exports/${kind}.${format}${query}`);
+    const url = URL.createObjectURL(blob);
+    const link = Object.assign(document.createElement("a"), { href: url, download: filename });
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  },
+  /** Demo tools only. */
+  activateNow: (id: string) => send<{ ok: true; activated: number }>("POST", `/dev/groups/${id}/activate-now`),
+  /** Demo tools only: close the open period now. */
+  closeRoundNow: (id: string) => send<{ ok: true; closed: number; completed: boolean }>("POST", `/dev/groups/${id}/close-round`),
+
+  // --- Link landing pages: public, personalized when signed in.
+  getInvite: (token: string) => publicRequest<InviteLanding>(`/invites/${token}`, { withAuth: true }),
+  joinViaInvite: (token: string) =>
+    send<{ groupId: string; alreadyMember: boolean }>("POST", `/invites/${token}/join`),
+  getClaim: (token: string) => publicRequest<ClaimLanding>(`/claims/${token}`, { withAuth: true }),
+  claimPlaceholder: (token: string) => send<{ groupId: string }>("POST", `/claims/${token}/claim`),
 };
+
+/** An authenticated download: the file and the name the server gave it. Refreshes the token once on 401. */
+async function requestFile(path: string, retry = true): Promise<{ blob: Blob; filename: string }> {
+  const tokens = getStoredTokens();
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: tokens?.accessToken ? { Authorization: `Bearer ${tokens.accessToken}` } : undefined,
+  });
+  if (res.status === 401 && retry && tokens?.refreshToken && (await refreshAccessToken())) return requestFile(path, false);
+  if (!res.ok) throw await errorFrom(res);
+  const filename = /filename="([^"]+)"/.exec(res.headers.get("content-disposition") ?? "")?.[1] ?? "kaban-export";
+  return { blob: await res.blob(), filename };
+}
+
+function send<T>(method: string, path: string, body?: unknown): Promise<T> {
+  return request<T>(path, { method, body: JSON.stringify(body ?? {}) });
+}
 
 export { ApiError };

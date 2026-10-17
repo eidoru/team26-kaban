@@ -46,23 +46,20 @@ const login = await call("/auth/login", {
 });
 const auth = { headers: { Authorization: `Bearer ${login.body.accessToken}` } };
 
-const { body: groupList } = await call("/groups", auth);
+const { body: home } = await call("/groups/home", auth);
 const group =
-  groupList.groups.find((g) => g.status === "active") ??
-  groupList.groups.find((g) => g.status === "forming") ??
-  groupList.groups[0];
+  home.groups.find((g) => g.state === "ACTIVE") ?? home.groups.find((g) => g.state === "LOBBY") ?? home.groups[0];
 
 const endpoints = [
   ["health (no DB)", "/health"],
-  ["home overview", "/home/overview"],
+  ["home", "/groups/home"],
   ["notifications", "/notifications"],
-  ["groups list", "/groups"],
 ];
 if (group) {
-  endpoints.push([`group detail (${group.status})`, `/groups/${group.id}`]);
-  if (group.status !== "forming") {
-    endpoints.push(["current round", `/groups/${group.id}/rounds/current`]);
-    endpoints.push(["ledger", `/groups/${group.id}/ledger`]);
+  endpoints.push([`group detail (${group.state.toLowerCase()})`, `/groups/${group.id}`]);
+  if (group.state !== "LOBBY" && group.state !== "LAUNCHED") {
+    endpoints.push(["group stats", `/groups/${group.id}/stats`]);
+    endpoints.push(["activity", `/groups/${group.id}/activity`]);
   }
 }
 

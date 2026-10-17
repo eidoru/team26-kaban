@@ -6,6 +6,8 @@ import { resolve } from "path";
 export default defineConfig({
   envDir: resolve(__dirname, ".."),
   plugins: [react(), tailwindcss()],
+  // The paluwagan rules are plain TypeScript shared with the server, so forms check exactly what the API checks.
+  resolve: { alias: { "@domain": resolve(__dirname, "../server/src/domain") } },
   build: {
     rollupOptions: {
       output: {

@@ -1,1127 +1,293 @@
-import { Router } from "express";
+import { Router, type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
-import { GroupStatus, InviteTokenType, Prisma } from "@prisma/client";
-import { prisma } from "../lib/prisma.js";
-import { createNotification, writeAuditLog } from "../lib/audit.js";
-import { resolveAppOrigin } from "../lib/origin.js";
-import { requireAuth, requireDemoTools } from "../middleware/auth.js";
+import { requireAuth } from "../middleware/auth.js";
+import { loadGroup, requireOrganizer } from "../middleware/groupAccess.js";
 import { validateBody } from "../middleware/validate.js";
-import {
-  loadGroup,
-  requireGroupManager,
-  requireGroupMember,
-} from "../middleware/groupAccess.js";
-import {
-  assertForming,
-  CLAIM_CLOSED_MESSAGE,
-  countFilledSlots,
-  deleteFormingGroup,
-  getGroupOrThrow,
-  GroupError,
-  inviteExpiry,
-  inviteUrl,
-  listUserGroups,
-  resetPayoutOrderIfRosterIncomplete,
-  serializeGroup,
-  serializeMember,
-} from "../services/groups.js";
-import { loadGroupDetailPayload } from "../services/groupDetail.js";
-import {
-  activateGroup,
-  forceAdvanceGroupRound,
-  serializeRound,
-  setPayoutOrder,
-} from "../services/schedule.js";
-import {
-  confirmContribution,
-  ContributionError,
-  getGroupLedger,
-  recordContribution,
-  reportContribution,
-  serializeContribution,
-  serializeContributionForViewer,
-} from "../services/contributions.js";
-import { getGroupAuditLog } from "../services/auditLog.js";
+import { resolveAppOrigin } from "../lib/origin.js";
 import { notifyGroupChangeSafe } from "../lib/realtimeNotify.js";
-import { runAfterResponse } from "../lib/background.js";
-import {
-  settleMemberDebts,
-  coverObligationExternally,
-  getGroupObligations,
-  getGroupSettlementClaims,
-  submitSettlementClaim,
-  reviewSettlementClaim,
-  ObligationError,
-} from "../services/obligations.js";
-import {
-  DisputeError,
-  getGroupDisputes,
-  raiseDispute,
-  resolveDispute,
-} from "../services/disputes.js";
-import {
-  DashboardError,
-  getGroupDashboard,
-  getManagerObligationsOverview,
-} from "../services/dashboard.js";
-import { getCompletionSummary, getMemberReliabilitySummaries, SummaryError } from "../services/summary.js";
+import { cancelGroup, createGroup, editGroup, groupDetail } from "../services/groups.js";
+import { addPlaceholder, createClaimLink, createInviteLink, removeSlot } from "../services/roster.js";
+import { launchGroup, setOrder, shuffleOrder } from "../services/launch.js";
+import { cancelSubmission, reviewSubmission, submitPayment } from "../services/submissions.js";
+import { confirmReceipt, markHandedOver } from "../services/payouts.js";
+import { cancelDispute, raiseDispute, reviewDispute } from "../services/disputes.js";
+import { cancelSwap, requestSwap, respondToSwap, reviewSwap } from "../services/swaps.js";
+import { buildExport } from "../services/exports.js";
+import { completionSummary } from "../services/records.js";
+import { activityLog, type ActivityCategory } from "../services/activity.js";
+import { sendManualReminder } from "../services/reminders.js";
+import { groupStats, homeDashboard, slotHistory } from "../services/dashboard.js";
+import { createProofUpload, PROOF_CONTENT_TYPES } from "../lib/storage.js";
+import { can } from "../domain/lifecycle.js";
+import { conflict, notFound as notFoundError } from "../lib/errors.js";
 
 const router = Router();
-
-/** UAT/demo only: close the current round without waiting for the calendar. */
-router.post(
-  "/:id/advance-round",
-  requireDemoTools,
-  requireAuth,
-  loadGroup,
-  requireGroupManager,
-  async (req, res, next) => {
-    try {
-      const membership = req.membership!;
-      const { group: updatedGroup, ...result } = await forceAdvanceGroupRound(
-        req.group!.id,
-        req.user!.id,
-      );
-      await writeAuditLog({
-        groupId: req.group!.id,
-        actorId: req.user!.id,
-        action: "group.advance_round",
-        entityType: "group",
-        entityId: req.group!.id,
-        metadata: result,
-      });
-      const group = await loadGroupDetailPayload(updatedGroup, membership, req.user!.id);
-
-      res.json({ ok: true, ...result, group });
-    } catch (err) {
-      if (err instanceof GroupError) {
-        res.status(err.status).json({ error: err.message });
-        return;
-      }
-      next(err);
-    }
-  },
-);
-
 router.use(requireAuth);
 
-router.get("/", async (req, res, next) => {
-  try {
-    const groups = await listUserGroups(req.user!.id);
-    res.json({ groups });
-  } catch (err) {
-    next(err);
-  }
+/** §4.1 input. The rules live in domain/setup.ts; this only checks shapes. Amounts in centavos. */
+const setupSchema = z.object({
+  name: z.string(),
+  slotCount: z.number().int(),
+  amountMode: z.enum(["CONTRIBUTION", "POT"]),
+  amount: z.number().int(),
+  frequency: z.enum(["WEEKLY", "BI_WEEKLY", "TWICE_MONTHLY", "MONTHLY", "CUSTOM"]),
+  intervalDays: z.number().int().nullish(),
+  startDate: z.string(),
+  interestPercent: z.number().nullish(),
 });
-
-router.get("/manager/obligations", async (req, res, next) => {
-  try {
-    const overview = await getManagerObligationsOverview(req.user!.id);
-    res.json(overview);
-  } catch (err) {
-    next(err);
-  }
+const placeholderSchema = z.object({ name: z.string(), contact: z.string().optional() });
+const orderSchema = z.object({ slotIds: z.array(z.string()).min(1) });
+const proofSchema = z.object({ contentType: z.enum(PROOF_CONTENT_TYPES as [string, ...string[]]) });
+const submissionSchema = z.object({
+  slotId: z.string(),
+  type: z.enum(["CONTRIBUTION", "DEBT_PAYMENT"]).default("CONTRIBUTION"),
+  amount: z.number().int(),
+  proofPath: z.string().optional(),
+  note: z.string().optional(),
 });
+const denySchema = z.object({ reason: z.string() });
+const handoverSchema = z.object({ proofPath: z.string().optional() });
+const disputeSchema = z.object({ submissionId: z.string(), proposedAmount: z.number().int(), reason: z.string() });
+const denyDisputeSchema = z.object({ note: z.string() });
+const swapSchema = z.object({ targetSlotId: z.string(), requesterSlotId: z.string().optional() });
 
-const createGroupSchema = z
-  .object({
-    name: z.string().min(1).max(100),
-    contributionAmount: z.number().positive(),
-    frequency: z.enum(["weekly", "biweekly", "monthly", "custom"]),
-    frequencyDays: z.number().int().min(1).max(365).optional(),
-    slotCount: z.number().int().min(2).max(30),
-    startDate: z.string().date(),
-    shortfallInterestRatePercent: z.number().min(0).max(100).optional(),
-  })
-  .superRefine((data, ctx) => {
-    if (data.frequency === "custom") {
-      if (data.frequencyDays == null) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Custom frequency requires an interval in days",
-          path: ["frequencyDays"],
-        });
-      }
-    } else if (data.frequencyDays != null) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "frequencyDays is only valid with custom frequency",
-        path: ["frequencyDays"],
-      });
+const detail = (req: Request, groupId: string) => groupDetail(groupId, req.user!.id, resolveAppOrigin(req));
+
+/**
+ * An action on `:id`: run it, broadcast the change, and answer with the fresh detail so the client
+ * doesn't need to refetch. `organizerAction` also requires the organizer.
+ */
+type GroupAction = (req: Request, groupId: string, userId: string) => Promise<unknown>;
+
+function memberAction(action: GroupAction) {
+  return [loadGroup, answerWithDetail(action)] as const;
+}
+
+function organizerAction(action: GroupAction) {
+  return [loadGroup, requireOrganizer, answerWithDetail(action)] as const;
+}
+
+function answerWithDetail(action: GroupAction) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const groupId = req.group!.id;
+      await action(req, groupId, req.user!.id);
+      notifyGroupChangeSafe(groupId);
+      res.json(await detail(req, groupId));
+    } catch (err) {
+      next(err);
     }
-  });
+  };
+}
 
-router.post("/", validateBody(createGroupSchema), async (req, res, next) => {
+/** §15.2: the member's home across every paluwagan. Must sit above "/:id". */
+router.get("/home", async (req, res, next) => {
   try {
-    const {
-      name,
-      contributionAmount,
-      frequency,
-      frequencyDays,
-      slotCount,
-      startDate,
-      shortfallInterestRatePercent,
-    } = req.body;
-    const userId = req.user!.id;
-
-    const group = await prisma.$transaction(async (tx) => {
-      const created = await tx.group.create({
-        data: {
-          name,
-          contributionAmount,
-          frequency,
-          frequencyDays: frequency === "custom" ? frequencyDays : null,
-          slotCount,
-          startDate: new Date(startDate),
-          shortfallInterestRatePercent: shortfallInterestRatePercent ?? 0,
-          managerId: userId,
-          memberships: {
-            create: {
-              userId,
-              displayName: req.user!.displayName,
-              isManager: true,
-            },
-          },
-        },
-      });
-
-      const managerMembership = await tx.membership.findFirstOrThrow({
-        where: { groupId: created.id, userId },
-      });
-
-      await tx.auditLog.create({
-        data: {
-          groupId: created.id,
-          actorId: userId,
-          action: "group.created",
-          entityType: "group",
-          entityId: created.id,
-          metadata: {
-            name,
-            slotCount,
-            frequency,
-            ...(frequency === "custom" ? { frequencyDays } : {}),
-            shortfallInterestRatePercent: shortfallInterestRatePercent ?? 0,
-          },
-        },
-      });
-
-      return { created, managerMembership };
-    });
-
-    const filledCount = 1;
-    res.status(201).json({
-      group: serializeGroup(group.created, filledCount, "manager"),
-      membershipId: group.managerMembership.id,
-    });
+    res.json(await homeDashboard(req.user!.id));
   } catch (err) {
     next(err);
   }
 });
 
-router.delete("/:id", loadGroup, requireGroupManager, async (req, res, next) => {
-  try {
-    await deleteFormingGroup(req.group!.id, req.user!.id);
-    notifyGroupChangeSafe(req.group!.id, "memberships");
-    res.status(204).send();
-  } catch (err) {
-    if (err instanceof GroupError) {
-      res.status(err.status).json({ error: err.message });
-      return;
-    }
-    next(err);
-  }
-});
 
-router.get("/:id", loadGroup, requireGroupMember, async (req, res, next) => {
+router.post("/", validateBody(setupSchema), async (req, res, next) => {
   try {
-    res.json(await loadGroupDetailPayload(req.group!, req.membership!, req.user!.id));
+    const group = await createGroup(req.user!.id, req.body);
+    res.status(201).json(await detail(req, group.id));
   } catch (err) {
     next(err);
   }
 });
 
-router.get("/:id/member-reliability", loadGroup, requireGroupMember, async (req, res, next) => {
+router.get("/:id", loadGroup, async (req, res, next) => {
   try {
-    const reliability = await getMemberReliabilitySummaries(req.group!.id);
-    res.json({ reliability });
+    res.json(await detail(req, req.group!.id));
   } catch (err) {
     next(err);
   }
 });
 
-const addMemberSchema = z.object({
-  displayName: z.string().min(1).max(100),
-  contact: z.string().max(200).optional(),
-});
-
+router.patch("/:id", validateBody(setupSchema), ...organizerAction((req, id, user) => editGroup(id, user, req.body)));
+router.post("/:id/cancel", ...organizerAction((_req, id, user) => cancelGroup(id, user)));
+router.post("/:id/invite-link", ...organizerAction((_req, id, user) => createInviteLink(id, user)));
 router.post(
-  "/:id/members",
-  loadGroup,
-  requireGroupManager,
-  validateBody(addMemberSchema),
-  async (req, res, next) => {
-    try {
-      const group = req.group!;
-      assertForming(group);
-
-      const membership = await prisma.$transaction(async (tx) => {
-        const filledCount = await tx.membership.count({ where: { groupId: group.id } });
-        if (filledCount >= group.slotCount) {
-          throw new GroupError(409, "Group is full");
-        }
-
-        return tx.membership.create({
-          data: {
-            groupId: group.id,
-            displayName: req.body.displayName,
-            contact: req.body.contact ?? null,
-          },
-        });
-      });
-
-      runAfterResponse(
-        "audit membership.placeholder_added",
-        writeAuditLog({
-          groupId: group.id,
-          actorId: req.user!.id,
-          action: "membership.placeholder_added",
-          entityType: "membership",
-          entityId: membership.id,
-          metadata: { displayName: membership.displayName },
-        }),
-      );
-
-      notifyGroupChangeSafe(req.group!.id, "memberships");
-      res.status(201).json({ member: serializeMember(membership) });
-    } catch (err) {
-      if (err instanceof GroupError) {
-        res.status(err.status).json({ error: err.message });
-        return;
-      }
-      next(err);
-    }
-  },
+  "/:id/placeholders",
+  validateBody(placeholderSchema),
+  ...organizerAction((req, id, user) => addPlaceholder(id, user, req.body)),
 );
-
-const updateMemberSchema = z.object({
-  displayName: z.string().min(1).max(100).optional(),
-  contact: z.string().max(200).nullable().optional(),
-});
-
-router.patch(
-  "/:id/members/:mid",
-  loadGroup,
-  requireGroupManager,
-  validateBody(updateMemberSchema),
-  async (req, res, next) => {
-    try {
-      const group = req.group!;
-      assertForming(group);
-
-      const existing = await prisma.membership.findFirst({
-        where: { id: String(req.params.mid), groupId: group.id },
-      });
-      if (!existing) {
-        res.status(404).json({ error: "Member not found" });
-        return;
-      }
-
-      const membership = await prisma.membership.update({
-        where: { id: existing.id },
-        data: req.body,
-      });
-
-      await writeAuditLog({
-        groupId: group.id,
-        actorId: req.user!.id,
-        action: "membership.updated",
-        entityType: "membership",
-        entityId: membership.id,
-      });
-
-      notifyGroupChangeSafe(req.group!.id, "memberships");
-      res.json({ member: serializeMember(membership) });
-    } catch (err) {
-      if (err instanceof GroupError) {
-        res.status(err.status).json({ error: err.message });
-        return;
-      }
-      next(err);
-    }
-  },
-);
-
-router.delete(
-  "/:id/members/:mid",
-  loadGroup,
-  requireGroupManager,
-  async (req, res, next) => {
-    try {
-      const group = req.group!;
-      assertForming(group);
-
-      const existing = await prisma.membership.findFirst({
-        where: { id: String(req.params.mid), groupId: group.id },
-      });
-      if (!existing) {
-        res.status(404).json({ error: "Member not found" });
-        return;
-      }
-      if (existing.isManager) {
-        res.status(409).json({ error: "Cannot remove the manager from the roster" });
-        return;
-      }
-
-      await prisma.$transaction(async (tx) => {
-        await tx.membership.delete({ where: { id: existing.id } });
-        const reset = await resetPayoutOrderIfRosterIncomplete(tx, group.id);
-        if (reset) {
-          await tx.auditLog.create({
-            data: {
-              groupId: group.id,
-              actorId: req.user!.id,
-              action: "group.payout_order_reset",
-              entityType: "group",
-              entityId: group.id,
-              metadata: { reason: "roster_no_longer_full" },
-            },
-          });
-        }
-      });
-
-      await writeAuditLog({
-        groupId: group.id,
-        actorId: req.user!.id,
-        action: "membership.removed",
-        entityType: "membership",
-        entityId: existing.id,
-        metadata: { displayName: existing.displayName },
-      });
-
-      notifyGroupChangeSafe(req.group!.id, "memberships");
-      res.status(204).send();
-    } catch (err) {
-      if (err instanceof GroupError) {
-        res.status(err.status).json({ error: err.message });
-        return;
-      }
-      next(err);
-    }
-  },
-);
-
-const createInviteSchema = z.object({
-  type: z.enum(["group_invite", "membership_claim"]),
-  membershipId: z.string().uuid().optional(),
-});
-
+/** Delete a placeholder or kick a member (organizer). Members leave with POST /leave. */
+router.delete("/:id/slots/:slotId", ...organizerAction((req, id, user) => removeSlot(id, user, String(req.params.slotId))));
 router.post(
-  "/:id/invites",
-  loadGroup,
-  requireGroupManager,
-  validateBody(createInviteSchema),
-  async (req, res, next) => {
-    try {
-      const group = req.group!;
-      const { type, membershipId } = req.body;
+  "/:id/slots/:slotId/claim-link",
+  ...organizerAction((req, id, user) => createClaimLink(id, user, String(req.params.slotId))),
+);
+router.put("/:id/order", validateBody(orderSchema), ...organizerAction((req, id, user) => setOrder(id, user, req.body.slotIds)));
+router.post("/:id/order/shuffle", ...organizerAction((_req, id, user) => shuffleOrder(id, user)));
+router.post("/:id/launch", ...organizerAction((_req, id, user) => launchGroup(id, user)));
 
-      if (type === InviteTokenType.group_invite) {
-        assertForming(group);
-        const filledCount = await countFilledSlots(group.id);
-        if (filledCount >= group.slotCount) {
-          res.status(409).json({ error: "Group is full; no invite link can be generated" });
-          return;
-        }
-      }
-
-      if (type === InviteTokenType.membership_claim) {
-        if (group.status === GroupStatus.completed) {
-          res.status(409).json({ error: CLAIM_CLOSED_MESSAGE });
-          return;
-        }
-        if (!membershipId) {
-          res.status(400).json({ error: "membershipId is required for claim links" });
-          return;
-        }
-        const placeholder = await prisma.membership.findFirst({
-          where: { id: membershipId, groupId: group.id, userId: null },
-        });
-        if (!placeholder) {
-          res.status(404).json({ error: "Placeholder membership not found or already claimed" });
-          return;
-        }
-      }
-
-      const invite = await prisma.inviteToken.create({
-        data: {
-          type,
-          groupId: group.id,
-          targetMembershipId: type === InviteTokenType.membership_claim ? membershipId : null,
-          expiresAt: inviteExpiry(),
-        },
-      });
-
-      await writeAuditLog({
-        groupId: group.id,
-        actorId: req.user!.id,
-        action: "invite.created",
-        entityType: "invite_token",
-        entityId: invite.id,
-        metadata: { type },
-      });
-
-      res.status(201).json({
-        invite: {
-          id: invite.id,
-          type: invite.type,
-          token: invite.token,
-          expiresAt: invite.expiresAt,
-          url: inviteUrl(invite.type, invite.token, resolveAppOrigin(req)),
-        },
-      });
-    } catch (err) {
-      if (err instanceof GroupError) {
-        res.status(err.status).json({ error: err.message });
-        return;
-      }
-      next(err);
+// --- Payments (§6.1). The browser uploads a proof photo first, then submits with its path.
+router.post("/:id/proofs", loadGroup, validateBody(proofSchema), async (req, res, next) => {
+  try {
+    const state = req.group!.state;
+    if (!can.submitContribution(state) && !can.submitDebtPayment(state)) {
+      throw conflict("Payments open once the paluwagan starts.", "WRONG_STATE");
     }
-  },
+    res.json(await createProofUpload(req.group!.id, req.body.contentType));
+  } catch (err) {
+    next(err);
+  }
+});
+router.post(
+  "/:id/submissions",
+  validateBody(submissionSchema),
+  ...memberAction((req, id, user) => submitPayment(id, user, req.body)),
+);
+router.post(
+  "/:id/submissions/:submissionId/approve",
+  ...organizerAction((req, id, user) => reviewSubmission(id, user, String(req.params.submissionId), { approve: true })),
+);
+router.post(
+  "/:id/submissions/:submissionId/deny",
+  validateBody(denySchema),
+  ...organizerAction((req, id, user) =>
+    reviewSubmission(id, user, String(req.params.submissionId), { approve: false, reason: req.body.reason }),
+  ),
+);
+router.post(
+  "/:id/submissions/:submissionId/cancel",
+  ...memberAction((req, id, user) => cancelSubmission(id, user, String(req.params.submissionId))),
 );
 
-const payoutOrderSchema = z.object({
-  method: z.enum(["random", "manual"]),
-  order: z
-    .array(
-      z.object({
-        membershipId: z.string().uuid(),
-        turnNumber: z.number().int().min(1),
+// --- Disputes (§6.2): change an approved contribution while its period is open.
+router.post("/:id/disputes", validateBody(disputeSchema), ...memberAction((req, id, user) => raiseDispute(id, user, req.body)));
+router.post(
+  "/:id/disputes/:disputeId/approve",
+  ...organizerAction((req, id, user) => reviewDispute(id, user, String(req.params.disputeId), { approve: true })),
+);
+router.post(
+  "/:id/disputes/:disputeId/deny",
+  validateBody(denyDisputeSchema),
+  ...organizerAction((req, id, user) =>
+    reviewDispute(id, user, String(req.params.disputeId), { approve: false, note: req.body.note }),
+  ),
+);
+router.post(
+  "/:id/disputes/:disputeId/cancel",
+  ...memberAction((req, id, user) => cancelDispute(id, user, String(req.params.disputeId))),
+);
+
+// --- Swaps (§9): ask, the other side answers, then the organizer approves (unless already a party).
+router.post("/:id/swaps", validateBody(swapSchema), ...memberAction((req, id, user) => requestSwap(id, user, req.body)));
+router.post(
+  "/:id/swaps/:swapId/accept",
+  ...memberAction((req, id, user) => respondToSwap(id, user, String(req.params.swapId), true)),
+);
+router.post(
+  "/:id/swaps/:swapId/decline",
+  ...memberAction((req, id, user) => respondToSwap(id, user, String(req.params.swapId), false)),
+);
+router.post(
+  "/:id/swaps/:swapId/approve",
+  ...organizerAction((req, id, user) => reviewSwap(id, user, String(req.params.swapId), { approve: true })),
+);
+router.post(
+  "/:id/swaps/:swapId/deny",
+  validateBody(denyDisputeSchema),
+  ...organizerAction((req, id, user) =>
+    reviewSwap(id, user, String(req.params.swapId), { approve: false, note: req.body.note }),
+  ),
+);
+router.post("/:id/swaps/:swapId/cancel", ...memberAction((req, id, user) => cancelSwap(id, user, String(req.params.swapId))));
+
+// --- Payouts (§7, R-PAY-05). Rounds are addressed by number.
+router.post(
+  "/:id/rounds/:number/handover",
+  validateBody(handoverSchema),
+  ...organizerAction((req, id, user) => markHandedOver(id, user, Number(req.params.number), req.body.proofPath)),
+);
+router.post(
+  "/:id/rounds/:number/confirm-receipt",
+  ...memberAction((req, id, user) => confirmReceipt(id, user, Number(req.params.number))),
+);
+
+// --- Records (§10, §14): the summary as JSON, and downloadable statements, ledger and summary.
+router.get("/:id/summary", loadGroup, async (req, res, next) => {
+  try {
+    res.json(await completionSummary(req.group!.id));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** §15.1 / §15.3: health, projections, money overview, collection rate and reliability. */
+router.get("/:id/stats", loadGroup, async (req, res, next) => {
+  try {
+    res.json(await groupStats(req.group!.id, req.user!.id));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** §15.3: one slot's history (own, or any for the organizer with ?slot=). */
+router.get("/:id/history", loadGroup, async (req, res, next) => {
+  try {
+    res.json(await slotHistory(req.group!.id, req.user!.id, typeof req.query.slot === "string" ? req.query.slot : undefined));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** R-AUD-03: the audit log, for every member. `?before=<entry id>` for older; `?category=` to filter. */
+router.get("/:id/activity", loadGroup, async (req, res, next) => {
+  try {
+    const categories = ["payments", "debts", "payouts", "disputes", "swaps", "members", "settings"];
+    const category = typeof req.query.category === "string" && categories.includes(req.query.category) ? req.query.category : undefined;
+    res.json(
+      await activityLog(req.group!.id, {
+        before: typeof req.query.before === "string" ? req.query.before : undefined,
+        category: category as ActivityCategory | undefined,
       }),
-    )
-    .optional(),
+    );
+  } catch (err) {
+    next(err);
+  }
 });
 
+/** §15.1: the organizer reminds a member who hasn't fully paid this round. */
 router.post(
-  "/:id/payout-order",
-  loadGroup,
-  requireGroupManager,
-  validateBody(payoutOrderSchema),
-  async (req, res, next) => {
-    try {
-      const group = req.group!;
-      assertForming(group);
-      const members = await setPayoutOrder(
-        group.id,
-        req.user!.id,
-        req.body.method,
-        req.body.order,
-      );
-      notifyGroupChangeSafe(req.group!.id, "memberships");
-      res.json({ members: members.map(serializeMember) });
-    } catch (err) {
-      if (err instanceof GroupError) {
-        res.status(err.status).json({ error: err.message });
-        return;
-      }
-      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
-        res.status(409).json({ error: "Payout order conflict — please try again" });
-        return;
-      }
-      next(err);
-    }
-  },
+  "/:id/slots/:slotId/remind",
+  ...organizerAction((req, id, user) => sendManualReminder(id, user, String(req.params.slotId))),
 );
 
-const startDateSchema = z.object({
-  startDate: z.string().date(),
-});
-
-router.patch(
-  "/:id/start-date",
-  loadGroup,
-  requireGroupManager,
-  validateBody(startDateSchema),
-  async (req, res, next) => {
-    try {
-      const group = req.group!;
-      assertForming(group);
-
-      const updated = await prisma.group.update({
-        where: { id: group.id },
-        data: { startDate: new Date(req.body.startDate) },
-      });
-
-      await writeAuditLog({
-        groupId: group.id,
-        actorId: req.user!.id,
-        action: "group.start_date_set",
-        entityType: "group",
-        entityId: group.id,
-        metadata: { startDate: req.body.startDate },
-      });
-
-      const filledCount = await countFilledSlots(group.id);
-      notifyGroupChangeSafe(req.group!.id, "memberships");
-      res.json({
-        group: serializeGroup(updated, filledCount, "manager"),
-      });
-    } catch (err) {
-      if (err instanceof GroupError) {
-        res.status(err.status).json({ error: err.message });
-        return;
-      }
-      next(err);
-    }
-  },
-);
-
-const activateSchema = z.object({
-  startDate: z.string().date().optional(),
-});
-
-router.post(
-  "/:id/activate",
-  loadGroup,
-  requireGroupManager,
-  validateBody(activateSchema),
-  async (req, res, next) => {
-    try {
-      const group = req.group!;
-      await activateGroup(group.id, req.user!.id, req.body.startDate);
-
-      const updated = await getGroupOrThrow(group.id);
-      const members = await prisma.membership.findMany({
-        where: { groupId: group.id },
-        orderBy: { turnNumber: "asc" },
-      });
-      const rounds = await prisma.round.findMany({
-        where: { groupId: group.id },
-        orderBy: { number: "asc" },
-      });
-      const current = rounds.find((r) => r.status === "current");
-      let currentRound = null;
-      if (current) {
-        const contributions = await prisma.contribution.findMany({
-          where: { roundId: current.id },
-        });
-        const recipient = members.find((m) => m.id === current.recipientMembershipId);
-        currentRound = {
-          ...serializeRound(current),
-          recipientName: recipient?.displayName ?? "Unknown",
-          contributions: contributions.map(serializeContribution),
-        };
-      }
-
-      res.json({
-        group: serializeGroup(updated, members.length, "manager"),
-        members: members.map(serializeMember),
-        currentRound,
-        schedule: rounds.map(serializeRound),
-      });
-    } catch (err) {
-      if (err instanceof GroupError) {
-        res.status(err.status).json({ error: err.message });
-        return;
-      }
-      next(err);
-    }
-  },
-);
-
-router.get("/:id/rounds/current", loadGroup, requireGroupMember, async (req, res, next) => {
+router.get("/:id/exports/:kind.:format", loadGroup, async (req, res, next) => {
   try {
-    const group = req.group!;
-    if (group.status === "forming") {
-      res.status(404).json({ error: "Group has not started yet" });
-      return;
+    const kind = String(req.params.kind);
+    const format = String(req.params.format);
+    if (!["statement", "ledger", "summary"].includes(kind) || !["pdf", "csv"].includes(format)) {
+      throw notFoundError("Export");
     }
-
-    const current = await prisma.round.findFirst({
-      where: { groupId: group.id, status: "current" },
+    const file = await buildExport({
+      groupId: req.group!.id,
+      viewerUserId: req.user!.id,
+      kind: kind as "statement" | "ledger" | "summary",
+      format: format as "pdf" | "csv",
+      slotId: typeof req.query.slot === "string" ? req.query.slot : undefined,
     });
-    if (!current) {
-      res.json({ currentRound: null });
-      return;
-    }
-
-    const [members, contributions] = await Promise.all([
-      prisma.membership.findMany({ where: { groupId: group.id } }),
-      prisma.contribution.findMany({ where: { roundId: current.id } }),
-    ]);
-    const memberById = new Map(members.map((m) => [m.id, m]));
-    const isManager = req.membership!.isManager;
-
-    res.json({
-      currentRound: {
-        ...serializeRound(current),
-        recipientName: memberById.get(current.recipientMembershipId)?.displayName ?? "Unknown",
-        contributions: contributions.map((c) =>
-          serializeContributionForViewer(
-            c,
-            memberById.get(c.membershipId)!,
-            req.user!.id,
-            isManager,
-            group.contributionAmount,
-          ),
-        ),
-      },
-    });
+    res.setHeader("Content-Type", file.contentType);
+    res.setHeader("Content-Disposition", `attachment; filename="${file.filename}"`);
+    res.setHeader("Cache-Control", "private, no-store");
+    res.send(file.body);
   } catch (err) {
     next(err);
   }
 });
 
-router.get("/:id/rounds", loadGroup, requireGroupMember, async (req, res, next) => {
+router.post("/:id/leave", loadGroup, async (req, res, next) => {
   try {
-    const group = req.group!;
-    if (group.status === "forming") {
-      res.status(404).json({ error: "Group has not started yet" });
-      return;
-    }
-
-    const [rounds, members] = await Promise.all([
-      prisma.round.findMany({
-        where: { groupId: group.id },
-        orderBy: { number: "asc" },
-      }),
-      prisma.membership.findMany({ where: { groupId: group.id } }),
-    ]);
-
-    res.json({
-      schedule: rounds.map((r) => ({
-        ...serializeRound(r),
-        recipientName:
-          members.find((m) => m.id === r.recipientMembershipId)?.displayName ?? "Unknown",
-      })),
-    });
+    await removeSlot(req.group!.id, req.user!.id, req.slot!.id);
+    notifyGroupChangeSafe(req.group!.id);
+    res.json({ ok: true });
   } catch (err) {
-    next(err);
-  }
-});
-
-const reportContributionSchema = z.object({
-  note: z.string().max(500).optional(),
-  proofUrl: z.string().url().max(500).optional(),
-  amount: z.number().positive().optional(),
-});
-
-router.post(
-  "/:id/contributions/:cid/report",
-  loadGroup,
-  requireGroupMember,
-  validateBody(reportContributionSchema),
-  async (req, res, next) => {
-    try {
-      const contribution = await reportContribution(
-        req.group!.id,
-        String(req.params.cid),
-        req.user!.id,
-        req.body,
-      );
-      res.json({ contribution: serializeContribution(contribution) });
-    } catch (err) {
-      if (err instanceof GroupError || err instanceof ContributionError) {
-        res.status(err.status).json({ error: err.message });
-        return;
-      }
-      next(err);
-    }
-  },
-);
-
-router.post(
-  "/:id/contributions/:cid/confirm",
-  loadGroup,
-  requireGroupManager,
-  async (req, res, next) => {
-    try {
-      const contribution = await confirmContribution(
-        req.group!.id,
-        String(req.params.cid),
-        req.user!.id,
-      );
-      res.json({ contribution: serializeContribution(contribution) });
-    } catch (err) {
-      if (err instanceof GroupError || err instanceof ContributionError) {
-        res.status(err.status).json({ error: err.message });
-        return;
-      }
-      next(err);
-    }
-  },
-);
-
-const recordContributionSchema = z.object({
-  note: z.string().max(500).optional(),
-  amount: z.number().positive().optional(),
-});
-
-router.post(
-  "/:id/contributions/:cid/record",
-  loadGroup,
-  requireGroupManager,
-  validateBody(recordContributionSchema),
-  async (req, res, next) => {
-    try {
-      const contribution = await recordContribution(
-        req.group!.id,
-        String(req.params.cid),
-        req.user!.id,
-        req.body,
-      );
-      res.json({ contribution: serializeContribution(contribution) });
-    } catch (err) {
-      if (err instanceof GroupError || err instanceof ContributionError) {
-        res.status(err.status).json({ error: err.message });
-        return;
-      }
-      next(err);
-    }
-  },
-);
-
-router.get("/:id/ledger", loadGroup, requireGroupMember, async (req, res, next) => {
-  try {
-    const group = req.group!;
-    if (group.status === "forming") {
-      res.status(404).json({ error: "Group has not started yet" });
-      return;
-    }
-    const entries = await getGroupLedger(group.id);
-    res.json({ entries });
-  } catch (err) {
-    next(err);
-  }
-});
-
-router.get("/:id/audit-log", loadGroup, requireGroupManager, async (req, res, next) => {
-  try {
-    const before = typeof req.query.before === "string" && req.query.before ? req.query.before : undefined;
-    const page = await getGroupAuditLog(req.group!.id, { before });
-    res.json(page);
-  } catch (err) {
-    next(err);
-  }
-});
-
-router.get("/:id/obligations", loadGroup, requireGroupMember, async (req, res, next) => {
-  try {
-    const obligations = await getGroupObligations(req.group!.id);
-    res.json({ obligations });
-  } catch (err) {
-    if (err instanceof ObligationError) {
-      res.status(err.status).json({ error: err.message });
-      return;
-    }
-    next(err);
-  }
-});
-
-const settleDebtsSchema = z.object({
-  amount: z.number().positive(),
-  note: z.string().max(500).optional(),
-});
-
-router.post(
-  "/:id/members/:mid/settle",
-  loadGroup,
-  requireGroupManager,
-  validateBody(settleDebtsSchema),
-  async (req, res, next) => {
-    try {
-      const group = req.group!;
-      const memberId = String(req.params.mid);
-      const member = await prisma.membership.findFirst({
-        where: { id: memberId, groupId: group.id },
-      });
-      if (!member) {
-        res.status(404).json({ error: "Member not found" });
-        return;
-      }
-
-      const result = await settleMemberDebts(
-        group.id,
-        memberId,
-        req.user!.id,
-        req.body.amount,
-        req.body.note,
-      );
-      notifyGroupChangeSafe(req.group!.id, "rounds");
-      res.json(result);
-    } catch (err) {
-      if (err instanceof ObligationError) {
-        res.status(err.status).json({ error: err.message });
-        return;
-      }
-      next(err);
-    }
-  },
-);
-
-
-const coverExternallySchema = z.object({
-  note: z.string().min(1).max(500),
-});
-
-router.post(
-  "/:id/obligations/:oid/cover-externally",
-  loadGroup,
-  requireGroupManager,
-  validateBody(coverExternallySchema),
-  async (req, res, next) => {
-    try {
-      const result = await coverObligationExternally(
-        req.group!.id,
-        String(req.params.oid),
-        req.user!.id,
-        req.body.note,
-      );
-      notifyGroupChangeSafe(req.group!.id, "rounds");
-      res.json(result);
-    } catch (err) {
-      if (err instanceof ObligationError) {
-        res.status(err.status).json({ error: err.message });
-        return;
-      }
-      next(err);
-    }
-  },
-);
-
-router.get("/:id/settlement-claims", loadGroup, requireGroupMember, async (req, res, next) => {
-  try {
-    const claims = await getGroupSettlementClaims(req.group!.id);
-    res.json({ claims });
-  } catch (err) {
-    if (err instanceof ObligationError) {
-      res.status(err.status).json({ error: err.message });
-      return;
-    }
-    next(err);
-  }
-});
-
-const submitSettlementClaimSchema = z.object({
-  amount: z.number().positive(),
-  note: z.string().max(500).optional(),
-  proofUrl: z.string().url().max(500).optional(),
-});
-
-router.post(
-  "/:id/settlement-claims",
-  loadGroup,
-  requireGroupMember,
-  validateBody(submitSettlementClaimSchema),
-  async (req, res, next) => {
-    try {
-      // Always the caller's own membership — a member can never submit a claim for someone else.
-      const claim = await submitSettlementClaim(
-        req.group!.id,
-        req.membership!.id,
-        req.user!.id,
-        req.body,
-      );
-      notifyGroupChangeSafe(req.group!.id, "rounds");
-      res.json({ claim });
-    } catch (err) {
-      if (err instanceof ObligationError) {
-        res.status(err.status).json({ error: err.message });
-        return;
-      }
-      next(err);
-    }
-  },
-);
-
-const reviewSettlementClaimSchema = z.object({
-  decision: z.enum(["confirm", "reject"]),
-  reviewNote: z.string().max(500).optional(),
-});
-
-router.patch(
-  "/:id/settlement-claims/:claimId/review",
-  loadGroup,
-  requireGroupManager,
-  validateBody(reviewSettlementClaimSchema),
-  async (req, res, next) => {
-    try {
-      const result = await reviewSettlementClaim(
-        req.group!.id,
-        String(req.params.claimId),
-        req.user!.id,
-        req.body.decision,
-        req.body.reviewNote,
-      );
-      notifyGroupChangeSafe(req.group!.id, "rounds");
-      res.json(result);
-    } catch (err) {
-      if (err instanceof ObligationError) {
-        res.status(err.status).json({ error: err.message });
-        return;
-      }
-      next(err);
-    }
-  },
-);
-
-
-router.get("/:id/dashboard", loadGroup, requireGroupManager, async (req, res, next) => {
-  try {
-    const dashboard = await getGroupDashboard(req.group!.id);
-    res.json({ dashboard });
-  } catch (err) {
-    if (err instanceof DashboardError) {
-      res.status(err.status).json({ error: err.message });
-      return;
-    }
-    next(err);
-  }
-});
-
-router.get("/:id/completion-summary", loadGroup, requireGroupMember, async (req, res, next) => {
-  try {
-    const summary = await getCompletionSummary(req.group!.id);
-    res.json({ summary });
-  } catch (err) {
-    if (err instanceof SummaryError) {
-      res.status(err.status).json({ error: err.message });
-      return;
-    }
-    next(err);
-  }
-});
-
-router.get("/:id/disputes", loadGroup, requireGroupMember, async (req, res, next) => {
-  try {
-    const disputes = await getGroupDisputes(req.group!.id);
-    res.json({ disputes });
-  } catch (err) {
-    next(err);
-  }
-});
-
-const raiseDisputeSchema = z.object({
-  note: z.string().min(1).max(1000),
-  proofUrl: z.string().url().max(500).optional(),
-});
-
-router.post(
-  "/:id/contributions/:cid/disputes",
-  loadGroup,
-  requireGroupMember,
-  validateBody(raiseDisputeSchema),
-  async (req, res, next) => {
-    try {
-      const dispute = await raiseDispute(
-        req.group!.id,
-        String(req.params.cid),
-        req.membership!.id,
-        req.user!.id,
-        req.body,
-      );
-      notifyGroupChangeSafe(req.group!.id, "rounds");
-      res.status(201).json({ dispute: { id: dispute.id, status: dispute.status } });
-    } catch (err) {
-      if (err instanceof DisputeError) {
-        res.status(err.status).json({ error: err.message });
-        return;
-      }
-      next(err);
-    }
-  },
-);
-
-const resolveDisputeSchema = z.object({
-  resolution: z.string().min(1).max(2000),
-});
-
-router.patch(
-  "/:id/disputes/:did/resolve",
-  loadGroup,
-  requireGroupManager,
-  validateBody(resolveDisputeSchema),
-  async (req, res, next) => {
-    try {
-      const dispute = await resolveDispute(
-        req.group!.id,
-        String(req.params.did),
-        req.user!.id,
-        req.body.resolution,
-      );
-      notifyGroupChangeSafe(req.group!.id, "rounds");
-      res.json({ dispute: { id: dispute.id, status: dispute.status } });
-    } catch (err) {
-      if (err instanceof DisputeError) {
-        res.status(err.status).json({ error: err.message });
-        return;
-      }
-      next(err);
-    }
-  },
-);
-
-router.post("/:id/leave", loadGroup, requireGroupMember, async (req, res, next) => {
-  try {
-    const group = req.group!;
-    const membership = req.membership!;
-    assertForming(group);
-
-    if (membership.isManager) {
-      res.status(409).json({
-        error: "Managers cannot leave during forming. Remove members or delete the group instead.",
-      });
-      return;
-    }
-
-    let payoutOrderReset = false;
-    await prisma.$transaction(async (tx) => {
-      await tx.membership.delete({ where: { id: membership.id } });
-      payoutOrderReset = await resetPayoutOrderIfRosterIncomplete(tx, group.id);
-      if (payoutOrderReset) {
-        await tx.auditLog.create({
-          data: {
-            groupId: group.id,
-            actorId: req.user!.id,
-            action: "group.payout_order_reset",
-            entityType: "group",
-            entityId: group.id,
-            metadata: { reason: "roster_no_longer_full" },
-          },
-        });
-      }
-    });
-
-    await writeAuditLog({
-      groupId: group.id,
-      actorId: req.user!.id,
-      action: "membership.left",
-      entityType: "membership",
-      entityId: membership.id,
-      metadata: { displayName: membership.displayName },
-    });
-
-    const managerMembership = await prisma.membership.findFirst({
-      where: { groupId: group.id, isManager: true },
-    });
-    if (managerMembership?.userId) {
-      await createNotification({
-        userId: managerMembership.userId,
-        groupId: group.id,
-        type: "member_left",
-        title: `${group.name}: member left`,
-        body: `${membership.displayName} left the group during forming.`,
-        link: `/groups/${group.id}`,
-      });
-    }
-
-    notifyGroupChangeSafe(req.group!.id, "memberships");
-    res.status(204).send();
-  } catch (err) {
-    if (err instanceof GroupError) {
-      res.status(err.status).json({ error: err.message });
-      return;
-    }
     next(err);
   }
 });
