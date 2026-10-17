@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useState } from "react";
 import { Camera, X } from "lucide-react";
 import type { GroupDetail, PayoutView } from "../../../api/client";
 import { Sheet } from "../../../components/flow/Sheet";
+import { SheetDone } from "../../../components/flow/SheetDone";
 import { formatDueDate } from "../../../lib/dates";
 import { formatPeso } from "../../../lib/money";
 import { proofFileError, uploadProof } from "../../../lib/proofUpload";
@@ -92,6 +93,8 @@ function PayoutForm({
   const preview = useMemo(() => (file ? URL.createObjectURL(file) : null), [file]);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
+  // Once recorded: what was done, shown instead of closing on the spot.
+  const [done, setDone] = useState<"handedOver" | "received" | null>(null);
   const fileId = useId();
   useEffect(() => {
     if (!preview) return;
@@ -106,7 +109,7 @@ function PayoutForm({
         setUploading(true);
         proofPath = await uploadProof(detail.group.id, file);
       }
-      if (await onHandOver(payout.round, proofPath)) onClose();
+      if (await onHandOver(payout.round, proofPath)) setDone("handedOver");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't save it. Try again.");
     } finally {
@@ -116,6 +119,20 @@ function PayoutForm({
 
   const busy = uploading || pending === "handover" || pending === "confirm";
   const name = isRecipient ? "you" : (recipient?.name ?? "the recipient");
+  if (done) {
+    // R-PAY-05: the recipient confirms; for a placeholder the organizer's record is the receipt.
+    const title =
+      done === "received" ? "Payout received" : isRecipient ? `You took your ${formatPeso(payout.net)}` : `Handed over to ${name}`;
+    return (
+      <SheetDone title={title} onClose={onClose}>
+        {done === "received" || isRecipient
+          ? `Round ${payout.round}'s ${formatPeso(payout.net)} is recorded as received.`
+          : recipient?.kind === "PLACEHOLDER"
+            ? `Round ${payout.round}'s ${formatPeso(payout.net)} is recorded for ${name}.`
+            : `${name} is asked to confirm they got ${formatPeso(payout.net)}.`}
+      </SheetDone>
+    );
+  }
   return (
     <Sheet
       open
@@ -136,7 +153,7 @@ function PayoutForm({
         ) : confirming ? (
           <button
             type="button"
-            onClick={() => void onConfirm(payout.round).then((done) => done && onClose())}
+            onClick={() => void onConfirm(payout.round).then((ok) => ok && setDone("received"))}
             disabled={busy}
             className={`${ui.btnPrimaryFull} min-h-11`}
           >

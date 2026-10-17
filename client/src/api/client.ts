@@ -128,6 +128,8 @@ export interface PeriodSlot {
   due: number;
   approved: number;
   pending: number;
+  /** R-DEC-29: the increases this slot's pending corrections ask for; they hold room like pending payments. */
+  pendingIncrease: number;
   status: PeriodStatus;
   pendingReview: boolean;
   /** Last time the organizer sent this slot a reminder this round. */

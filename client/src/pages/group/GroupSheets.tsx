@@ -4,6 +4,7 @@ import type { GroupDetail, SlotView } from "../../api/client";
 import { Field } from "../../components/flow/Field";
 import { ShareLink } from "../../components/flow/ShareLink";
 import { Sheet } from "../../components/flow/Sheet";
+import { SheetDone } from "../../components/flow/SheetDone";
 import { ui } from "../../lib/ui";
 
 const NAME_MAX = 100;
@@ -49,20 +50,33 @@ export function PlaceholderSheet({
 }) {
   const [name, setName] = useState("");
   const [contact, setContact] = useState("");
+  // The name just added, shown instead of closing on the spot.
+  const [added, setAdded] = useState<string | null>(null);
+  const close = () => {
+    setAdded(null);
+    onClose();
+  };
   const nameError = !name.trim() ? "Enter a name." : name.trim().length > NAME_MAX ? `Up to ${NAME_MAX} characters.` : null;
   const contactError = contact.trim().length > CONTACT_MAX ? `Up to ${CONTACT_MAX} characters.` : null;
 
   async function add() {
     if (nameError || contactError) return;
     if (await onAddPlaceholder({ name: name.trim(), contact: contact.trim() || undefined })) {
+      setAdded(name.trim());
       setName("");
       setContact("");
-      onClose();
     }
   }
 
+  if (open && added) {
+    return (
+      <SheetDone title={`Added ${added}`} onClose={close} another={{ label: "Add another", onClick: () => setAdded(null) }}>
+        {added} is in the list. You record their payments, and you can send them a claim link anytime.
+      </SheetDone>
+    );
+  }
   return (
-    <Sheet open={open} onClose={onClose} title="Add a placeholder">
+    <Sheet open={open} onClose={close} title="Add a placeholder">
       <form
         className="space-y-4"
         onSubmit={(e) => {

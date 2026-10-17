@@ -3,7 +3,13 @@ import { NOTE_MAX_LENGTH } from "../domain/constants.js";
 import { outstanding } from "../domain/debt.js";
 import { can } from "../domain/lifecycle.js";
 import { formatPeso } from "../domain/money.js";
-import { contributionApprovalError, periodStatus, submissionAmountError, submissionCap } from "../domain/submissions.js";
+import {
+  contributionApprovalError,
+  correctionIncrease,
+  periodStatus,
+  submissionAmountError,
+  submissionCap,
+} from "../domain/submissions.js";
 import { audit } from "../lib/audit.js";
 import { AppError, badRequest, conflict, forbidden, notFound } from "../lib/errors.js";
 import { isProofPathFor, proofExists, proofViewUrls } from "../lib/storage.js";
@@ -16,15 +22,28 @@ import { slotName, withGroupLock, type Db } from "./common.js";
 const sum = (rows: { amount: bigint; effectiveAmount: bigint | null }[]) =>
   rows.reduce((total, r) => total + Number(r.effectiveAmount ?? r.amount), 0);
 
-/** Approved and pending contribution totals for one slot in one period (R-SUB-06, R-SUB-07). */
-export async function periodTotals(db: Db, slotId: string, roundId: string) {
-  const rows = await db.submission.findMany({
-    where: { slotId, roundId, type: "CONTRIBUTION", status: { in: ["APPROVED", "PENDING"] } },
-    select: { status: true, amount: true, effectiveAmount: true, appliedAs: true },
-  });
+/**
+ * Approved and pending contribution totals for one slot in one period (R-SUB-06, R-SUB-07), and
+ * the increases its pending corrections ask for (R-DEC-29), less the one `exceptDisputeId` names.
+ */
+export async function periodTotals(db: Db, slotId: string, roundId: string, exceptDisputeId?: string) {
+  const [rows, disputes] = await Promise.all([
+    db.submission.findMany({
+      where: { slotId, roundId, type: "CONTRIBUTION", status: { in: ["APPROVED", "PENDING"] } },
+      select: { status: true, amount: true, effectiveAmount: true, appliedAs: true },
+    }),
+    db.dispute.findMany({
+      where: { slotId, status: "PENDING", submission: { roundId }, ...(exceptDisputeId ? { id: { not: exceptDisputeId } } : {}) },
+      select: { previousAmount: true, proposedAmount: true },
+    }),
+  ]);
   const approved = rows.filter((r) => r.status === "APPROVED" && r.appliedAs !== "DEBT_PAYMENT");
   const pending = rows.filter((r) => r.status === "PENDING");
-  return { approved: sum(approved), pending: sum(pending), pendingCount: pending.length };
+  const pendingIncrease = disputes.reduce(
+    (total, d) => total + correctionIncrease(Number(d.previousAmount), Number(d.proposedAmount)),
+    0,
+  );
+  return { approved: sum(approved), pending: sum(pending), pendingCount: pending.length, pendingIncrease };
 }
 
 /**
@@ -90,7 +109,8 @@ export async function submitPayment(
     const cap = round
       ? await (async () => {
           const totals = await periodTotals(tx, slot.id, round.id);
-          return submissionCap(Number(group.contribution), totals.approved, totals.pending);
+          // R-DEC-29: pending corrections hold their increases.
+          return submissionCap(Number(group.contribution), totals.approved, totals.pending + totals.pendingIncrease);
         })()
       : submissionCap(outstanding(debtOf(slot)), 0, await pendingAgainstDebt(tx, slot.id));
     const error = submissionAmountError(input.amount, cap);
@@ -279,11 +299,15 @@ export async function cancelSubmission(groupId: string, userId: string, submissi
 export async function openPeriodView(db: Db, groupId: string, contribution: number) {
   const round = await db.round.findFirst({ where: { groupId, status: "OPEN" } });
   if (!round) return null;
-  const [slots, submissions] = await Promise.all([
+  const [slots, submissions, disputes] = await Promise.all([
     db.slot.findMany({ where: { groupId }, select: { id: true } }),
     db.submission.findMany({
       where: { roundId: round.id, type: "CONTRIBUTION", status: { in: ["APPROVED", "PENDING"] } },
       select: { slotId: true, status: true, amount: true, effectiveAmount: true, appliedAs: true },
+    }),
+    db.dispute.findMany({
+      where: { status: "PENDING", submission: { roundId: round.id } },
+      select: { slotId: true, previousAmount: true, proposedAmount: true },
     }),
   ]);
   const reminded = await lastRemindedAt(round.id);
@@ -296,6 +320,10 @@ export async function openPeriodView(db: Db, groupId: string, contribution: numb
       due: contribution,
       approved,
       pending: sum(pendingRows),
+      /** R-DEC-29: the increases this slot's pending corrections ask for; they hold room like pending payments. */
+      pendingIncrease: disputes
+        .filter((d) => d.slotId === id)
+        .reduce((total, d) => total + correctionIncrease(Number(d.previousAmount), Number(d.proposedAmount)), 0),
       ...periodStatus(contribution, approved, pendingRows.length),
       /** Last time the organizer sent this slot a reminder this round. */
       remindedAt: reminded.get(id) ?? null,

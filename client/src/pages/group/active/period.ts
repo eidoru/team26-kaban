@@ -1,4 +1,4 @@
-import { contributionApprovalError, leftAfterPending, submissionCap } from "@domain/submissions";
+import { submissionCap } from "@domain/submissions";
 import type { DisputeView, GroupDetail, SubmissionView } from "../../../api/client";
 
 /** Pending submissions in the order they came in: the order they must be reviewed in (R-SUB-05). */
@@ -9,42 +9,25 @@ export function reviewQueue(detail: GroupDetail) {
 }
 
 /**
- * Where a pending payment falls among the same slot's pending payments for the same round and type,
- * the group the server reviews in order (R-SUB-05): `{ number: 2, of: 3 }`. Several pending ₱500s
- * look alike, so the review queue numbers them.
+ * R-SUB-05: a slot's pending payments for the same round and type as `payment`, oldest first. The
+ * server reviews each such stack in order, so only its first can be decided.
  */
-export function paymentOrder(detail: GroupDetail, payment: SubmissionView) {
-  const same = reviewQueue(detail).filter(
+export function stackOf(detail: GroupDetail, payment: SubmissionView) {
+  return reviewQueue(detail).filter(
     (s) => s.slotId === payment.slotId && s.round === payment.round && s.type === payment.type,
   );
-  return { number: same.findIndex((s) => s.id === payment.id) + 1, of: same.length };
 }
 
 /**
- * R-DEC-29: why a pending contribution for the open period can't be approved (the period
- * is already filled, or this would pass it), or null. The server refuses it too. `left` is what the
- * approved amounts leave; `waiting` is the member's other pending payments that still fit, taken in
- * review order (R-SUB-05); `sendable` is what's left after those, the same cap the member's pay form
- * will show once this one is denied.
+ * A slot's standing in the open period, plus what can still be reported for it (R-SUB-06). Under
+ * the room rule (R-DEC-29), `waiting` is everything that holds room until reviewed: pending payments
+ * and the increases pending corrections ask for.
  */
-export function overfill(detail: GroupDetail, payment: SubmissionView, name: string) {
-  if (payment.type !== "CONTRIBUTION" || payment.round !== detail.period?.number) return null;
-  const standing = detail.period?.slots.find((s) => s.slotId === payment.slotId);
-  if (!standing) return null;
-  const error = contributionApprovalError(name, payment.amount, standing.approved, standing.due);
-  if (!error) return null;
-  const left = Math.max(0, standing.due - standing.approved);
-  const others = reviewQueue(detail).filter(
-    (s) => s.slotId === payment.slotId && s.round === payment.round && s.type === payment.type && s.id !== payment.id,
-  );
-  return { error, left, ...leftAfterPending(left, others.map((s) => s.amount)) };
-}
-
-/** A slot's standing in the open period, plus what can still be reported for it (R-SUB-06). */
 export function standingOf(detail: GroupDetail, slotId: string) {
   const standing = detail.period?.slots.find((s) => s.slotId === slotId);
   if (!standing) return null;
-  return { ...standing, reportable: submissionCap(standing.due, standing.approved, standing.pending) };
+  const waiting = standing.pending + standing.pendingIncrease;
+  return { ...standing, waiting, reportable: submissionCap(standing.due, standing.approved, waiting) };
 }
 
 export function owedBy(detail: GroupDetail, slotId: string) {

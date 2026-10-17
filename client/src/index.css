@@ -79,6 +79,9 @@
 
   --animate-pop: pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
   --animate-rise: rise 0.4s ease-out both;
+  --animate-slide-in: slide-in 0.3s ease-out both;
+  --animate-carousel-out: carousel-out 0.6s ease-in both;
+  --animate-carousel-in: carousel-in 0.6s ease-out both;
   --animate-confetti: confetti 2.4s ease-in both;
 
   @keyframes pop {
@@ -88,6 +91,19 @@
   @keyframes rise {
     0% { transform: translateY(8px); opacity: 0; }
     100% { transform: translateY(0); opacity: 1; }
+  }
+  @keyframes slide-in {
+    0% { transform: translateX(16px); opacity: 0; }
+    100% { transform: translateX(0); opacity: 1; }
+  }
+  /* A decided card holds its stamp for a moment, then leaves left as the next one comes in from the right. */
+  @keyframes carousel-out {
+    0%, 35% { transform: translateX(0); opacity: 1; }
+    100% { transform: translateX(-70%); opacity: 0; }
+  }
+  @keyframes carousel-in {
+    0%, 35% { transform: translateX(70%); opacity: 0; }
+    100% { transform: translateX(0); opacity: 1; }
   }
   @keyframes confetti {
     0% { transform: translateY(0) rotate(0deg); opacity: 1; }

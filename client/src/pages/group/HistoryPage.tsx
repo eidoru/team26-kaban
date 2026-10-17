@@ -32,13 +32,12 @@ export function HistoryPage() {
     <div className="space-y-6">
       <div>
         {/* Reached from Money & records, which the view navigation highlights. */}
-        <Link to={`/groups/${id}/money`} className={`${ui.btnGhost} mb-4`}>
+        <Link to={`/groups/${id}/money`} className={ui.btnGhost}>
           <ArrowLeft className="h-4 w-4" aria-hidden />
           Money &amp; records
         </Link>
-        <h2 className={ui.sectionHeading}>Your history</h2>
         {data?.claimedAt && (
-          <p className="mt-2 rounded-2xl bg-sky-50 px-4 py-3 text-sm text-sky-900">
+          <p className="mt-4 rounded-2xl bg-sky-50 px-4 py-3 text-sm text-sky-900">
             You claimed this slot on {new Date(data.claimedAt).toLocaleDateString()}. Earlier records came with it and are marked
             inherited.
           </p>

@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { ArrowLeftRight } from "lucide-react";
 import type { GroupDetail, SlotView, SwapView } from "../../../api/client";
 import { Avatar } from "../../../components/Avatar";
 import { Sheet } from "../../../components/flow/Sheet";
+import { SheetDone } from "../../../components/flow/SheetDone";
 import { formatDueDate } from "../../../lib/dates";
 import { ui } from "../../../lib/ui";
 import { OPEN_SWAP, speaksFor, swapRequestBlocker, turnOf } from "./swaps";
@@ -51,9 +53,47 @@ export function SwapSheet({
   onManageSlot?: (slot: SlotView) => void;
 }) {
   if (!slot) return null;
+  return (
+    <SwapForm
+      key={slot.id}
+      detail={detail}
+      slot={slot}
+      pending={pending}
+      onClose={onClose}
+      onRequest={onRequest}
+      onManageSlot={onManageSlot}
+    />
+  );
+}
+
+function SwapForm({
+  detail,
+  slot,
+  pending,
+  onClose,
+  onRequest,
+  onManageSlot,
+}: {
+  detail: GroupDetail;
+  slot: SlotView;
+  pending: string | null;
+  onClose: () => void;
+  onRequest: (slot: SlotView) => Promise<boolean>;
+  onManageSlot?: (slot: SlotView) => void;
+}) {
+  // Once asked, say so instead of closing on the spot.
+  const [asked, setAsked] = useState(false);
   const blocker = swapRequestBlocker(detail, slot.id);
   const organizerDecides = !detail.viewer.isOrganizer && !slot.isOrganizer && slot.kind !== "PLACEHOLDER";
   const answerer = slot.kind === "PLACEHOLDER" ? detail.group.organizerName : slot.name;
+  if (asked) {
+    return (
+      <SheetDone title={`Asked ${answerer}`} onClose={onClose}>
+        {answerer} gets to say yes or no first.
+        {organizerDecides ? ` Then ${detail.group.organizerName} approves it.` : ""} You&apos;ll be told either way.
+      </SheetDone>
+    );
+  }
   return (
     <Sheet
       open
@@ -62,7 +102,7 @@ export function SwapSheet({
       footer={
         <button
           type="button"
-          onClick={() => void onRequest(slot).then((done) => done && onClose())}
+          onClick={() => void onRequest(slot).then((done) => done && setAsked(true))}
           disabled={!!blocker || pending === "swap"}
           className={`${ui.btnPrimaryFull} min-h-11`}
         >
