@@ -41,6 +41,7 @@ import { PayoutSchedule } from "./PayoutSchedule";
 import { currentOrder } from "./slots";
 import { PaySheet, type PayMode } from "./active/PaySheet";
 import { PayoutSheet } from "./active/PayoutSheet";
+import { WhoPaidSheet } from "./active/WhoPaidSheet";
 import { debtReportable, owedBy, payoutsToActOnFor, reviewItems, standingOf, type ReviewItem } from "./active/period";
 import { MyPayments, PayoutStageCard, PeriodCard, PeriodStatusList } from "./active/PeriodSections";
 import { DebtsView } from "./debts/DebtSections";
@@ -98,6 +99,8 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
   const [swapWithSlotId, setSwapWithSlotId] = useState<string | null>(null);
   // Open on the whole queue (true), or on one item from the Debts view (its review key).
   const [reviewOpen, setReviewOpen] = useState<boolean | string>(false);
+  // The Dashboard's "Record payments" with more than one placeholder to record: who paid first.
+  const [pickingRecord, setPickingRecord] = useState(false);
   const [demoTools] = useDemoToolsSetting();
   const selectedSlot = detail.slots.find((s) => s.id === selectedSlotId) ?? null;
 
@@ -273,6 +276,8 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
   // --- The viewer's next step (design rule: it comes first), and the one main action.
   let now: ReactNode;
   let primary: ReactNode = null;
+  /** Placeholders with this round's contribution still to record, for the Record task and its picker. */
+  let toRecord: { slot: SlotView; owes: number }[] = [];
   if (group.state === "LOBBY" && isOrganizer) {
     const blockers = detail.launch?.blockers ?? [];
     if (!full) {
@@ -458,11 +463,11 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
     }
     if (isOrganizer && period) {
       // Placeholders pay the organizer outside the app; the organizer records it for them (R-SUB-02).
-      // One task for all of them; it opens the first, and the list shrinks as they're recorded.
-      const toRecord = detail.slots
+      // One task for all of them; with more than one it asks who paid, and the list shrinks as they're recorded.
+      toRecord = detail.slots
         .filter((s) => s.kind === "PLACEHOLDER")
-        .map((slot) => ({ slot, standing: standingOf(detail, slot.id) }))
-        .filter((x) => x.standing && x.standing.reportable > 0);
+        .map((slot) => ({ slot, owes: standingOf(detail, slot.id)?.reportable ?? 0 }))
+        .filter((x) => x.owes > 0);
       if (toRecord.length > 0) {
         const [first] = toRecord;
         const names = toRecord.map((x) => x.slot.name);
@@ -472,10 +477,13 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
           icon: HandCoins,
           title:
             toRecord.length === 1
-              ? `Record ${first.slot.name}'s ${formatPeso(first.standing!.reportable)}`
+              ? `Record ${first.slot.name}'s ${formatPeso(first.owes)}`
               : `Record payments for ${listed}`,
           detail: `${toRecord.length === 1 ? "A placeholder" : "Placeholders"}: record once they've paid you.`,
-          action: { label: "Record", onClick: () => pay(first.slot.id, "CONTRIBUTION") },
+          action: {
+            label: "Record",
+            onClick: () => (toRecord.length === 1 ? pay(first.slot.id, "CONTRIBUTION") : setPickingRecord(true)),
+          },
         });
       }
       // Late payers, once the reminder window opens (§12): one button reminds everyone not reminded today.
@@ -776,6 +784,15 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
           onAddPlaceholder={async (input) => !!(await run("placeholder", () => api.addPlaceholder(group.id, input)))}
         />
       )}
+      <WhoPaidSheet
+        open={pickingRecord}
+        rows={toRecord}
+        onClose={() => setPickingRecord(false)}
+        onPick={(slot) => {
+          setPickingRecord(false);
+          pay(slot.id, "CONTRIBUTION");
+        }}
+      />
       <PaySheet
         detail={detail}
         target={

@@ -1,12 +1,12 @@
 import { useState } from "react";
-import { ChevronRight, CircleCheck } from "lucide-react";
+import { CircleCheck } from "lucide-react";
 import type { GroupDetail, SlotView, SubmissionView } from "../../../api/client";
 import { Avatar } from "../../../components/Avatar";
 import { ActionBar } from "../../../components/flow/ActionBar";
-import { Sheet } from "../../../components/flow/Sheet";
 import { formatPeso } from "../../../lib/money";
 import { ui } from "../../../lib/ui";
 import { debtReportable, owedBy, pendingTowardDebt } from "../active/period";
+import { WhoPaidSheet } from "../active/WhoPaidSheet";
 
 interface DebtRow {
   slot: SlotView;
@@ -129,7 +129,7 @@ export function DebtsView({
       )}
       <WhoPaidSheet
         open={picking}
-        rows={recordable}
+        rows={recordable.map((r) => ({ slot: r.slot, owes: r.owed }))}
         onClose={() => setPicking(false)}
         onPick={(slot) => {
           setPicking(false);
@@ -218,39 +218,5 @@ function DebtGrid({ rows }: { rows: DebtRow[] }) {
         )}
       </table>
     </div>
-  );
-}
-
-/** "Record a debt payment" with more than one placeholder owing: who paid, then the pay sheet. */
-function WhoPaidSheet({
-  open,
-  rows,
-  onClose,
-  onPick,
-}: {
-  open: boolean;
-  rows: DebtRow[];
-  onClose: () => void;
-  onPick: (slot: SlotView) => void;
-}) {
-  return (
-    <Sheet open={open} onClose={onClose} title="Who paid you?" subtitle="Placeholders pay you outside the app.">
-      <ul className="divide-y divide-ink-100 overflow-hidden rounded-3xl border border-ink-200 bg-white">
-        {rows.map(({ slot, owed }) => (
-          <li key={slot.id}>
-            <button
-              type="button"
-              onClick={() => onPick(slot)}
-              className="flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-ink-50"
-            >
-              <Avatar name={slot.name} size="md" placeholder />
-              <span className="min-w-0 flex-1 truncate text-sm font-bold text-ink-900">{slot.name}</span>
-              <span className="shrink-0 text-sm tabular-nums text-ink-600">owes {formatPeso(owed)}</span>
-              <ChevronRight className="h-4 w-4 shrink-0 text-ink-400" aria-hidden />
-            </button>
-          </li>
-        ))}
-      </ul>
-    </Sheet>
   );
 }
