@@ -3,6 +3,7 @@ import { roundHealth } from "../domain/health.js";
 import { outstanding } from "../domain/debt.js";
 import { processPayout } from "../domain/payout.js";
 import { daysBetween } from "../domain/schedule.js";
+import { submissionCap } from "../domain/submissions.js";
 import { frequencyLabel } from "../domain/setup.js";
 import { forbidden, notFound } from "../lib/errors.js";
 import { prisma } from "../lib/prisma.js";
@@ -163,7 +164,8 @@ export async function homeDashboard(userId: string) {
     const contribution = Number(group.contribution);
     const open = group.rounds.find((r) => r.status === "OPEN");
     const standing = open ? await periodTotals(prisma, slot.id, open.id) : null;
-    const reportable = standing ? Math.max(0, contribution - standing.approved - standing.pending) : 0;
+    // R-SUB-06 / R-DEC-29: pending corrections hold their increases, as in the pay form.
+    const reportable = standing ? submissionCap(contribution, standing.approved, standing.pending + standing.pendingIncrease) : 0;
     const owed = outstanding(debtOf(slot));
     const myRound = group.rounds.find((r) => r.recipientSlotId === slot.id);
 
