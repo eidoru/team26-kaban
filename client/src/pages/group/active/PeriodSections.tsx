@@ -401,34 +401,3 @@ function DisputeLine({
     </div>
   );
 }
-
-/** R-DSP-03 / R-DEC-14: refunds the organizer owes, recorded only. Hidden when there are none. */
-export function RefundsOwed({ detail }: { detail: GroupDetail }) {
-  const refunds = detail.disputes.filter((d) => d.refund);
-  if (!detail.viewer.isOrganizer || refunds.length === 0) return null;
-  return (
-    <section aria-labelledby="refunds-heading">
-      <h2 id="refunds-heading" className={ui.sectionHeading}>
-        Refunds you owe
-      </h2>
-      <p className={`${ui.sectionSubtitle} mb-3`}>From approved problem reports. Hand these back outside the app.</p>
-      <ul className="divide-y divide-ink-100 overflow-hidden rounded-3xl border border-ink-200 bg-white">
-        {refunds.map((d) => {
-          const slot = detail.slots.find((s) => s.id === d.slotId);
-          return (
-            <li key={d.id} className="flex items-center gap-3 px-4 py-3">
-              <Avatar name={slot?.name} size="md" placeholder={slot?.kind === "PLACEHOLDER"} />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-bold text-ink-900">{slot?.name}</span>
-                <span className="block text-xs text-ink-500">
-                  Round {d.round}: {formatPeso(d.previousAmount)} corrected to {formatPeso(d.proposedAmount)}
-                </span>
-              </span>
-              <span className="font-heading text-base font-bold tabular-nums text-ink-900">{formatPeso(d.refund!)}</span>
-            </li>
-          );
-        })}
-      </ul>
-    </section>
-  );
-}

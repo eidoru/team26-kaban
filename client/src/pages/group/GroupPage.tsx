@@ -42,7 +42,8 @@ import { currentOrder } from "./slots";
 import { PaySheet, type PayMode } from "./active/PaySheet";
 import { PayoutSheet } from "./active/PayoutSheet";
 import { debtReportable, owedBy, payoutsToActOnFor, reviewItems, standingOf, type ReviewItem } from "./active/period";
-import { MyPayments, PayoutStageCard, PeriodCard, PeriodStatusList, RefundsOwed } from "./active/PeriodSections";
+import { MyPayments, PayoutStageCard, PeriodCard, PeriodStatusList } from "./active/PeriodSections";
+import { DebtsView } from "./debts/DebtSections";
 import { DisputeSheet } from "./active/DisputeSheet";
 import { SwapSheet, SwapsList } from "./swaps/SwapSections";
 import { Recap } from "./records/RecordsSections";
@@ -52,12 +53,12 @@ import { ReviewSheet } from "./active/ReviewSheet";
 import { MembersList, SlotsList } from "./SlotsList";
 import { STATE_LABELS, useGroupShell } from "./groupShell";
 
-/** Only end states get a label; while it's being set up or runs, the page itself shows the state. */
-export type GroupViewName = "dashboard" | "schedule" | "members";
+/** The views of a launched paluwagan, one per GroupShell tab that GroupPage renders. */
+export type GroupViewName = "dashboard" | "schedule" | "members" | "debts";
 
 /**
  * One paluwagan, inside GroupShell (which loads it). Before launch it's a single page; after,
- * `view` picks Dashboard, Schedule or Members, and the sheets are shared by all three.
+ * `view` picks Dashboard, Schedule, Members or Debts, and the sheets are shared by all of them.
  */
 export function GroupPage({ view = "dashboard" }: { view?: GroupViewName }) {
   const { detail, navMode } = useGroupShell();
@@ -95,7 +96,8 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
   const [payoutRound, setPayoutRound] = useState<number | null>(null);
   const [disputeForId, setDisputeForId] = useState<string | null>(null);
   const [swapWithSlotId, setSwapWithSlotId] = useState<string | null>(null);
-  const [reviewOpen, setReviewOpen] = useState(false);
+  // Open on the whole queue (true), or on one item from the Debts view (its review key).
+  const [reviewOpen, setReviewOpen] = useState<boolean | string>(false);
   const [demoTools] = useDemoToolsSetting();
   const selectedSlot = detail.slots.find((s) => s.id === selectedSlotId) ?? null;
 
@@ -614,14 +616,14 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
             <h1 className={ui.pageTitle}>{group.name}</h1>
           </header>
           {now}
-      {error && (
-        <p className={ui.error} role="alert">
-          {error.message}{" "}
-          <button type="button" onClick={clearError} className="underline">
-            Dismiss
-          </button>
-        </p>
-      )}
+          {error && (
+            <p className={ui.error} role="alert">
+              {error.message}{" "}
+              <button type="button" onClick={clearError} className="underline">
+                Dismiss
+              </button>
+            </p>
+          )}
           {/* Once everyone has a turn, the schedule lists every member too, so it replaces the member list. */}
           {!ordered && (
             <SlotsList
@@ -643,14 +645,14 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
       ) : view === "schedule" ? (
         // Schedule: the order and when, and the swaps that change it.
         <>
-      {error && (
-        <p className={ui.error} role="alert">
-          {error.message}{" "}
-          <button type="button" onClick={clearError} className="underline">
-            Dismiss
-          </button>
-        </p>
-      )}
+          {error && (
+            <p className={ui.error} role="alert">
+              {error.message}{" "}
+              <button type="button" onClick={clearError} className="underline">
+                Dismiss
+              </button>
+            </p>
+          )}
           {schedule}
           <SwapsList
             detail={detail}
@@ -664,20 +666,33 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
           />
         </>
       ) : view === "members" ? (
-        // Members: everyone once, with what they owe and what you can do for them.
+        // Members: everyone once, by name; the organizer can invite a placeholder's person.
         <>
-      {error && (
-        <p className={ui.error} role="alert">
-          {error.message}{" "}
-          <button type="button" onClick={clearError} className="underline">
-            Dismiss
-          </button>
-        </p>
-      )}
-          <MembersList
+          {error && (
+            <p className={ui.error} role="alert">
+              {error.message}{" "}
+              <button type="button" onClick={clearError} className="underline">
+                Dismiss
+              </button>
+            </p>
+          )}
+          <MembersList detail={detail} onInvite={(slot) => setSelectedSlotId(slot.id)} />
+        </>
+      ) : view === "debts" ? (
+        // Debts: who owes what, by round; paying, recording and reviewing are in its bottom bar.
+        <>
+          {error && (
+            <p className={ui.error} role="alert">
+              {error.message}{" "}
+              <button type="button" onClick={clearError} className="underline">
+                Dismiss
+              </button>
+            </p>
+          )}
+          <DebtsView
             detail={detail}
-            onPayDebt={(slot) => pay(slot.id, "DEBT_PAYMENT")}
-            onInvite={(slot) => setSelectedSlotId(slot.id)}
+            onPay={(slot) => pay(slot.id, "DEBT_PAYMENT")}
+            onReview={(submission) => setReviewOpen(`payment-${submission.id}`)}
           />
         </>
       ) : (
@@ -714,7 +729,6 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
             )}
             {/* Members have their payout in "You"; the organizer's turn card stays unless it's this round. */}
             {isOrganizer && stats && stats.myTurn?.round !== detail.period?.number && <YourTurn detail={detail} stats={stats} />}
-            <RefundsOwed detail={detail} />
             <MyPayments
               detail={detail}
               pending={pending}
@@ -794,7 +808,10 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
       />
       {isOrganizer && (
         <ReviewSheet
-          open={reviewOpen}
+          // A new key per entry point, so a focused open starts on its item.
+          key={typeof reviewOpen === "string" ? reviewOpen : "queue"}
+          open={reviewOpen !== false}
+          initialKey={typeof reviewOpen === "string" ? reviewOpen : null}
           detail={detail}
           pending={pending}
           onClose={() => setReviewOpen(false)}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { computeAmounts } from "./amounts.js";
-import { addDebt, applyRepayment, NO_DEBT, outstanding, type DebtState } from "./debt.js";
+import { addDebt, applyRepayment, debtBreakdown, NO_DEBT, outstanding, type DebtState } from "./debt.js";
 import { canTransition, can } from "./lifecycle.js";
 import { formatPeso, interestOn, pesos, rateFromPercent } from "./money.js";
 import { processPayout, type PayoutResult } from "./payout.js";
@@ -130,6 +130,28 @@ describe("debt (§8)", () => {
     expect(paid.toPrincipal).toBe(pesos(87.5));
     expect(paid.debt).toEqual({ principal: pesos(912.5), interest: 0 });
     expect(applyRepayment(paid.debt, pesos(1_000)).excess).toBe(pesos(87.5));
+  });
+});
+
+describe("debt breakdown by round", () => {
+  it("groups what each round added and keeps repayments and deductions apart (R-DBT-01/03/05)", () => {
+    const breakdown = debtBreakdown([
+      { kind: "SHORTFALL_COVERED", round: 1, principalDelta: pesos(1_000), interestDelta: pesos(12.5) },
+      { kind: "REPAYMENT", round: null, principalDelta: -pesos(487.5), interestDelta: -pesos(12.5) },
+      { kind: "INTEREST_CHARGED", round: 2, principalDelta: 0, interestDelta: pesos(6.41) },
+      { kind: "SHORTFALL_COVERED", round: 2, principalDelta: pesos(500), interestDelta: pesos(6.25) },
+      { kind: "PAYOUT_DEDUCTION", round: 3, principalDelta: -pesos(200), interestDelta: -pesos(12.66) },
+    ]);
+    expect(breakdown.rounds).toEqual([
+      { round: 1, shortfall: pesos(1_000), interest: pesos(12.5) },
+      { round: 2, shortfall: pesos(500), interest: pesos(12.66) },
+    ]);
+    expect(breakdown.repaid).toBe(pesos(500));
+    expect(breakdown.deducted).toBe(pesos(212.66));
+  });
+
+  it("is empty with no debt", () => {
+    expect(debtBreakdown([])).toEqual({ rounds: [], repaid: 0, deducted: 0 });
   });
 });
 

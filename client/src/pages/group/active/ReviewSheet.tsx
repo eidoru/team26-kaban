@@ -19,10 +19,12 @@ const keyOf = (review: ReviewItem) => `${review.kind}-${review.item.id}`;
  * of everything waiting; a row opens that item with its proof (or "No proof attached", R-SUB-08)
  * and what approving changes, and after a decision the list comes back, shorter. With a single
  * item it opens straight on it. One member's payments still go in the order they came in
- * (R-SUB-05), so a later one waits for the earlier.
+ * (R-SUB-05), so a later one waits for the earlier. `initialKey` opens it on one item instead, and
+ * it closes once that item is decided.
  */
 export function ReviewSheet({
   open,
+  initialKey = null,
   detail,
   pending,
   onClose,
@@ -30,6 +32,7 @@ export function ReviewSheet({
   onDeny,
 }: {
   open: boolean;
+  initialKey?: string | null;
   detail: GroupDetail;
   pending: string | null;
   onClose: () => void;
@@ -37,7 +40,7 @@ export function ReviewSheet({
   onDeny: (review: ReviewItem, reason: string) => Promise<boolean>;
 }) {
   const queue = reviewItems(detail);
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [selectedKey, setSelectedKey] = useState<string | null>(initialKey);
   const [denying, setDenying] = useState(false);
   const [reason, setReason] = useState("");
   const select = (key: string | null) => {
@@ -117,12 +120,14 @@ export function ReviewSheet({
     ? queue.find((q) => q.kind === "payment" && q.item.slotId === current.item.slotId && q.item.submittedAt < current.item.submittedAt)
     : undefined;
 
+  // Opened on one item: back to where it was opened from. Otherwise the list, one shorter.
+  const done = () => (initialKey ? close() : select(null));
   async function deny() {
     if (!current || !reason.trim() || reasonError) return;
-    if (await onDeny(current, reason.trim())) select(null);
+    if (await onDeny(current, reason.trim())) done();
   }
   async function approve() {
-    if (current && (await onApprove(current))) select(null);
+    if (current && (await onApprove(current))) done();
   }
 
   const title = isDispute

@@ -48,3 +48,45 @@ export function applyRepayment(debt: DebtState, amount: Centavos) {
     excess: amount - toInterest - toPrincipal,
   };
 }
+
+/** One recorded change to a slot's debt: a DebtEntry, as the breakdown needs it. */
+export interface DebtChange {
+  kind: "SHORTFALL_COVERED" | "INTEREST_CHARGED" | "REPAYMENT" | "PAYOUT_DEDUCTION";
+  /** The round whose payout made the change; repayments have none. */
+  round: number | null;
+  principalDelta: Centavos;
+  interestDelta: Centavos;
+}
+
+/** What a slot's debt is made of, by the round that added it, and what has come off it. */
+export interface DebtBreakdown {
+  /** Rounds that added to the debt, oldest first: the shortfall covered (R-DBT-01) and interest charged (R-DBT-02/03). */
+  rounds: { round: number; shortfall: Centavos; interest: Centavos }[];
+  /** Paid back through debt payments and late contributions (R-DBT-04, R-DBT-06). */
+  repaid: Centavos;
+  /** Taken from the slot's own payout (R-PAY-03). */
+  deducted: Centavos;
+}
+
+/**
+ * Groups a slot's debt changes by round, so the organizer sees what each round added. Repayments
+ * aren't assigned to rounds: they go to interest first, then principal (R-DBT-05), not to a round.
+ * Sum of the rounds less `repaid` and `deducted` is what's owed now.
+ */
+export function debtBreakdown(changes: DebtChange[]): DebtBreakdown {
+  const byRound = new Map<number, { round: number; shortfall: Centavos; interest: Centavos }>();
+  let repaid = 0;
+  let deducted = 0;
+  for (const c of changes) {
+    const total = c.principalDelta + c.interestDelta;
+    if (c.kind === "REPAYMENT") repaid -= total;
+    else if (c.kind === "PAYOUT_DEDUCTION") deducted -= total;
+    else if (c.round !== null) {
+      const row = byRound.get(c.round) ?? { round: c.round, shortfall: 0, interest: 0 };
+      row.shortfall += c.principalDelta;
+      row.interest += c.interestDelta;
+      byRound.set(c.round, row);
+    }
+  }
+  return { rounds: [...byRound.values()].sort((a, b) => a.round - b.round), repaid, deducted };
+}

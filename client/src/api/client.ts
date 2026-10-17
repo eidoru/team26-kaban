@@ -79,8 +79,18 @@ export interface SlotView {
   contact: string | null;
   /** Live claim link, organizer only. */
   claimLink: { url: string; createdAt: string } | null;
-  /** What this slot owes the organizer (§8), in centavos. Everyone sees everyone's (R-DEC-06). */
-  debt: { principal: number; interest: number };
+  /**
+   * What this slot owes the organizer (§8), in centavos. Everyone sees everyone's (R-DEC-06).
+   * `rounds` is what each round's payout added; the rounds less `repaid` and `deducted` (taken
+   * from their payout) is what's owed now.
+   */
+  debt: {
+    principal: number;
+    interest: number;
+    rounds: { round: number; shortfall: number; interest: number }[];
+    repaid: number;
+    deducted: number;
+  };
 }
 
 /** A processed payout (§7). Amounts in centavos. */

@@ -1,5 +1,6 @@
 import type { Group } from "@prisma/client";
 import { canTransition } from "../domain/lifecycle.js";
+import { debtBreakdown } from "../domain/debt.js";
 import { buildSchedule } from "../domain/schedule.js";
 import {
   earliestStartDate,
@@ -202,6 +203,30 @@ export async function groupDetail(groupId: string, viewerUserId: string, appOrig
   const settings = settingsOf(group);
   const today = todayInManila();
 
+  // Every debt change, so each slot's debt can show what each round added (only after launch),
+  // fetched alongside the open period.
+  const [debtEntries, period] = await Promise.all([
+    group.rounds.length > 0
+      ? prisma.debtEntry.findMany({
+          where: { groupId },
+          orderBy: { createdAt: "asc" },
+          select: { slotId: true, kind: true, principalDelta: true, interestDelta: true, round: { select: { number: true } } },
+        })
+      : [],
+    openPeriodView(prisma, groupId, settings.contribution),
+  ]);
+  const breakdownOf = (slotId: string) =>
+    debtBreakdown(
+      debtEntries
+        .filter((e) => e.slotId === slotId)
+        .map((e) => ({
+          kind: e.kind,
+          round: e.round?.number ?? null,
+          principalDelta: Number(e.principalDelta),
+          interestDelta: Number(e.interestDelta),
+        })),
+    );
+
   const slots = group.slots.map((slot) => ({
     id: slot.id,
     kind: slot.userId ? ("MEMBER" as const) : ("PLACEHOLDER" as const),
@@ -211,7 +236,7 @@ export async function groupDetail(groupId: string, viewerUserId: string, appOrig
     position: slot.position,
     claimedAt: slot.claimedAt?.toISOString() ?? null,
     /** What this slot owes the organizer (§8). Everyone sees everyone's (R-DEC-06). */
-    debt: { principal: Number(slot.debtPrincipal), interest: Number(slot.debtInterest) },
+    debt: { principal: Number(slot.debtPrincipal), interest: Number(slot.debtInterest), ...breakdownOf(slot.id) },
     contact: isOrganizer && !slot.userId ? slot.placeholderContact : null,
     claimLink:
       isOrganizer && !slot.userId && slot.claimLinks[0]
@@ -234,7 +259,6 @@ export async function groupDetail(groupId: string, viewerUserId: string, appOrig
           (r) => ({ ...r, recipientSlotId: bySlotPosition.get(r.number) ?? null, status: "UPCOMING" as const }),
         );
 
-  const period = await openPeriodView(prisma, groupId, settings.contribution);
   const viewerScope = { userId: viewerUserId, slotId: viewer.id, isOrganizer };
   const started = !(group.state === "LOBBY" || group.state === "LAUNCHED" || group.state === "CANCELLED");
   const submissions = !started

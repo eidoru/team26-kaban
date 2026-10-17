@@ -57,6 +57,7 @@ export function App() {
                 <Route index element={<GroupPage view="dashboard" />} />
                 <Route path="schedule" element={<GroupPage view="schedule" />} />
                 <Route path="members" element={<GroupPage view="members" />} />
+                <Route path="debts" element={<GroupPage view="debts" />} />
                 <Route path="money" element={<MoneyRecordsPage />} />
                 <Route path="activity" element={<ActivityPage />} />
                 <Route path="history" element={<HistoryPage />} />

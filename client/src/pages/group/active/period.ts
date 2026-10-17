@@ -21,20 +21,29 @@ export function owedBy(detail: GroupDetail, slotId: string) {
 }
 
 /**
- * What can still be reported toward a slot's debt (R-SUB-06 applied to debt): what it owes, less
- * pending money that will land on the debt (debt payments, and contributions for closed periods).
+ * Pending submissions that will land on a slot's debt once approved: debt payments, and
+ * contributions for closed periods (R-DBT-06). Oldest first, the order they're reviewed in (R-SUB-05).
  */
-export function debtReportable(detail: GroupDetail, slotId: string) {
+export function pendingTowardDebt(detail: GroupDetail, slotId: string) {
   const openRound = detail.period?.number ?? null;
-  const pending = detail.submissions
-    .filter(
-      (s) =>
-        s.slotId === slotId &&
-        s.status === "PENDING" &&
-        (s.type === "DEBT_PAYMENT" || (s.round !== null && s.round !== openRound)),
-    )
-    .reduce((total, s) => total + s.amount, 0);
+  return reviewQueue(detail).filter(
+    (s) => s.slotId === slotId && (s.type === "DEBT_PAYMENT" || (s.round !== null && s.round !== openRound)),
+  );
+}
+
+/** What can still be reported toward a slot's debt (R-SUB-06 applied to debt): what it owes, less what's pending. */
+export function debtReportable(detail: GroupDetail, slotId: string) {
+  const pending = pendingTowardDebt(detail, slotId).reduce((total, s) => total + s.amount, 0);
   return submissionCap(owedBy(detail, slotId), 0, pending);
+}
+
+/**
+ * The Debts view has something to show: someone owes, a payment toward a debt is in review, or
+ * (for the organizer) a refund is owed back (R-DSP-03).
+ */
+export function hasDebtsView(detail: GroupDetail) {
+  const owing = detail.slots.some((s) => owedBy(detail, s.id) > 0 || pendingTowardDebt(detail, s.id).length > 0);
+  return owing || (detail.viewer.isOrganizer && detail.disputes.some((d) => d.refund));
 }
 
 /** Payouts this viewer has to act on, oldest first: hand over (organizer), or confirm receipt (recipient). */

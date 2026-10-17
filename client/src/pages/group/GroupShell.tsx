@@ -1,16 +1,17 @@
 import { Link, NavLink, Outlet, useLocation, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { Activity, CalendarDays, CloudOff, LayoutDashboard, Users, Wallet, type LucideIcon } from "lucide-react";
+import { Activity, CalendarDays, CloudOff, HandCoins, LayoutDashboard, Users, Wallet, type LucideIcon } from "lucide-react";
 import { ApiError, type GroupDetail } from "../../api/client";
 import { groupKey, useGroup } from "../../lib/groupQueries";
 import { ui } from "../../lib/ui";
 import { useGroupRealtime } from "../../lib/useGroupRealtime";
+import { hasDebtsView } from "./active/period";
 import { hasViews, STATE_LABELS, type GroupShellContext } from "./groupShell";
 
 /**
  * Every page of one paluwagan. Loads the group (live, with polling as the fallback), handles the
  * missing and failed cases once, and after launch adds the header and the view navigation:
- * Dashboard · Schedule · Members · Money & records · Activity. The lobby stays a single page.
+ * Dashboard · Schedule · Members · Debts · Money & records · Activity. The lobby stays a single page.
  */
 export function GroupShell() {
   const { id = "" } = useParams<{ id: string }>();
@@ -105,6 +106,10 @@ function GroupNav({ detail }: { detail: GroupDetail }) {
     { to: base, label: "Dashboard", short: "Dashboard", icon: LayoutDashboard },
     { to: `${base}/schedule`, label: "Schedule", short: "Schedule", icon: CalendarDays },
     { to: `${base}/members`, label: "Members", short: "Members", icon: Users },
+    // Only while there's a debt or refund to show or act on.
+    ...(hasDebtsView(detail) || pathname === `${base}/debts`
+      ? [{ to: `${base}/debts`, label: "Debts", short: "Debts", icon: HandCoins }]
+      : []),
     ...(started
       ? [{ to: `${base}/money`, label: "Money & records", short: "Money", icon: Wallet, also: [`${base}/history`] }]
       : []),
@@ -113,7 +118,7 @@ function GroupNav({ detail }: { detail: GroupDetail }) {
   return (
     <nav aria-label="Paluwagan" className="lg:sticky lg:top-24">
       <ul
-        className="grid gap-1 sm:flex sm:flex-wrap sm:gap-2 lg:flex-col lg:flex-nowrap lg:gap-1"
+        className={`grid ${items.length > 5 ? "gap-0" : "gap-1"} sm:flex sm:flex-wrap sm:gap-2 lg:flex-col lg:flex-nowrap lg:gap-1`}
         style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` }}
       >
         {items.map((item) => (
@@ -124,7 +129,8 @@ function GroupNav({ detail }: { detail: GroupDetail }) {
               aria-label={item.label}
               className={({ isActive }) => {
                 const active = isActive || (item.also ?? []).includes(pathname);
-                return `flex min-h-14 flex-col items-center justify-center gap-1 rounded-2xl px-1 text-[11px] font-bold transition-colors sm:min-h-11 sm:flex-row sm:gap-2 sm:rounded-full sm:px-4 sm:text-sm lg:justify-start lg:rounded-2xl ${
+                // Six tabs (with Debts) need the smaller size, and no gap, for "Dashboard" to fit at 390px.
+                return `flex min-h-14 flex-col items-center justify-center gap-1 rounded-2xl px-0.5 ${items.length > 5 ? "text-[11px]" : "text-xs"} font-bold transition-colors sm:min-h-11 sm:flex-row sm:gap-2 sm:rounded-full sm:px-4 sm:text-sm lg:justify-start lg:rounded-2xl ${
                   active ? "bg-brand-100 text-brand-800" : "text-ink-600 hover:bg-ink-100 hover:text-ink-900"
                 }`;
               }}
