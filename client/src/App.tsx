@@ -26,7 +26,6 @@ const EditGroupPage = lazy(() =>
 );
 const ActivityPage = lazy(() => import("./pages/group/ActivityPage").then((m) => ({ default: m.ActivityPage })));
 const HistoryPage = lazy(() => import("./pages/group/HistoryPage").then((m) => ({ default: m.HistoryPage })));
-const MoneyPage = lazy(() => import("./pages/MoneyPage").then((m) => ({ default: m.MoneyPage })));
 const InvitePage = lazy(() => import("./pages/join/InvitePage").then((m) => ({ default: m.InvitePage })));
 const ClaimPage = lazy(() => import("./pages/join/ClaimPage").then((m) => ({ default: m.ClaimPage })));
 
@@ -48,9 +47,9 @@ export function App() {
               <Route path="/home" element={<HomePage />} />
               <Route path="/profile" element={<ProfilePage />} />
               <Route path="/notifications" element={<NotificationsPage />} />
-              <Route path="/money" element={<MoneyPage />} />
+              <Route path="/money" element={<Navigate to="/home" replace />} />
               {/* Old "Owed to you" address, kept for bookmarks and older notifications. */}
-              <Route path="/manager/obligations" element={<Navigate to="/money" replace />} />
+              <Route path="/manager/obligations" element={<Navigate to="/home" replace />} />
               <Route path="/groups/new" element={<CreateGroupPage />} />
               {/* One paluwagan: the shell loads it and, once launched, adds the view navigation. */}
               <Route path="/groups/:id" element={<GroupShell />}>

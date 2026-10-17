@@ -138,10 +138,7 @@ export async function slotHistory(groupId: string, viewerUserId: string, slotId?
   };
 }
 
-/**
- * §15.2: the member's home across every paluwagan: what's due soon, what's waiting on them, each
- * group's standing, their payouts, and money totals (also the Money page).
- */
+/** §15.2: the member's home across every paluwagan: what's due soon, what's waiting on them, each group's standing. */
 export async function homeDashboard(userId: string) {
   const mySlots = await prisma.slot.findMany({
     where: { userId, group: { state: { not: "CANCELLED" } } },
@@ -158,10 +155,6 @@ export async function homeDashboard(userId: string) {
 
   const groups = [];
   const due = [];
-  const payouts = [];
-  const debts = [];
-  const owedToMe = [];
-  const totals = { contributed: 0, received: 0, owed: 0, owedToMe: 0, refundsToMe: 0, refundsIOwe: 0 };
 
   for (const slot of mySlots) {
     const group = slot.group;
@@ -171,8 +164,6 @@ export async function homeDashboard(userId: string) {
     const reportable = standing ? Math.max(0, contribution - standing.approved - standing.pending) : 0;
     const owed = outstanding(debtOf(slot));
     const myRound = group.rounds.find((r) => r.recipientSlotId === slot.id);
-    const summary = group.state === "LOBBY" || group.state === "LAUNCHED" ? null : await completionSummary(group.id);
-    const mine = summary?.members.find((m) => m.slotId === slot.id);
 
     // Things only this person can move forward.
     const [toReview, disputesToReview] = slot.isOrganizer
@@ -215,34 +206,11 @@ export async function homeDashboard(userId: string) {
       due.push({ groupId: group.id, groupName: group.name, kind: "CONTRIBUTION" as const, amount: reportable, dueDate: toCalendarDate(open.payoutDate), round: open.number });
     }
     if (owed > 0) {
-      debts.push({ groupId: group.id, groupName: group.name, principal: Number(slot.debtPrincipal), interest: Number(slot.debtInterest) });
       due.push({ groupId: group.id, groupName: group.name, kind: "DEBT" as const, amount: owed, dueDate: null, round: null });
     }
-    if (myRound) {
-      payouts.push({
-        groupId: group.id,
-        groupName: group.name,
-        round: myRound.number,
-        payoutDate: toCalendarDate(myRound.payoutDate),
-        status: myRound.payout?.status ?? (myRound.status === "OPEN" ? "COLLECTING" : group.state === "LOBBY" ? "NOT_STARTED" : "UPCOMING"),
-        net: myRound.payout ? Number(myRound.payout.net) : null,
-      });
-    }
-    if (slot.isOrganizer && summary) {
-      for (const member of summary.members.filter((m) => m.slotId !== slot.id && m.debtOutstanding > 0)) {
-        owedToMe.push({ groupId: group.id, groupName: group.name, name: member.name, amount: member.debtOutstanding });
-      }
-      totals.owedToMe += summary.members.filter((m) => m.slotId !== slot.id).reduce((t, m) => t + m.debtOutstanding, 0);
-      totals.refundsIOwe += summary.totals.refunds;
-    }
-    totals.contributed += mine?.contributed ?? 0;
-    totals.received += mine?.received ?? 0;
-    totals.owed += owed;
-    totals.refundsToMe += mine?.refunds ?? 0;
   }
 
   // Contributions by due date first, then debts.
   due.sort((a, b) => (a.dueDate ?? "9999").localeCompare(b.dueDate ?? "9999"));
-  payouts.sort((a, b) => a.payoutDate.localeCompare(b.payoutDate));
-  return { groups, due, payouts, debts, owedToMe, totals };
+  return { groups, due };
 }

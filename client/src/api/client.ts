@@ -288,17 +288,6 @@ export interface HomeDashboard {
     waiting: { reviews: number; swapsToAnswer: number; payoutsToHandOver: number; receiptsToConfirm: number };
   }[];
   due: { groupId: string; groupName: string; kind: "CONTRIBUTION" | "DEBT"; amount: number; dueDate: string | null; round: number | null }[];
-  payouts: {
-    groupId: string;
-    groupName: string;
-    round: number;
-    payoutDate: string;
-    status: "NOT_STARTED" | "UPCOMING" | "COLLECTING" | "AWAITING_HANDOVER" | "HANDED_OVER" | "CONFIRMED";
-    net: number | null;
-  }[];
-  debts: { groupId: string; groupName: string; principal: number; interest: number }[];
-  owedToMe: { groupId: string; groupName: string; name: string; amount: number }[];
-  totals: { contributed: number; received: number; owed: number; owedToMe: number; refundsToMe: number; refundsIOwe: number };
 }
 
 export type ExportKind = "statement" | "ledger" | "summary";

@@ -95,7 +95,7 @@ function badges(g: Group): Badge[] {
 
 /**
  * §15.2 home: what's waiting on you, what's due soonest (each with Pay), your paluwagans, and
- * recent activity. Totals and payouts live on the Money page.
+ * recent activity.
  */
 export function HomePage() {
   const { data, isPending } = useQuery({ queryKey: homeKey, queryFn: () => api.home() });

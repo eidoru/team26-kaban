@@ -5,7 +5,7 @@ import { queryClient } from "./queryClient";
 
 type NotificationsData = { notifications: NotificationItem[]; unreadCount: number };
 
-/** The home dashboard (§15.2), shared by Home and Money. */
+/** The home dashboard (§15.2). */
 export const homeKey = ["home"] as const;
 
 export function prefetchRealtimeToken() {

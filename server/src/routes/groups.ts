@@ -80,7 +80,7 @@ function answerWithDetail(action: GroupAction) {
   };
 }
 
-/** §15.2: the member's home across every paluwagan (and the Money page). Must sit above "/:id". */
+/** §15.2: the member's home across every paluwagan. Must sit above "/:id". */
 router.get("/home", async (req, res, next) => {
   try {
     res.json(await homeDashboard(req.user!.id));
