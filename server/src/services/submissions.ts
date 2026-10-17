@@ -3,7 +3,7 @@ import { NOTE_MAX_LENGTH } from "../domain/constants.js";
 import { outstanding } from "../domain/debt.js";
 import { can } from "../domain/lifecycle.js";
 import { formatPeso } from "../domain/money.js";
-import { periodStatus, submissionAmountError, submissionCap } from "../domain/submissions.js";
+import { contributionApprovalError, periodStatus, submissionAmountError, submissionCap } from "../domain/submissions.js";
 import { audit } from "../lib/audit.js";
 import { AppError, badRequest, conflict, forbidden, notFound } from "../lib/errors.js";
 import { isProofPathFor, proofExists, proofViewUrls } from "../lib/storage.js";
@@ -183,6 +183,12 @@ export async function reviewSubmission(
           "MORE_THAN_OWED",
         );
       }
+    }
+    if (decision.approve && !toDebt && submission.type === "CONTRIBUTION" && submission.roundId) {
+      // R-DEC-29: an earlier approval or a problem-report increase may have filled the period.
+      const { approved } = await periodTotals(tx, submission.slotId, submission.roundId);
+      const error = contributionApprovalError(slotName(submission.slot), amount, approved, Number(group.contribution));
+      if (error) throw conflict(error, "MORE_THAN_DUE");
     }
 
     const selfApproved = decision.approve && submission.submittedById === reviewerUserId;

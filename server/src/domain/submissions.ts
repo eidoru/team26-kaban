@@ -21,6 +21,41 @@ export function submissionAmountError(amount: Centavos, cap: Centavos): string |
   return null;
 }
 
+/**
+ * R-DEC-29: why a pending contribution for an open period can't be approved, or null.
+ * The cap at submission counts pending payments, but a later approval or a problem-report increase
+ * can still fill the period first; approving then would take the approved total past the
+ * contribution, and the extra would count toward nothing. The organizer denies it instead.
+ */
+export function contributionApprovalError(
+  name: string,
+  amount: Centavos,
+  approved: Centavos,
+  contribution: Centavos,
+): string | null {
+  const left = Math.max(0, contribution - approved);
+  if (amount <= left) return null;
+  return left === 0
+    ? `${name} has already paid in full this round, so this can't be approved. Deny it instead.`
+    : `${name} has only ${formatPeso(left)} left to pay this round, so this can't be approved. Deny it instead.`;
+}
+
+/**
+ * R-DEC-29: with `left` to pay, which of a member's other pending contributions (in review
+ * order) still fit, and what's left after them: the cap the member's pay form shows once the ones
+ * that don't fit are denied. Those are skipped here; each will be refused on its own turn.
+ */
+export function leftAfterPending(left: Centavos, pending: Centavos[]) {
+  let sendable = Math.max(0, left);
+  const waiting: Centavos[] = [];
+  for (const amount of pending) {
+    if (amount > sendable) continue;
+    waiting.push(amount);
+    sendable -= amount;
+  }
+  return { waiting, sendable };
+}
+
 /** R-SUB-07: only approved amounts count. `pendingReview` is shown alongside the status. */
 export function periodStatus(contribution: Centavos, approved: Centavos, pendingCount: number) {
   const status: PeriodStatus = approved >= contribution ? "PAID" : approved > 0 ? "PARTIAL" : "UNPAID";

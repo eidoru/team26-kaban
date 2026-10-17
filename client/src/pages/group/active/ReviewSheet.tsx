@@ -7,7 +7,7 @@ import { Avatar } from "../../../components/Avatar";
 import { Sheet } from "../../../components/flow/Sheet";
 import { formatPeso } from "../../../lib/money";
 import { ui } from "../../../lib/ui";
-import { owedBy, reviewItems, type ReviewItem } from "./period";
+import { disputeQueue, overfill, owedBy, paymentOrder, reviewItems, type ReviewItem } from "./period";
 
 const sentAt = (iso: string) =>
   new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
@@ -19,8 +19,12 @@ const keyOf = (review: ReviewItem) => `${review.kind}-${review.item.id}`;
  * of everything waiting; a row opens that item with its proof (or "No proof attached", R-SUB-08)
  * and what approving changes, and after a decision the list comes back, shorter. With a single
  * item it opens straight on it. One member's payments still go in the order they came in
- * (R-SUB-05), so a later one waits for the earlier. `initialKey` opens it on one item instead, and
- * it closes once that item is decided.
+ * (R-SUB-05), so a later one waits for the earlier; several from one member are numbered so they
+ * can be told apart. A contribution the member no longer has room for (R-DEC-29) is
+ * flagged, and Deny, with a reason filled in, is its only action. A payment whose member also has a
+ * problem report waiting for the same round points to it: that decision changes what's left to pay,
+ * and whichever is decided second is checked against the first. `initialKey` opens it on one item
+ * instead, and it closes once that item is decided.
  */
 export function ReviewSheet({
   open,
@@ -70,10 +74,12 @@ export function ReviewSheet({
 
   if (!current) {
     return (
-      <Sheet open onClose={close} title="Waiting for review" subtitle={`${queue.length} to decide`}>
+      <Sheet open wide onClose={close} title="Waiting for review" subtitle={`${queue.length} to decide`}>
         <ul className="divide-y divide-ink-100 overflow-hidden rounded-3xl border border-ink-200 bg-white">
           {queue.map((q) => {
             const slot = detail.slots.find((s) => s.id === q.item.slotId);
+            const order = q.kind === "payment" ? paymentOrder(detail, q.item) : null;
+            const full = q.kind === "payment" ? overfill(detail, q.item, nameOf(q.item.slotId)) : null;
             return (
               <li key={keyOf(q)}>
                 <button
@@ -92,7 +98,17 @@ export function ReviewSheet({
                         </>
                       ) : (
                         <>
-                          {q.item.round ? `Round ${q.item.round}` : "Debt payment"} · {q.item.proofUrl ? "proof attached" : "no proof"}
+                          {q.item.round ? `Round ${q.item.round}` : "Debt payment"}
+                          {order && order.of > 1 && ` · ${order.number} of ${order.of}`} ·{" "}
+                          {full ? (
+                            <span className="font-semibold text-sun-700">
+                              {full.left === 0 ? "already paid in full" : "more than what's left"}
+                            </span>
+                          ) : q.item.proofUrl ? (
+                            "proof attached"
+                          ) : (
+                            "no proof"
+                          )}
                         </>
                       )}
                     </span>
@@ -119,6 +135,31 @@ export function ReviewSheet({
   const earlier = !isDispute
     ? queue.find((q) => q.kind === "payment" && q.item.slotId === current.item.slotId && q.item.submittedAt < current.item.submittedAt)
     : undefined;
+  const order = current.kind === "payment" ? paymentOrder(detail, current.item) : null;
+  // A correction still waiting for the same member and round changes what's left (R-DEC-30).
+  const payment = current.kind === "payment" ? current.item : null;
+  const report =
+    payment?.type === "CONTRIBUTION" && payment.round === detail.period?.number
+      ? disputeQueue(detail).find((x) => x.slotId === payment.slotId && x.round === payment.round)
+      : undefined;
+  const earlierOrder = earlier?.kind === "payment" ? paymentOrder(detail, earlier.item) : null;
+  const full = current.kind === "payment" ? overfill(detail, current.item, slot?.name ?? "This member") : null;
+  // R-DEC-29: the member sees this, so it says what to send instead, if anything. Their
+  // other payments still waiting for review count, as they do in the member's pay form.
+  const waitingText = full
+    ? full.waiting.length === 1
+      ? `your ${formatPeso(full.waiting[0])} is still waiting for review`
+      : `your other ${formatPeso(full.waiting.reduce((a, b) => a + b, 0))} is still waiting for review`
+    : "";
+  const fullReason = !full
+    ? ""
+    : full.left === 0
+      ? "This round was already paid in full."
+      : full.waiting.length === 0
+        ? `Only ${formatPeso(full.left)} was left to pay this round. Send that amount instead.`
+        : full.sendable > 0
+          ? `Only ${formatPeso(full.left)} was left to pay this round, and ${waitingText}, so send ${formatPeso(full.sendable)} instead.`
+          : `Only ${formatPeso(full.left)} was left to pay this round, and ${waitingText}, which covers it.`;
 
   // Opened on one item: back to where it was opened from. Otherwise the list, one shorter.
   const done = () => (initialKey ? close() : select(null));
@@ -133,13 +174,16 @@ export function ReviewSheet({
   const title = isDispute
     ? `${slot?.name ?? "Member"} reports a problem with a ${formatPeso(current.item.previousAmount)} payment`
     : `${slot?.name ?? "Member"} paid ${formatPeso(current.item.amount)}`;
-  const subtitle = `${current.item.round ? `Round ${current.item.round} · ` : ""}${sentAt(
+  const subtitle = `${current.item.round ? `Round ${current.item.round} · ` : ""}${
+    order && order.of > 1 ? `Payment ${order.number} of ${order.of} · ` : ""
+  }${sentAt(
     isDispute ? current.item.createdAt : current.item.submittedAt,
   )}`;
 
   return (
     <Sheet
       open
+      wide
       onClose={close}
       title={title}
       subtitle={subtitle}
@@ -158,6 +202,18 @@ export function ReviewSheet({
               {pending === "deny" ? "Denying…" : isDispute ? "Deny report" : "Deny payment"}
             </button>
           </div>
+        ) : full ? (
+          <button
+            type="button"
+            onClick={() => {
+              setDenying(true);
+              setReason(fullReason);
+            }}
+            disabled={busy || !!earlier}
+            className={`${ui.btnPrimary} min-h-11 w-full`}
+          >
+            Deny payment
+          </button>
         ) : (
           <div className="flex gap-2">
             <button type="button" onClick={() => setDenying(true)} disabled={busy || !!earlier} className={`${ui.btnSecondary} min-h-11 flex-1`}>
@@ -179,8 +235,20 @@ export function ReviewSheet({
         )}
         {earlier && earlier.kind === "payment" && (
           <p className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-2xl bg-sun-50 px-4 py-3 text-sm text-sun-900">
-            Review their earlier {formatPeso(earlier.item.amount)} first.
+            Review their earlier {formatPeso(earlier.item.amount)}
+            {earlierOrder && earlierOrder.of > 1 && ` (${earlierOrder.number} of ${earlierOrder.of})`} first.
             <button type="button" onClick={() => select(keyOf(earlier))} className={`${ui.link} font-bold`}>
+              Go to it
+            </button>
+          </p>
+        )}
+        {report && (
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-2xl bg-sun-50 px-4 py-3 text-sm text-sun-900">
+            <TriangleAlert className="h-4 w-4 shrink-0" aria-hidden />
+            {slot?.isViewer ? "You also asked" : `${slot?.name ?? "This member"} also asked`} to change a{" "}
+            {formatPeso(report.previousAmount)} payment to {formatPeso(report.proposedAmount)}. Decide that first: it changes
+            what&apos;s left to pay.
+            <button type="button" onClick={() => select(`dispute-${report.id}`)} className={`${ui.link} font-bold`}>
               Go to it
             </button>
           </p>
@@ -188,7 +256,7 @@ export function ReviewSheet({
         {current.kind === "dispute" ? (
           <DisputeBody dispute={current.item} name={name} />
         ) : (
-          <PaymentBody detail={detail} payment={current.item} name={name} />
+          <PaymentBody detail={detail} payment={current.item} name={name} blocked={full?.error ?? null} />
         )}
         {denying && (
           <div>
@@ -240,7 +308,17 @@ function DisputeBody({ dispute, name }: { dispute: DisputeView; name: string }) 
   );
 }
 
-function PaymentBody({ detail, payment, name }: { detail: GroupDetail; payment: SubmissionView; name: string }) {
+function PaymentBody({
+  detail,
+  payment,
+  name,
+  blocked,
+}: {
+  detail: GroupDetail;
+  payment: SubmissionView;
+  name: string;
+  blocked: string | null;
+}) {
   const thisRound = payment.type === "CONTRIBUTION" && payment.round === detail.period?.number;
   const standing = thisRound ? detail.period?.slots.find((s) => s.slotId === payment.slotId) : undefined;
   const after = standing ? periodStatus(standing.due, standing.approved + payment.amount, 0).status : null;
@@ -254,7 +332,7 @@ function PaymentBody({ detail, payment, name }: { detail: GroupDetail; payment: 
           rel="noreferrer"
           className="group relative block overflow-hidden rounded-2xl border border-ink-200 bg-ink-50"
         >
-          <img src={payment.proofUrl} alt={`Proof from ${name}`} className="max-h-72 w-full object-contain" />
+          <img src={payment.proofUrl} alt={`Proof from ${name}`} className="max-h-72 w-full object-contain sm:max-h-96" />
           <span className="absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-full bg-white/90 px-3 py-1 text-xs font-bold text-ink-700 shadow-card">
             <ExternalLink className="h-3.5 w-3.5" aria-hidden />
             Full size
@@ -272,25 +350,32 @@ function PaymentBody({ detail, payment, name }: { detail: GroupDetail; payment: 
           {payment.note}
         </p>
       )}
-      <p className="text-sm text-ink-600">
-        {standing && after ? (
-          <>
-            After approval:{" "}
-            <b>{after === "PAID" ? "paid up" : `${formatPeso(standing.approved + payment.amount)} of ${formatPeso(standing.due)} paid`}</b>
-          </>
-        ) : payment.amount > owed ? (
-          // R-DEC-19: the server refuses it; say so before the organizer tries.
-          <>
-            {owed > 0 ? `${name} only owes ${formatPeso(owed)} now` : `${name} doesn't owe anything now`}, so this can&apos;t be
-            approved. Deny it instead.
-          </>
-        ) : (
-          <>
-            {payment.type === "CONTRIBUTION" ? `Round ${payment.round} has closed, so this` : "This"} goes toward {name}&apos;s{" "}
-            {formatPeso(owed)} debt, interest first.
-          </>
-        )}
-      </p>
+      {blocked ? (
+        <p className="flex items-start gap-2 rounded-2xl bg-sun-50 px-4 py-3 text-sm font-semibold text-sun-900">
+          <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+          {blocked}
+        </p>
+      ) : (
+        <p className="text-sm text-ink-600">
+          {standing && after ? (
+            <>
+              After approval:{" "}
+              <b>{after === "PAID" ? "paid up" : `${formatPeso(standing.approved + payment.amount)} of ${formatPeso(standing.due)} paid`}</b>
+            </>
+          ) : payment.amount > owed ? (
+            // R-DEC-19: the server refuses it; say so before the organizer tries.
+            <>
+              {owed > 0 ? `${name} only owes ${formatPeso(owed)} now` : `${name} doesn't owe anything now`}, so this can&apos;t be
+              approved. Deny it instead.
+            </>
+          ) : (
+            <>
+              {payment.type === "CONTRIBUTION" ? `Round ${payment.round} has closed, so this` : "This"} goes toward {name}&apos;s{" "}
+              {formatPeso(owed)} debt, interest first.
+            </>
+          )}
+        </p>
+      )}
     </>
   );
 }
