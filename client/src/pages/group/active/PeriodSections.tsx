@@ -2,7 +2,7 @@ import { Check, ChevronRight, Clock, ImageOff, Paperclip } from "lucide-react";
 import type { DisputeView, GroupDetail, GroupStats, PayoutView, PeriodSlot, SlotView, SubmissionView } from "../../../api/client";
 import { roundsLabel } from "@domain/submissions";
 import { Avatar } from "../../../components/Avatar";
-import { daysUntil, formatLocalDate, formatMonthDay } from "../../../lib/dates";
+import { daysUntil, formatMonthDay } from "../../../lib/dates";
 import { formatPeso } from "../../../lib/money";
 import { ui } from "../../../lib/ui";
 import { asPayments, isAhead, latestDispute, payRooms } from "./period";
@@ -33,7 +33,7 @@ function StageTrack({ stages }: { stages: Stage[] }) {
         <li
           key={stage.label}
           aria-current={stage.state === "active" ? "step" : undefined}
-          className="relative min-w-0 flex-1 px-1 text-center"
+          className="relative min-w-0 flex-1 px-2 text-center"
         >
           {/* The line from the previous step, drawn under the dots: green once this step is reached. */}
           {i > 0 && (
@@ -58,10 +58,15 @@ function StageTrack({ stages }: { stages: Stage[] }) {
   );
 }
 
+/** A timestamp as the viewer's local "Nov 1", to match the other step notes. */
+function shortDay(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
 /**
  * A payout still on its way (§7): handed over by the organizer, then confirmed by the recipient.
  * Shown to everyone (R-DEC-06) while the next round collects, so both stages are visible at once.
- * The whole header opens the payout's details.
+ * The whole header opens the payout's details; from `sm` the steps sit beside it, so the card stays one band.
  */
 export function PayoutStageCard({ detail, payout, onOpen }: { detail: GroupDetail; payout: PayoutView; onOpen: () => void }) {
   const recipient = detail.slots.find((s) => s.id === payout.recipientSlotId);
@@ -70,11 +75,14 @@ export function PayoutStageCard({ detail, payout, onOpen }: { detail: GroupDetai
   const oneStep = recipient?.kind === "PLACEHOLDER" || recipient?.isOrganizer;
   const collected: Stage = { label: "Collected", note: formatMonthDay(payout.payoutDate), state: "done" };
   return (
-    <section aria-label={`Round ${payout.round} payout`} className={ui.cardCompact}>
+    <section
+      aria-label={`Round ${payout.round} payout`}
+      className={`${ui.cardCompact} sm:flex sm:items-center sm:gap-8`}
+    >
       <button
         type="button"
         onClick={onOpen}
-        className="-m-2 flex w-[calc(100%+1rem)] items-center gap-3 rounded-2xl p-2 text-left transition-colors hover:bg-ink-50"
+        className="-m-2 flex w-[calc(100%+1rem)] items-center gap-3 rounded-2xl p-2 text-left transition-colors hover:bg-ink-50 sm:w-auto sm:min-w-0 sm:flex-1"
       >
         {recipient && <Avatar name={recipient.name} size="md" placeholder={recipient.kind === "PLACEHOLDER"} />}
         <span className="min-w-0 flex-1">
@@ -87,7 +95,7 @@ export function PayoutStageCard({ detail, payout, onOpen }: { detail: GroupDetai
         <ChevronRight className="h-5 w-5 shrink-0 text-ink-400" aria-hidden />
         <span className="sr-only">Details</span>
       </button>
-      <div className="mt-5">
+      <div className="mt-5 sm:mt-0 sm:w-96 sm:shrink-0">
         <StageTrack
           stages={
             oneStep
@@ -96,12 +104,12 @@ export function PayoutStageCard({ detail, payout, onOpen }: { detail: GroupDetai
                   collected,
                   {
                     label: "Handed over",
-                    note: payout.handedOverAt ? formatLocalDate(payout.handedOverAt) : `By ${detail.group.organizerName}`,
+                    note: payout.handedOverAt ? shortDay(payout.handedOverAt) : `By ${detail.group.organizerName}`,
                     state: handedOver ? "done" : "active",
                   },
                   {
                     label: "Received",
-                    note: recipient?.isViewer ? "Confirm when you have it" : `${recipient?.name} confirms`,
+                    note: recipient?.isViewer ? "Yours to confirm" : `${recipient?.name} confirms`,
                     state: handedOver ? "active" : "todo",
                   },
                 ]
