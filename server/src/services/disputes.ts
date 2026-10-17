@@ -91,9 +91,11 @@ export async function reviewDispute(
   disputeId: string,
   decision: { approve: true } | { approve: false; note: string },
 ) {
-  const note = decision.approve
-    ? null
-    : requiredText(decision.note, NOTE_MAX_LENGTH, "Say why, so the member understands.", "The reason");
+  // `=== false`, not truthiness: Vercel compiles the function non-strict, where only this narrows the union.
+  const note =
+    decision.approve === false
+      ? requiredText(decision.note, NOTE_MAX_LENGTH, "Say why, so the member understands.", "The reason")
+      : null;
   return withGroupLock(groupId, async (tx, group) => {
     const dispute = await tx.dispute.findFirst({
       where: { id: disputeId, groupId },
