@@ -80,7 +80,9 @@ describe("Demo tools environment gate", () => {
 
   const path = "/api/v1/dev/groups/00000000-0000-0000-0000-000000000001/activate-now";
 
+  // Vercel sets NODE_ENV=production too; the routes must still be mounted for the opt-in to work.
   it("is reachable on Vercel production when ALLOW_DEMO_TOOLS=true", async () => {
+    vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("VERCEL_ENV", "production");
     vi.stubEnv("ALLOW_DEMO_TOOLS", "true");
     // Past the environment gate; the auth check is what rejects this anonymous request.
@@ -89,6 +91,11 @@ describe("Demo tools environment gate", () => {
 
   it("returns 404 on Vercel production", async () => {
     vi.stubEnv("VERCEL_ENV", "production");
+    expect((await request(app).post(path)).status).toBe(404);
+  });
+
+  it("returns 404 in any production build without ALLOW_DEMO_TOOLS", async () => {
+    vi.stubEnv("NODE_ENV", "production");
     expect((await request(app).post(path)).status).toBe(404);
   });
 });

@@ -160,9 +160,15 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
     if (confirmed) await run("launch", () => api.launch(group.id));
   }
 
+  /** Demo calls return a count, not the group, so refetch it; `run` shows a failure in the error banner. */
+  const demo = (key: string, call: () => Promise<unknown>) =>
+    run(key, async () => {
+      await call();
+      return api.getGroup(group.id);
+    });
+
   async function startNow() {
-    await api.activateNow(group.id);
-    await queryClient.invalidateQueries({ queryKey: groupKey(group.id) });
+    await demo("demo-start", () => api.activateNow(group.id));
   }
 
   async function closeRoundNow() {
@@ -172,8 +178,7 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
       confirmLabel: "Close round",
     });
     if (!confirmed) return;
-    await api.closeRoundNow(group.id);
-    await queryClient.invalidateQueries({ queryKey: groupKey(group.id) });
+    await demo("demo-close", () => api.closeRoundNow(group.id));
   }
 
   const pay = (slotId: string, mode: PayMode) => setPayTarget({ slotId, mode });
@@ -365,7 +370,7 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
         }
       >
         {isOrganizer && demoTools && (
-          <button type="button" onClick={() => void startNow()} className={ui.btnSecondarySm}>
+          <button type="button" onClick={() => void startNow()} disabled={pending !== null} className={ui.btnSecondarySm}>
             Start now (demo)
           </button>
         )}
@@ -711,14 +716,14 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
                 <PayoutStageCard key={p.round} detail={detail} payout={p} onOpen={() => setPayoutRound(p.round)} />
               ))}
             {isOrganizer && now}
-        {error && (
-          <p className={ui.error} role="alert">
-            {error.message}{" "}
-            <button type="button" onClick={clearError} className="underline">
-              Dismiss
-            </button>
-          </p>
-        )}
+            {error && (
+              <p className={ui.error} role="alert">
+                {error.message}{" "}
+                <button type="button" onClick={clearError} className="underline">
+                  Dismiss
+                </button>
+              </p>
+            )}
             {detail.period && (
               <PeriodStatusList
                 detail={detail}
@@ -744,7 +749,12 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
                   Demo tools
                 </h2>
                 <p className="mt-1 text-sm text-ink-600">Skip ahead without waiting for the calendar. Only you see this.</p>
-                <button type="button" onClick={() => void closeRoundNow()} className={`${ui.btnSecondarySm} mt-3`}>
+                <button
+                  type="button"
+                  onClick={() => void closeRoundNow()}
+                  disabled={pending !== null}
+                  className={`${ui.btnSecondarySm} mt-3`}
+                >
                   Close round {detail.period.number} now
                 </button>
               </section>
