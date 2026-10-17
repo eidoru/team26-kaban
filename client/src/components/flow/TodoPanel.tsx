@@ -1,6 +1,19 @@
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { ui } from "../../lib/ui";
+import type { NowTone } from "./NowPanel";
+
+/**
+ * Icon chip per tone, matching the Now panel's: `danger` for money owed late, `sun` for money the viewer must
+ * send, `brand` for someone waiting on the viewer's decision, `calm` for optional tasks. Only the chip is
+ * colored; cards and buttons stay the same, so there's still one kind of action.
+ */
+const CHIP: Record<NowTone, string> = {
+  brand: "bg-brand-700 text-white",
+  sun: "bg-sun-400 text-sun-950",
+  danger: "bg-danger-600 text-white",
+  calm: "bg-ink-100 text-ink-600",
+};
 
 export interface TodoAction {
   label: string;
@@ -15,6 +28,8 @@ export interface TodoAction {
 export interface Todo {
   id: string;
   icon: LucideIcon;
+  /** What's at stake, shown as the icon chip's color. */
+  tone: NowTone;
   title: string;
   detail?: ReactNode;
   action: TodoAction;
@@ -41,7 +56,7 @@ export function TodoPanel({ todos }: { todos: Todo[] }) {
             key={todo.id}
             className={`flex items-center gap-x-3 gap-y-2 rounded-2xl bg-white p-3 sm:p-4 ${todo.secondary ? "flex-wrap" : ""}`}
           >
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-brand-100 text-brand-800" aria-hidden>
+            <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${CHIP[todo.tone]}`} aria-hidden>
               <todo.icon className="h-5 w-5" />
             </span>
             <div className={`min-w-0 flex-1 ${todo.secondary ? "basis-48" : ""}`}>
