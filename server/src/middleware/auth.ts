@@ -96,14 +96,13 @@ export function requireCronSecret(req: Request, res: Response, next: NextFunctio
   next();
 }
 
-/** UAT/demo tools are unavailable on Vercel production deploys. */
-
 /**
- * Organizer demo tools (advance round). Off on Vercel production unless ALLOW_DEMO_TOOLS=true
- * opts in; only for the authenticated manager routes, never the unauthenticated testing endpoints.
+ * Organizer demo tools (advance round). Off in production builds (NODE_ENV, which Vercel always sets) and on
+ * Vercel production unless ALLOW_DEMO_TOOLS=true opts in. Only for authenticated organizer routes.
  */
 export function requireDemoTools(_req: Request, res: Response, next: NextFunction) {
-  if (process.env.VERCEL_ENV === "production" && process.env.ALLOW_DEMO_TOOLS !== "true") {
+  const production = process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production";
+  if (production && process.env.ALLOW_DEMO_TOOLS !== "true") {
     res.status(404).json({ error: "Not found" });
     return;
   }

@@ -37,9 +37,8 @@ app.use("/api/v1", invitesRoutes);
 app.use("/api/v1/notifications", notificationsRoutes);
 app.use("/api/v1/cron", cronRoutes);
 
-if (process.env.NODE_ENV !== "production") {
-  app.use("/api/v1/dev", devRoutes);
-}
+// Always mounted: requireDemoTools decides per request, so ALLOW_DEMO_TOOLS can turn them on in production.
+app.use("/api/v1/dev", devRoutes);
 
 app.use(errorHandler);
 
