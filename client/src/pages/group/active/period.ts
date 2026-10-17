@@ -9,16 +9,6 @@ export function reviewQueue(detail: GroupDetail) {
 }
 
 /**
- * Where a pending payment falls among the same slot's pending payments for the same round and type,
- * the group the server reviews in order (R-SUB-05): `{ number: 2, of: 3 }`. Several pending ₱500s
- * look alike, so the review queue numbers them.
- */
-export function paymentOrder(detail: GroupDetail, payment: SubmissionView) {
-  const same = stackOf(detail, payment);
-  return { number: same.findIndex((s) => s.id === payment.id) + 1, of: same.length };
-}
-
-/**
  * R-SUB-05: a slot's pending payments for the same round and type as `payment`, oldest first. The
  * server reviews each such stack in order, so only its first can be decided.
  */
