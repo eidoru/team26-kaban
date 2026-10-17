@@ -7,7 +7,7 @@ import { Avatar } from "../../../components/Avatar";
 import { Sheet } from "../../../components/flow/Sheet";
 import { formatPeso } from "../../../lib/money";
 import { ui } from "../../../lib/ui";
-import { disputeQueue, overfill, owedBy, paymentOrder, reviewItems, type ReviewItem } from "./period";
+import { owedBy, paymentOrder, reviewItems, stackOf, type ReviewItem } from "./period";
 
 const sentAt = (iso: string) =>
   new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
@@ -18,13 +18,11 @@ const keyOf = (review: ReviewItem) => `${review.kind}-${review.item.id}`;
  * The organizer's review queue: disputes (R-DSP-02) and payments (R-SUB-03/04). It opens on a list
  * of everything waiting; a row opens that item with its proof (or "No proof attached", R-SUB-08)
  * and what approving changes, and after a decision the list comes back, shorter. With a single
- * item it opens straight on it. One member's payments still go in the order they came in
- * (R-SUB-05), so a later one waits for the earlier; several from one member are numbered so they
- * can be told apart. A contribution the member no longer has room for (R-DEC-29) is
- * flagged, and Deny, with a reason filled in, is its only action. A payment whose member also has a
- * problem report waiting for the same round points to it: that decision changes what's left to pay,
- * and whichever is decided second is checked against the first. `initialKey` opens it on one item
- * instead, and it closes once that item is decided.
+ * item it opens straight on it. One member's payments for a round go in the order they came in
+ * (R-SUB-05), so the list shows only the next of each stack, numbered ("1 of 6"), and deciding one
+ * moves straight on to the next (R-DEC-30). The room rule (R-DEC-29) means anything waiting can be
+ * approved in any order; if the server still refuses something, its message shows here, in the
+ * sheet. `initialKey` opens it on one item instead, and it closes once that item is decided.
  */
 export function ReviewSheet({
   open,
@@ -34,6 +32,8 @@ export function ReviewSheet({
   onClose,
   onApprove,
   onDeny,
+  error,
+  onClearError,
 }: {
   open: boolean;
   initialKey?: string | null;
@@ -42,6 +42,9 @@ export function ReviewSheet({
   onClose: () => void;
   onApprove: (review: ReviewItem) => Promise<boolean>;
   onDeny: (review: ReviewItem, reason: string) => Promise<boolean>;
+  /** The last approve or deny that failed; shown in the sheet, not on the page behind it. */
+  error: string | null;
+  onClearError: () => void;
 }) {
   const queue = reviewItems(detail);
   const [selectedKey, setSelectedKey] = useState<string | null>(initialKey);
@@ -51,6 +54,7 @@ export function ReviewSheet({
     setSelectedKey(key);
     setDenying(false);
     setReason("");
+    onClearError();
   };
   const close = () => {
     select(null);
@@ -65,8 +69,10 @@ export function ReviewSheet({
     );
   }
 
+  // R-SUB-05: only the next payment of each member's stack can be decided, so only it is listed.
+  const visible = queue.filter((q) => q.kind === "dispute" || paymentOrder(detail, q.item).number === 1);
   // A decided item leaves the queue, which brings the list back (or the last item, if one is left).
-  const current = queue.find((q) => keyOf(q) === selectedKey) ?? (queue.length === 1 ? queue[0] : null);
+  const current = queue.find((q) => keyOf(q) === selectedKey) ?? (visible.length === 1 ? visible[0] : null);
   const nameOf = (slotId: string) => {
     const s = detail.slots.find((x) => x.id === slotId);
     return s?.isViewer ? "You" : (s?.name ?? "Member");
@@ -76,10 +82,9 @@ export function ReviewSheet({
     return (
       <Sheet open wide onClose={close} title="Waiting for review" subtitle={`${queue.length} to decide`}>
         <ul className="divide-y divide-ink-100 overflow-hidden rounded-3xl border border-ink-200 bg-white">
-          {queue.map((q) => {
+          {visible.map((q) => {
             const slot = detail.slots.find((s) => s.id === q.item.slotId);
             const order = q.kind === "payment" ? paymentOrder(detail, q.item) : null;
-            const full = q.kind === "payment" ? overfill(detail, q.item, nameOf(q.item.slotId)) : null;
             return (
               <li key={keyOf(q)}>
                 <button
@@ -100,15 +105,7 @@ export function ReviewSheet({
                         <>
                           {q.item.round ? `Round ${q.item.round}` : "Debt payment"}
                           {order && order.of > 1 && ` · ${order.number} of ${order.of}`} ·{" "}
-                          {full ? (
-                            <span className="font-semibold text-sun-700">
-                              {full.left === 0 ? "already paid in full" : "more than what's left"}
-                            </span>
-                          ) : q.item.proofUrl ? (
-                            "proof attached"
-                          ) : (
-                            "no proof"
-                          )}
+                          {q.item.proofUrl ? "proof attached" : "no proof"}
                         </>
                       )}
                     </span>
@@ -131,38 +128,15 @@ export function ReviewSheet({
   const reasonError = reason.trim().length > NOTE_MAX_LENGTH ? `Up to ${NOTE_MAX_LENGTH} characters.` : null;
   const busy = pending === "approve" || pending === "deny";
   const isDispute = current.kind === "dispute";
-  // R-SUB-05: the same member's earlier payment comes first.
-  const earlier = !isDispute
-    ? queue.find((q) => q.kind === "payment" && q.item.slotId === current.item.slotId && q.item.submittedAt < current.item.submittedAt)
-    : undefined;
+  // R-SUB-05: the first of the member's stack for this round comes first, then the next one.
+  const stack = current.kind === "payment" ? stackOf(detail, current.item) : [];
   const order = current.kind === "payment" ? paymentOrder(detail, current.item) : null;
-  // A correction still waiting for the same member and round changes what's left (R-DEC-30).
-  const payment = current.kind === "payment" ? current.item : null;
-  const report =
-    payment?.type === "CONTRIBUTION" && payment.round === detail.period?.number
-      ? disputeQueue(detail).find((x) => x.slotId === payment.slotId && x.round === payment.round)
-      : undefined;
-  const earlierOrder = earlier?.kind === "payment" ? paymentOrder(detail, earlier.item) : null;
-  const full = current.kind === "payment" ? overfill(detail, current.item, slot?.name ?? "This member") : null;
-  // R-DEC-29: the member sees this, so it says what to send instead, if anything. Their
-  // other payments still waiting for review count, as they do in the member's pay form.
-  const waitingText = full
-    ? full.waiting.length === 1
-      ? `your ${formatPeso(full.waiting[0])} is still waiting for review`
-      : `your other ${formatPeso(full.waiting.reduce((a, b) => a + b, 0))} is still waiting for review`
-    : "";
-  const fullReason = !full
-    ? ""
-    : full.left === 0
-      ? "This round was already paid in full."
-      : full.waiting.length === 0
-        ? `Only ${formatPeso(full.left)} was left to pay this round. Send that amount instead.`
-        : full.sendable > 0
-          ? `Only ${formatPeso(full.left)} was left to pay this round, and ${waitingText}, so send ${formatPeso(full.sendable)} instead.`
-          : `Only ${formatPeso(full.left)} was left to pay this round, and ${waitingText}, which covers it.`;
+  const first = order && order.number > 1 ? stack[0] : undefined;
+  const next = order ? stack[order.number] : undefined;
 
-  // Opened on one item: back to where it was opened from. Otherwise the list, one shorter.
-  const done = () => (initialKey ? close() : select(null));
+  // Opened on one item: back to where it was opened from. Otherwise the member's next payment, if
+  // they stacked several, or the list, one shorter.
+  const done = () => (initialKey ? close() : select(next ? `payment-${next.id}` : null));
   async function deny() {
     if (!current || !reason.trim() || reasonError) return;
     if (await onDeny(current, reason.trim())) done();
@@ -202,24 +176,12 @@ export function ReviewSheet({
               {pending === "deny" ? "Denying…" : isDispute ? "Deny report" : "Deny payment"}
             </button>
           </div>
-        ) : full ? (
-          <button
-            type="button"
-            onClick={() => {
-              setDenying(true);
-              setReason(fullReason);
-            }}
-            disabled={busy || !!earlier}
-            className={`${ui.btnPrimary} min-h-11 w-full`}
-          >
-            Deny payment
-          </button>
         ) : (
           <div className="flex gap-2">
-            <button type="button" onClick={() => setDenying(true)} disabled={busy || !!earlier} className={`${ui.btnSecondary} min-h-11 flex-1`}>
+            <button type="button" onClick={() => setDenying(true)} disabled={busy || !!first} className={`${ui.btnSecondary} min-h-11 flex-1`}>
               Deny
             </button>
-            <button type="button" onClick={() => void approve()} disabled={busy || !!earlier} className={`${ui.btnPrimary} min-h-11 flex-1`}>
+            <button type="button" onClick={() => void approve()} disabled={busy || !!first} className={`${ui.btnPrimary} min-h-11 flex-1`}>
               {pending === "approve" ? "Approving…" : isDispute ? "Approve change" : "Approve"}
             </button>
           </div>
@@ -233,30 +195,23 @@ export function ReviewSheet({
             All {queue.length}
           </button>
         )}
-        {earlier && earlier.kind === "payment" && (
+        {first && order && (
           <p className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-2xl bg-sun-50 px-4 py-3 text-sm text-sun-900">
-            Review their earlier {formatPeso(earlier.item.amount)}
-            {earlierOrder && earlierOrder.of > 1 && ` (${earlierOrder.number} of ${earlierOrder.of})`} first.
-            <button type="button" onClick={() => select(keyOf(earlier))} className={`${ui.link} font-bold`}>
+            Review their earlier {formatPeso(first.amount)} (1 of {order.of}) first.
+            <button type="button" onClick={() => select(`payment-${first.id}`)} className={`${ui.link} font-bold`}>
               Go to it
             </button>
           </p>
         )}
-        {report && (
-          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-2xl bg-sun-50 px-4 py-3 text-sm text-sun-900">
-            <TriangleAlert className="h-4 w-4 shrink-0" aria-hidden />
-            {slot?.isViewer ? "You also asked" : `${slot?.name ?? "This member"} also asked`} to change a{" "}
-            {formatPeso(report.previousAmount)} payment to {formatPeso(report.proposedAmount)}. Decide that first: it changes
-            what&apos;s left to pay.
-            <button type="button" onClick={() => select(`dispute-${report.id}`)} className={`${ui.link} font-bold`}>
-              Go to it
-            </button>
+        {error && (
+          <p className={ui.error} role="alert">
+            {error}
           </p>
         )}
         {current.kind === "dispute" ? (
           <DisputeBody dispute={current.item} name={name} />
         ) : (
-          <PaymentBody detail={detail} payment={current.item} name={name} blocked={full?.error ?? null} />
+          <PaymentBody detail={detail} payment={current.item} name={name} />
         )}
         {denying && (
           <div>
@@ -308,17 +263,7 @@ function DisputeBody({ dispute, name }: { dispute: DisputeView; name: string }) 
   );
 }
 
-function PaymentBody({
-  detail,
-  payment,
-  name,
-  blocked,
-}: {
-  detail: GroupDetail;
-  payment: SubmissionView;
-  name: string;
-  blocked: string | null;
-}) {
+function PaymentBody({ detail, payment, name }: { detail: GroupDetail; payment: SubmissionView; name: string }) {
   const thisRound = payment.type === "CONTRIBUTION" && payment.round === detail.period?.number;
   const standing = thisRound ? detail.period?.slots.find((s) => s.slotId === payment.slotId) : undefined;
   const after = standing ? periodStatus(standing.due, standing.approved + payment.amount, 0).status : null;
@@ -350,32 +295,25 @@ function PaymentBody({
           {payment.note}
         </p>
       )}
-      {blocked ? (
-        <p className="flex items-start gap-2 rounded-2xl bg-sun-50 px-4 py-3 text-sm font-semibold text-sun-900">
-          <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-          {blocked}
-        </p>
-      ) : (
-        <p className="text-sm text-ink-600">
-          {standing && after ? (
-            <>
-              After approval:{" "}
-              <b>{after === "PAID" ? "paid up" : `${formatPeso(standing.approved + payment.amount)} of ${formatPeso(standing.due)} paid`}</b>
-            </>
-          ) : payment.amount > owed ? (
-            // R-DEC-19: the server refuses it; say so before the organizer tries.
-            <>
-              {owed > 0 ? `${name} only owes ${formatPeso(owed)} now` : `${name} doesn't owe anything now`}, so this can&apos;t be
-              approved. Deny it instead.
-            </>
-          ) : (
-            <>
-              {payment.type === "CONTRIBUTION" ? `Round ${payment.round} has closed, so this` : "This"} goes toward {name}&apos;s{" "}
-              {formatPeso(owed)} debt, interest first.
-            </>
-          )}
-        </p>
-      )}
+      <p className="text-sm text-ink-600">
+        {standing && after ? (
+          <>
+            After approval:{" "}
+            <b>{after === "PAID" ? "paid up" : `${formatPeso(standing.approved + payment.amount)} of ${formatPeso(standing.due)} paid`}</b>
+          </>
+        ) : payment.amount > owed ? (
+          // R-DEC-19: the server refuses it; say so before the organizer tries.
+          <>
+            {owed > 0 ? `${name} only owes ${formatPeso(owed)} now` : `${name} doesn't owe anything now`}, so this can&apos;t be
+            approved. Deny it instead.
+          </>
+        ) : (
+          <>
+            {payment.type === "CONTRIBUTION" ? `Round ${payment.round} has closed, so this` : "This"} goes toward {name}&apos;s{" "}
+            {formatPeso(owed)} debt, interest first.
+          </>
+        )}
+      </p>
     </>
   );
 }

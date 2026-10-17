@@ -50,7 +50,8 @@ function DisputeForm({
   const value = parsePesoInput(amountText);
   const amountError = Number.isNaN(value)
     ? "Enter an amount like 1500, or 0."
-    : disputeAmountError(value, current, standing?.approved ?? current, standing?.due ?? current);
+    : // R-DEC-29: what's waiting for review holds its room, so it limits an increase.
+      disputeAmountError(value, current, standing?.approved ?? current, standing?.due ?? current, standing?.waiting ?? 0);
   const reasonError =
     reason.trim().length > DISPUTE_REASON_MAX_LENGTH ? `Up to ${DISPUTE_REASON_MAX_LENGTH} characters.` : null;
   const refund = Number.isNaN(value) ? 0 : refundFor(current, value);

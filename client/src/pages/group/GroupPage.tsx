@@ -819,9 +819,14 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
           initialKey={typeof reviewOpen === "string" ? reviewOpen : null}
           detail={detail}
           pending={pending}
-          onClose={() => setReviewOpen(false)}
+          onClose={() => {
+            setReviewOpen(false);
+            clearError();
+          }}
           onApprove={approveItem}
           onDeny={denyItem}
+          error={error?.message ?? null}
+          onClearError={clearError}
         />
       )}
       <SlotSheet
