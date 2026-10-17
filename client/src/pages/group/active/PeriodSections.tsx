@@ -1,8 +1,8 @@
-import { Check, Clock, ImageOff, Paperclip } from "lucide-react";
+import { Check, ChevronRight, Clock, ImageOff, Paperclip } from "lucide-react";
 import type { DisputeView, GroupDetail, GroupStats, PayoutView, PeriodSlot, SlotView, SubmissionView } from "../../../api/client";
 import { roundsLabel } from "@domain/submissions";
 import { Avatar } from "../../../components/Avatar";
-import { daysUntil, formatLocalDate, formatMonthDay } from "../../../lib/dates";
+import { daysUntil, formatMonthDay } from "../../../lib/dates";
 import { formatPeso } from "../../../lib/money";
 import { ui } from "../../../lib/ui";
 import { asPayments, isAhead, latestDispute, payRooms } from "./period";
@@ -16,25 +16,41 @@ interface Stage {
 }
 
 /**
- * Where money is in a round's life, as three steps with the current one lit: collecting, then the
+ * Where money is in a round's life, as connected steps with the current one lit: collected, then the
  * payout, then the recipient confirming it.
  */
-const STAGE_BAR = { done: "bg-brand-600", active: "bg-sun-400", todo: "bg-ink-200" };
-const STAGE_LABEL = { done: "text-ink-600", active: "text-ink-900", todo: "text-ink-400" };
+const STAGE_DOT = {
+  done: "bg-brand-600 text-white",
+  active: "bg-white ring-2 ring-sun-400",
+  todo: "bg-white ring-2 ring-ink-200",
+};
+const STAGE_LABEL = { done: "text-ink-700", active: "text-ink-900", todo: "text-ink-400" };
 
 function StageTrack({ stages }: { stages: Stage[] }) {
   return (
-    <ol className="grid gap-2" style={{ gridTemplateColumns: `repeat(${stages.length}, minmax(0, 1fr))` }} aria-label="Stage">
-      {stages.map((stage) => (
-        <li key={stage.label} aria-current={stage.state === "active" ? "step" : undefined}>
-          <span className={`block h-1.5 rounded-full ${STAGE_BAR[stage.state]}`} />
-          <span className={`mt-2 flex items-center gap-1 text-xs font-bold ${STAGE_LABEL[stage.state]}`}>
-            {stage.state === "done" && <Check className="h-3.5 w-3.5 shrink-0" aria-hidden />}
-            {stage.state === "active" && (
-              <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-sun-500" aria-hidden />
-            )}
-            {stage.label}
+    <ol className="isolate flex" aria-label="Stage">
+      {stages.map((stage, i) => (
+        <li
+          key={stage.label}
+          aria-current={stage.state === "active" ? "step" : undefined}
+          className="relative min-w-0 flex-1 px-2 text-center"
+        >
+          {/* The line from the previous step, drawn under the dots: green once this step is reached. */}
+          {i > 0 && (
+            <span
+              aria-hidden
+              className={`absolute top-3 right-1/2 left-[-50%] h-0.5 -translate-y-1/2 ${
+                stage.state === "todo" ? "bg-ink-200" : "bg-brand-600"
+              }`}
+            />
+          )}
+          <span
+            className={`relative z-10 mx-auto flex h-6 w-6 items-center justify-center rounded-full ${STAGE_DOT[stage.state]}`}
+          >
+            {stage.state === "done" && <Check className="h-3.5 w-3.5" strokeWidth={3} aria-hidden />}
+            {stage.state === "active" && <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-sun-500" aria-hidden />}
           </span>
+          <span className={`mt-2 block text-xs font-bold ${STAGE_LABEL[stage.state]}`}>{stage.label}</span>
           {stage.note && <span className="block text-xs text-ink-500">{stage.note}</span>}
         </li>
       ))}
@@ -42,9 +58,15 @@ function StageTrack({ stages }: { stages: Stage[] }) {
   );
 }
 
+/** A timestamp as the viewer's local "Nov 1", to match the other step notes. */
+function shortDay(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
 /**
  * A payout still on its way (§7): handed over by the organizer, then confirmed by the recipient.
  * Shown to everyone (R-DEC-06) while the next round collects, so both stages are visible at once.
+ * The whole header opens the payout's details; from `sm` the steps sit beside it, so the card stays one band.
  */
 export function PayoutStageCard({ detail, payout, onOpen }: { detail: GroupDetail; payout: PayoutView; onOpen: () => void }) {
   const recipient = detail.slots.find((s) => s.id === payout.recipientSlotId);
@@ -55,38 +77,45 @@ export function PayoutStageCard({ detail, payout, onOpen }: { detail: GroupDetai
   return (
     <section
       aria-label={`Round ${payout.round} payout`}
-      className="rounded-3xl border-2 border-sun-200 bg-sun-50 p-5 sm:p-6"
+      className={`${ui.cardCompact} sm:flex sm:items-center sm:gap-8`}
     >
-      <div className="mb-4 flex items-start justify-between gap-3">
-        <p className="min-w-0">
-          <span className="block text-xs font-bold uppercase tracking-wide text-sun-800">Round {payout.round} payout</span>
-          <span className="font-heading block text-lg font-bold text-ink-900">
-            {formatPeso(payout.net)} to {recipient?.isViewer ? "you" : recipient?.name}
+      <button
+        type="button"
+        onClick={onOpen}
+        className="-m-2 flex w-[calc(100%+1rem)] items-center gap-3 rounded-2xl p-2 text-left transition-colors hover:bg-ink-50 sm:w-auto sm:min-w-0 sm:flex-1"
+      >
+        {recipient && <Avatar name={recipient.name} size="md" placeholder={recipient.kind === "PLACEHOLDER"} />}
+        <span className="min-w-0 flex-1">
+          <span className="font-heading block truncate text-lg font-bold text-ink-900">
+            <span className="tabular-nums">{formatPeso(payout.net)}</span> to{" "}
+            {recipient?.isViewer ? "you" : recipient?.name}
           </span>
-        </p>
-        <button type="button" onClick={onOpen} className={`${ui.btnSecondarySm} shrink-0`}>
-          Details
-        </button>
+          <span className="block text-sm text-ink-500">The pot from round {payout.round}</span>
+        </span>
+        <ChevronRight className="h-5 w-5 shrink-0 text-ink-400" aria-hidden />
+        <span className="sr-only">Details</span>
+      </button>
+      <div className="mt-5 sm:mt-0 sm:w-96 sm:shrink-0">
+        <StageTrack
+          stages={
+            oneStep
+              ? [collected, { label: "Paid out", note: `By ${detail.group.organizerName}`, state: "active" }]
+              : [
+                  collected,
+                  {
+                    label: "Handed over",
+                    note: payout.handedOverAt ? shortDay(payout.handedOverAt) : `By ${detail.group.organizerName}`,
+                    state: handedOver ? "done" : "active",
+                  },
+                  {
+                    label: "Received",
+                    note: recipient?.isViewer ? "Yours to confirm" : `${recipient?.name} confirms`,
+                    state: handedOver ? "active" : "todo",
+                  },
+                ]
+          }
+        />
       </div>
-      <StageTrack
-        stages={
-          oneStep
-            ? [collected, { label: "Paid out", note: `By ${detail.group.organizerName}`, state: "active" }]
-            : [
-                collected,
-                {
-                  label: "Handed over",
-                  note: payout.handedOverAt ? formatLocalDate(payout.handedOverAt) : `By ${detail.group.organizerName}`,
-                  state: handedOver ? "done" : "active",
-                },
-                {
-                  label: "Received",
-                  note: recipient?.isViewer ? "Confirm when you have it" : `${recipient?.name} confirms`,
-                  state: handedOver ? "active" : "todo",
-                },
-              ]
-        }
-      />
     </section>
   );
 }
@@ -186,8 +215,8 @@ function StatusChip({ standing }: { standing: PeriodSlot }) {
 /**
  * Everyone's standing this round, in payout order (R-SUB-07, R-DEC-06). The viewer's own row is
  * always tappable to pay, whatever the Now panel is showing; the organizer's placeholder rows too,
- * to record their payments (R-SUB-02). Once that slot has paid this round in full (approved), the
- * same row pays ahead (R-DEC-31); every row says what its slot has paid ahead (R-DEC-06).
+ * to record their payments (R-SUB-02). Once that slot's payments cover this round, approved or in
+ * review (R-DEC-29), the same row pays ahead (R-DEC-31); every row says what its slot has paid ahead (R-DEC-06).
  */
 export function PeriodStatusList({
   detail,
@@ -212,16 +241,16 @@ export function PeriodStatusList({
       <ul className="divide-y divide-ink-100 overflow-hidden rounded-3xl border border-ink-200 bg-white">
         {slots.map((slot) => {
           const standing = period.slots.find((s) => s.slotId === slot.id)!;
-          const recordable =
-            onRecord &&
-            (slot.isViewer || (detail.viewer.isOrganizer && slot.kind === "PLACEHOLDER")) &&
-            standing.status !== "PAID";
-          // R-DEC-31: only once this round is approved in full, and paying ahead is open to the slot.
-          const payableAhead =
-            onRecord &&
-            (slot.isViewer || (detail.viewer.isOrganizer && slot.kind === "PLACEHOLDER")) &&
-            standing.status === "PAID" &&
-            payRooms(detail, slot.id).ahead > 0;
+          // What a payment from this row would fill (R-DEC-29, R-DEC-31): pending money already holds
+          // this round's room, so once it's covered, approved or in review, the row pays ahead instead.
+          const rooms =
+            onRecord && (slot.isViewer || (detail.viewer.isOrganizer && slot.kind === "PLACEHOLDER"))
+              ? payRooms(detail, slot.id)
+              : null;
+          const recordable = !!rooms && rooms.openRoom > 0;
+          const payableAhead = !!rooms && rooms.openRoom === 0 && rooms.ahead > 0;
+          // A button takes the place of the In review chip, so the amount line says it.
+          const inReview = (recordable || payableAhead) && standing.status !== "PAID" && standing.pending > 0;
           const paidAhead = detail.ahead.filter((a) => a.slotId === slot.id && a.approved + a.pending > 0);
           const aheadTotal = paidAhead.reduce((total, a) => total + a.approved + a.pending, 0);
           const body = (
@@ -235,7 +264,9 @@ export function PeriodStatusList({
                   {standing.status === "PAID"
                     ? // The button takes the place of the Paid chip, so the line says it.
                       `${payableAhead ? "Paid " : ""}${formatPeso(standing.approved)}`
-                    : `${formatPeso(standing.approved)} of ${formatPeso(standing.due)}`}
+                    : `${formatPeso(standing.approved)} of ${formatPeso(standing.due)}${
+                        inReview ? ` · ${formatPeso(standing.pending)} in review` : ""
+                      }`}
                 </span>
                 {aheadTotal > 0 && (
                   <span className="block text-xs text-brand-700 tabular-nums">
@@ -259,11 +290,11 @@ export function PeriodStatusList({
             <li key={slot.id} className={`flex min-h-16 items-center gap-3 px-4 py-3 ${slot.isViewer ? "bg-brand-50" : ""}`}>
               {body}
               {recordable ? (
-                <button type="button" onClick={() => onRecord(slot)} className={`${ui.btnSecondarySm} ${TRAILING}`}>
+                <button type="button" onClick={() => onRecord!(slot)} className={`${ui.btnSecondarySm} ${TRAILING}`}>
                   {slot.isViewer && !detail.viewer.isOrganizer ? "Report" : "Record"}
                 </button>
               ) : payableAhead ? (
-                <button type="button" onClick={() => onRecord(slot)} className={`${ui.btnSecondarySm} ${TRAILING}`}>
+                <button type="button" onClick={() => onRecord!(slot)} className={`${ui.btnSecondarySm} ${TRAILING}`}>
                   {slot.isViewer && !detail.viewer.isOrganizer ? "Pay ahead" : "Record ahead"}
                 </button>
               ) : remindable ? (

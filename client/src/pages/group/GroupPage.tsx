@@ -724,10 +724,11 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
             {started && !isOrganizer && <MyStanding detail={detail} stats={stats} />}
             {!isOrganizer && now}
             {detail.period && <PeriodCard detail={detail} stats={stats} />}
-            {/* Any earlier payout still on its way, with where it stands. */}
+            {/* Any earlier payout still on its way, with where it stands, for whoever is waiting on it.
+                The one who must act (organizer to hand over, recipient to confirm) has it as a to-do instead. */}
             {[...detail.payouts]
               .reverse()
-              .filter((p) => p.status !== "CONFIRMED")
+              .filter((p) => p.status !== "CONFIRMED" && !payoutsToActOnFor(detail).includes(p))
               .map((p) => (
                 <PayoutStageCard key={p.round} detail={detail} payout={p} onOpen={() => setPayoutRound(p.round)} />
               ))}

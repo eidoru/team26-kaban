@@ -6,13 +6,14 @@ import type { NowTone } from "./NowPanel";
 /**
  * Icon chip per tone, matching the Now panel's: `danger` for money owed late, `sun` for money the viewer must
  * send, `brand` for someone waiting on the viewer's decision, `calm` for optional tasks. Only the chip is
- * colored; cards and buttons stay the same, so there's still one kind of action.
+ * colored, in soft tints so the Now panel stays the loudest thing; cards and buttons stay the same, so there's
+ * still one kind of action.
  */
 const CHIP: Record<NowTone, string> = {
-  brand: "bg-brand-700 text-white",
-  sun: "bg-sun-400 text-sun-950",
-  danger: "bg-danger-600 text-white",
-  calm: "bg-ink-100 text-ink-600",
+  brand: "bg-brand-100 text-brand-800",
+  sun: "bg-sun-100 text-sun-800",
+  danger: "bg-danger-100 text-danger-700",
+  calm: "bg-ink-100 text-ink-500",
 };
 
 export interface TodoAction {

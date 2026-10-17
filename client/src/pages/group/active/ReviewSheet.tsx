@@ -32,8 +32,8 @@ type Decision = {
 /**
  * The organizer's review queue: disputes (R-DSP-02) and payments (R-SUB-03/04). It opens on a list
  * of everything waiting; a row opens that item with its proof (or "No proof attached", R-SUB-08)
- * and what approving changes, and after a decision the list comes back, shorter. With a single
- * item it opens straight on it. One member's payments for a round go in the order they came in
+ * and what approving changes, and after a decision the list comes back, shorter, with the decision
+ * stamped above it. With a single item it opens straight on it. One member's payments for a round go in the order they came in
  * (R-SUB-05), so the list shows only the next of each stack, numbered ("1 of 6"), and deciding one
  * moves straight on to the next (R-DEC-30): the decided card is stamped and slides out as the next
  * one slides in, carousel-style, and a bar shows the stack's progress. When a member's stack is done,
@@ -147,8 +147,9 @@ export function ReviewSheet({
 
   if (!current) {
     return (
-      <Sheet open wide onClose={close} title="Waiting for review" subtitle={`${queue.length} to decide`}>
+      <Sheet open onClose={close} title="Waiting for review" subtitle={`${queue.length} to decide`}>
         {status}
+        {outgoing && <DecidedBanner decision={outgoing} />}
         <ul className="divide-y divide-ink-100 overflow-hidden rounded-3xl border border-ink-200 bg-white">
           {visible.map((q) => {
             const slot = detail.slots.find((s) => s.id === q.item.slotId);
@@ -234,10 +235,8 @@ export function ReviewSheet({
     setDecided((all) => [...all, decision]);
     done();
     setAnnouncement(decision.label);
-    if (next && !initialKey) {
-      setOutgoing(decision);
-      setCarousel(true);
-    } else if (review.kind === "payment" && !initialKey) {
+    if (initialKey) return;
+    if (review.kind === "payment" && !next) {
       // The member's stack is done. Pause on it if it had several, or if the next item (someone
       // else's) would otherwise open by itself.
       const states = [
@@ -247,8 +246,13 @@ export function ReviewSheet({
       const left = visible.filter((q) => keyOf(q) !== keyOf(review));
       if (states.length > 1 || left.length === 1) {
         setFinished({ slotId: review.item.slotId, round: review.item.round, states });
+        return;
       }
     }
+    // Otherwise the decision stays visible where the sheet lands: sliding out beside the next card,
+    // or stamped above the list, so going back to the list is never a silent jump.
+    setOutgoing(decision);
+    setCarousel(true);
   }
   async function deny() {
     if (!current || !reason.trim() || reasonError) return;
@@ -272,7 +276,6 @@ export function ReviewSheet({
   return (
     <Sheet
       open
-      wide
       onClose={close}
       title={title}
       subtitle={subtitle}
@@ -406,6 +409,25 @@ function DecidedCard({ decision, onDone }: { decision: Decision; onDone: () => v
 }
 
 /**
+ * The decision just made, above the list it brought back (the row is gone from it). Stays until
+ * the organizer opens something else; screen readers hear it from the sheet's status line.
+ */
+function DecidedBanner({ decision }: { decision: Decision }) {
+  const Icon = decision.approved ? CircleCheck : CircleX;
+  return (
+    <p
+      aria-hidden
+      className={`animate-slide-in mb-3 flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-bold ${
+        decision.approved ? "bg-brand-50 text-brand-800" : "bg-danger-50 text-danger-800"
+      }`}
+    >
+      <Icon className="animate-pop h-5 w-5 shrink-0" />
+      {decision.label}
+    </p>
+  );
+}
+
+/**
  * R-DEC-30: a member's stack is done. Shows how it went and where they stand, then says where the
  * organizer goes next, so moving on to another member is a deliberate step.
  */
@@ -432,7 +454,6 @@ function FinishedStep({
   return (
     <Sheet
       open
-      wide
       onClose={onClose}
       title={title}
       subtitle={`${finished.round ? `Round ${finished.round} · ` : ""}${count} ${count === 1 ? "payment" : "payments"}`}
