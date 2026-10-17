@@ -5,8 +5,7 @@ import { useDialogBehavior } from "../../lib/useDialogBehavior";
 
 /**
  * Details and secondary actions. Slides up from the bottom on phones and sits centered from sm up.
- * `footer` stays pinned below the scrolling body, for the sheet's main action. `wide` gives it more
- * room from sm up, for sheets with a photo and several notes (phones already use the full width).
+ * `footer` stays pinned below the scrolling body, for the sheet's main action.
  */
 export function Sheet({
   open,
@@ -14,7 +13,6 @@ export function Sheet({
   subtitle,
   onClose,
   footer,
-  wide = false,
   children,
 }: {
   open: boolean;
@@ -22,7 +20,6 @@ export function Sheet({
   subtitle?: ReactNode;
   onClose: () => void;
   footer?: ReactNode;
-  wide?: boolean;
   children: ReactNode;
 }) {
   const titleId = useId();
@@ -46,7 +43,7 @@ export function Sheet({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className={`animate-rise relative flex max-h-[88dvh] w-full flex-col rounded-t-3xl border border-ink-200 bg-white shadow-lift sm:rounded-3xl ${wide ? "sm:max-w-3xl" : "sm:max-w-xl"}`}
+        className="animate-rise relative flex max-h-[88dvh] w-full flex-col rounded-t-3xl border border-ink-200 bg-white shadow-lift sm:rounded-3xl sm:max-w-xl"
       >
         <div className="mx-auto mt-2 h-1.5 w-10 shrink-0 rounded-full bg-ink-200 sm:hidden" aria-hidden />
         <div className="flex shrink-0 items-start justify-between gap-3 px-5 pb-3 pt-3 sm:px-6 sm:pt-5">

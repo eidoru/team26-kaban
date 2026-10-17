@@ -147,7 +147,7 @@ export function ReviewSheet({
 
   if (!current) {
     return (
-      <Sheet open wide onClose={close} title="Waiting for review" subtitle={`${queue.length} to decide`}>
+      <Sheet open onClose={close} title="Waiting for review" subtitle={`${queue.length} to decide`}>
         {status}
         <ul className="divide-y divide-ink-100 overflow-hidden rounded-3xl border border-ink-200 bg-white">
           {visible.map((q) => {
@@ -272,7 +272,6 @@ export function ReviewSheet({
   return (
     <Sheet
       open
-      wide
       onClose={close}
       title={title}
       subtitle={subtitle}
@@ -432,7 +431,6 @@ function FinishedStep({
   return (
     <Sheet
       open
-      wide
       onClose={onClose}
       title={title}
       subtitle={`${finished.round ? `Round ${finished.round} · ` : ""}${count} ${count === 1 ? "payment" : "payments"}`}
