@@ -1,10 +1,11 @@
 import { useOutletContext } from "react-router-dom";
 import type { GroupDetail } from "../../api/client";
 
-/** Only end states get a label; while it's being set up or runs, the page itself shows the state. */
+/**
+ * Only the cancelled lobby page gets a text label; a completed paluwagan shows a check seal by its
+ * name in GroupShell, and while it's being set up or runs, the page itself shows the state.
+ */
 export const STATE_LABELS: Partial<Record<GroupDetail["group"]["state"], string>> = {
-  COMPLETED: "Completed",
-  COMPLETED_WITH_OUTSTANDING_DEBT: "Completed, debts open",
   CANCELLED: "Cancelled",
 };
 

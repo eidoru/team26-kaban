@@ -14,6 +14,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { api, type HomeDashboard } from "../api/client";
+import { CompleteSeal } from "../components/CompleteSeal";
 import { KabanChest } from "../components/Illustration";
 import { NotificationIcon } from "../components/NotificationIcon";
 import { dueHint, formatShortDate } from "../lib/dates";
@@ -82,15 +83,10 @@ function badges(g: Group): Badge[] {
       }
       break;
     }
+    // A finished paluwagan wears the check seal by its name instead of a badge; only a debt of yours stays.
     case "COMPLETED_WITH_OUTSTANDING_DEBT":
-      out.push(
-        g.owed > 0
-          ? { icon: HandCoins, text: `You owe ${formatPeso(g.owed)}`, tone: TONES.bad }
-          : { icon: Check, text: "Complete, debts open", tone: TONES.info },
-      );
+      if (g.owed > 0) out.push({ icon: HandCoins, text: `You owe ${formatPeso(g.owed)}`, tone: TONES.bad });
       break;
-    default:
-      out.push({ icon: Check, text: "Complete", tone: TONES.info });
   }
   if (g.myTurn && g.state !== "LOBBY") {
     out.push(
@@ -211,30 +207,39 @@ export function HomePage() {
           {start}
         </div>
         <ul className="space-y-3">
-          {data.groups.map((g) => (
-            <li key={g.id}>
-              <Link
-                to={`/groups/${g.id}`}
-                className="flex items-center gap-4 rounded-3xl border border-ink-200 bg-white p-5 shadow-card transition-colors hover:border-brand-300"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-bold uppercase tracking-wide text-ink-500">
-                    {formatPeso(g.contribution)} {g.frequencyLabel.toLowerCase()}
-                  </p>
-                  <p className="font-heading mt-0.5 truncate text-lg font-bold text-ink-900">{g.name}</p>
-                  <ul className="mt-2 flex flex-wrap gap-1.5">
-                    {badges(g).map((b) => (
-                      <li key={b.text} className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${b.tone}`}>
-                        <b.icon className="h-3.5 w-3.5" aria-hidden />
-                        {b.text}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-                <ChevronRight className="h-5 w-5 shrink-0 text-ink-400" aria-hidden />
-              </Link>
-            </li>
-          ))}
+          {data.groups.map((g) => {
+            const complete = g.state === "COMPLETED" || g.state === "COMPLETED_WITH_OUTSTANDING_DEBT";
+            const shown = badges(g);
+            return (
+              <li key={g.id}>
+                <Link
+                  to={`/groups/${g.id}`}
+                  className="flex items-center gap-4 rounded-3xl border border-ink-200 bg-white p-5 shadow-card transition-colors hover:border-brand-300"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-bold uppercase tracking-wide text-ink-500">
+                      {formatPeso(g.contribution)} {g.frequencyLabel.toLowerCase()}
+                    </p>
+                    <p className="font-heading mt-0.5 flex items-center gap-2 text-lg font-bold text-ink-900">
+                      {complete && <CompleteSeal size="sm" />}
+                      <span className="truncate">{g.name}</span>
+                    </p>
+                    {shown.length > 0 && (
+                      <ul className="mt-2 flex flex-wrap gap-1.5">
+                        {shown.map((b) => (
+                          <li key={b.text} className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${b.tone}`}>
+                            <b.icon className="h-3.5 w-3.5" aria-hidden />
+                            {b.text}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                  <ChevronRight className="h-5 w-5 shrink-0 text-ink-400" aria-hidden />
+                </Link>
+              </li>
+            );
+          })}
         </ul>
       </section>
 

@@ -2,11 +2,12 @@ import { Link, NavLink, Outlet, useLocation, useParams } from "react-router-dom"
 import { useQueryClient } from "@tanstack/react-query";
 import { Activity, CalendarDays, CloudOff, HandCoins, LayoutDashboard, Users, Wallet, type LucideIcon } from "lucide-react";
 import { ApiError, type GroupDetail } from "../../api/client";
+import { CompleteSeal } from "../../components/CompleteSeal";
 import { groupKey, useGroup } from "../../lib/groupQueries";
 import { ui } from "../../lib/ui";
 import { useGroupRealtime } from "../../lib/useGroupRealtime";
 import { hasDebtsView } from "./active/period";
-import { hasViews, STATE_LABELS, type GroupShellContext } from "./groupShell";
+import { hasViews, type GroupShellContext } from "./groupShell";
 
 /**
  * Every page of one paluwagan. Loads the group (live, with polling as the fallback), handles the
@@ -61,13 +62,14 @@ export function GroupShell() {
   if (!navMode) return <Outlet context={context} />;
 
   const { group } = detail;
+  const complete = group.state === "COMPLETED" || group.state === "COMPLETED_WITH_OUTSTANDING_DEBT";
   return (
     <div className="min-w-0 space-y-6">
       <header>
-        {STATE_LABELS[group.state] && (
-          <p className="mb-1 text-xs font-bold uppercase tracking-wide text-ink-500">{STATE_LABELS[group.state]}</p>
-        )}
-        <h1 className={ui.pageTitle}>{group.name}</h1>
+        <h1 className={`${ui.pageTitle} flex items-start gap-3`}>
+          {complete && <CompleteSeal size="lg" />}
+          <span className="min-w-0">{group.name}</span>
+        </h1>
         {detail.period && (
           <p className="mt-1 text-sm text-ink-500">
             Round {detail.period.number} of {group.slotCount}
