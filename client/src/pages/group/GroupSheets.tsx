@@ -10,8 +10,8 @@ const NAME_MAX = 100;
 const CONTACT_MAX = 200;
 
 /**
- * The invite link (R-LOB-01), shown in the lobby's next-step panel while slots are open: share it,
- * or replace it so the old one stops working.
+ * The invite link (R-LOB-01), shown in the lobby's next-step panel while slots are open. Once made,
+ * it's permanent.
  */
 export function InviteLinkPanel({
   detail,
@@ -24,12 +24,7 @@ export function InviteLinkPanel({
 }) {
   const { group, inviteLink } = detail;
   return inviteLink ? (
-    <>
-      <ShareLink url={inviteLink.url} shareText={`Join ${group.name} on Kaban`} />
-      <button type="button" onClick={onCreateLink} disabled={pending === "invite"} className={`${ui.link} mt-2`}>
-        Make a new link (the old one stops working)
-      </button>
-    </>
+    <ShareLink url={inviteLink.url} shareText={`Join ${group.name} on Kaban`} />
   ) : (
     <button type="button" onClick={onCreateLink} disabled={pending === "invite"} className={ui.btnPrimaryFull}>
       {pending === "invite" ? "Creating…" : "Create invite link"}
@@ -103,7 +98,6 @@ export function SlotSheet({
   pending,
   onClose,
   onCreateClaimLink,
-  onRevokeClaimLink,
   onRemove,
 }: {
   slot: SlotView | null;
@@ -111,7 +105,6 @@ export function SlotSheet({
   pending: string | null;
   onClose: () => void;
   onCreateClaimLink: (slot: SlotView) => void;
-  onRevokeClaimLink: (slot: SlotView) => void;
   onRemove: (slot: SlotView) => void;
 }) {
   if (!slot) return null;
@@ -129,17 +122,7 @@ export function SlotSheet({
           <section aria-label="Claim link">
             <div className="space-y-2">
               {slot.claimLink ? (
-                <>
-                  <ShareLink url={slot.claimLink.url} shareText={`Claim your slot in ${detail.group.name} on Kaban`} />
-                  <div className="flex flex-wrap gap-x-4 gap-y-1">
-                    <button type="button" onClick={() => onCreateClaimLink(slot)} disabled={!!pending} className={ui.link}>
-                      Make a new link
-                    </button>
-                    <button type="button" onClick={() => onRevokeClaimLink(slot)} disabled={!!pending} className={ui.link}>
-                      Turn off this link
-                    </button>
-                  </div>
-                </>
+                <ShareLink url={slot.claimLink.url} shareText={`Claim your slot in ${detail.group.name} on Kaban`} />
               ) : (
                 <button
                   type="button"

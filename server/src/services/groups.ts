@@ -130,11 +130,6 @@ export async function cancelGroup(groupId: string, actorUserId: string) {
       where: { id: groupId },
       data: { state: "CANCELLED", cancelledAt: new Date() },
     });
-    await tx.inviteLink.updateMany({ where: { groupId, revokedAt: null }, data: { revokedAt: new Date() } });
-    await tx.claimLink.updateMany({
-      where: { slot: { groupId }, revokedAt: null, claimedAt: null },
-      data: { revokedAt: new Date() },
-    });
     await audit(tx, { groupId, actorUserId, action: "group.cancelled" });
     const others = (await memberUserIds(tx, groupId)).filter((id) => id !== actorUserId);
     await notifyUsers(tx, others, {

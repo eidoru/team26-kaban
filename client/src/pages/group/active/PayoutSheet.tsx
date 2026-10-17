@@ -45,12 +45,9 @@ export function PayoutSheet({
   onClose,
   onHandOver,
   onConfirm,
-  onManageSlot,
 }: {
   detail: GroupDetail;
   payout: PayoutView | null;
-  /** Organizer only, for a placeholder recipient: open that slot's actions (its claim link). */
-  onManageSlot?: (slotId: string) => void;
   pending: string | null;
   onClose: () => void;
   onHandOver: (round: number, proofPath?: string) => Promise<boolean>;
@@ -66,7 +63,6 @@ export function PayoutSheet({
       onClose={onClose}
       onHandOver={onHandOver}
       onConfirm={onConfirm}
-      onManageSlot={onManageSlot}
     />
   );
 }
@@ -78,11 +74,9 @@ function PayoutForm({
   onClose,
   onHandOver,
   onConfirm,
-  onManageSlot,
 }: {
   detail: GroupDetail;
   payout: PayoutView;
-  onManageSlot?: (slotId: string) => void;
   pending: string | null;
   onClose: () => void;
   onHandOver: (round: number, proofPath?: string) => Promise<boolean>;
@@ -213,11 +207,6 @@ function PayoutForm({
           <a href={payout.proofUrl} target="_blank" rel="noreferrer" className={ui.link}>
             View handover photo
           </a>
-        )}
-        {onManageSlot && detail.viewer.isOrganizer && recipient?.kind === "PLACEHOLDER" && (
-          <button type="button" onClick={() => onManageSlot(recipient.id)} className={`${ui.link} block`}>
-            Claim link for {recipient.name}
-          </button>
         )}
         {error && (
           <p className={ui.error} role="alert">

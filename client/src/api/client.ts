@@ -633,8 +633,6 @@ export const api = {
     send<GroupDetail>("POST", `/groups/${id}/placeholders`, body),
   removeSlot: (id: string, slotId: string) => send<GroupDetail>("DELETE", `/groups/${id}/slots/${slotId}`),
   createClaimLink: (id: string, slotId: string) => send<GroupDetail>("POST", `/groups/${id}/slots/${slotId}/claim-link`),
-  revokeClaimLink: (id: string, slotId: string) =>
-    send<GroupDetail>("DELETE", `/groups/${id}/slots/${slotId}/claim-link`),
   setOrder: (id: string, slotIds: string[]) => send<GroupDetail>("PUT", `/groups/${id}/order`, { slotIds }),
   shuffleOrder: (id: string) => send<GroupDetail>("POST", `/groups/${id}/order/shuffle`),
   launch: (id: string) => send<GroupDetail>("POST", `/groups/${id}/launch`),

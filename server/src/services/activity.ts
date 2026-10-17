@@ -84,8 +84,6 @@ export function describe(entry: {
       return T(`${actor} removed the placeholder ${target}`);
     case "claim_link.created":
       return T(`${actor} made a claim link for ${target}`);
-    case "claim_link.revoked":
-      return T(`${actor} turned off ${target}'s claim link`);
     case "placeholder.claimed":
       return T(`${f.name ?? target} claimed ${b.placeholderName ?? "a placeholder"}'s slot`, "Its turn and history carry over.");
     case "order.changed":

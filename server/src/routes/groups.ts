@@ -6,7 +6,7 @@ import { validateBody } from "../middleware/validate.js";
 import { resolveAppOrigin } from "../lib/origin.js";
 import { notifyGroupChangeSafe } from "../lib/realtimeNotify.js";
 import { cancelGroup, createGroup, editGroup, groupDetail } from "../services/groups.js";
-import { addPlaceholder, createClaimLink, createInviteLink, removeSlot, revokeClaimLink } from "../services/roster.js";
+import { addPlaceholder, createClaimLink, createInviteLink, removeSlot } from "../services/roster.js";
 import { launchGroup, setOrder, shuffleOrder } from "../services/launch.js";
 import { cancelSubmission, reviewSubmission, submitPayment } from "../services/submissions.js";
 import { confirmReceipt, markHandedOver } from "../services/payouts.js";
@@ -120,10 +120,6 @@ router.delete("/:id/slots/:slotId", ...organizerAction((req, id, user) => remove
 router.post(
   "/:id/slots/:slotId/claim-link",
   ...organizerAction((req, id, user) => createClaimLink(id, user, String(req.params.slotId))),
-);
-router.delete(
-  "/:id/slots/:slotId/claim-link",
-  ...organizerAction((req, id, user) => revokeClaimLink(id, user, String(req.params.slotId))),
 );
 router.put("/:id/order", validateBody(orderSchema), ...organizerAction((req, id, user) => setOrder(id, user, req.body.slotIds)));
 router.post("/:id/order/shuffle", ...organizerAction((_req, id, user) => shuffleOrder(id, user)));

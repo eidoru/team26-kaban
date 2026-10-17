@@ -16,7 +16,6 @@ export type AuditAction =
   | "placeholder.added"
   | "placeholder.deleted"
   | "claim_link.created"
-  | "claim_link.revoked"
   | "placeholder.claimed"
   | "order.changed"
   | "order.shuffled"

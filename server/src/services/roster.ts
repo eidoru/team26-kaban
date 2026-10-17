@@ -10,11 +10,12 @@ import { assertState, memberUserIds, resetOrder, slotName, withGroupLock } from 
 export const PERSON_NAME_MAX = 100;
 export const CONTACT_MAX = 200;
 
-/** R-LOB-01: one live invite link per group. Generating again revokes the old one. */
+/** R-LOB-01: one permanent invite link per group. Asking again returns the same link. */
 export async function createInviteLink(groupId: string, actorUserId: string) {
   return withGroupLock(groupId, async (tx, group) => {
     assertState(group, ["LOBBY"], "Invites close once the paluwagan launches.");
-    await tx.inviteLink.updateMany({ where: { groupId, revokedAt: null }, data: { revokedAt: new Date() } });
+    const existing = await tx.inviteLink.findFirst({ where: { groupId, revokedAt: null } });
+    if (existing) return existing;
     const link = await tx.inviteLink.create({ data: { groupId } });
     await audit(tx, { groupId, actorUserId, action: "invite_link.created" });
     return link;
@@ -145,17 +146,15 @@ export async function removeSlot(groupId: string, actorUserId: string, slotId: s
   });
 }
 
-/** R-LOB-03: one live claim link per placeholder; a new one revokes the old. */
+/** R-LOB-03: one permanent claim link per placeholder. Asking again returns the same link. */
 export async function createClaimLink(groupId: string, actorUserId: string, slotId: string) {
   return withGroupLock(groupId, async (tx, group) => {
     if (!can.claimPlaceholder(group.state)) throw conflict("Placeholders can't be claimed anymore.", "WRONG_STATE");
     const slot = await tx.slot.findFirst({ where: { id: slotId, groupId } });
     if (!slot) throw notFound("Slot");
     if (slot.userId) throw conflict("This slot already belongs to a member.");
-    await tx.claimLink.updateMany({
-      where: { slotId, revokedAt: null, claimedAt: null },
-      data: { revokedAt: new Date() },
-    });
+    const existing = await tx.claimLink.findFirst({ where: { slotId, revokedAt: null, claimedAt: null } });
+    if (existing) return existing;
     const link = await tx.claimLink.create({ data: { slotId } });
     await audit(tx, {
       groupId,
@@ -165,24 +164,6 @@ export async function createClaimLink(groupId: string, actorUserId: string, slot
       targetName: slot.placeholderName,
     });
     return link;
-  });
-}
-
-export async function revokeClaimLink(groupId: string, actorUserId: string, slotId: string) {
-  return withGroupLock(groupId, async (tx) => {
-    const { count } = await tx.claimLink.updateMany({
-      where: { slotId, slot: { groupId }, revokedAt: null, claimedAt: null },
-      data: { revokedAt: new Date() },
-    });
-    if (count === 0) return;
-    const slot = await tx.slot.findUniqueOrThrow({ where: { id: slotId } });
-    await audit(tx, {
-      groupId,
-      actorUserId,
-      action: "claim_link.revoked",
-      targetSlotId: slotId,
-      targetName: slot.placeholderName,
-    });
   });
 }
 

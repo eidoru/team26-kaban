@@ -195,7 +195,7 @@ model Slot {
   @@map("slots")
 }
 
-/// R-LOB-01, R-INV-05: reusable while the group is in LOBBY. Regenerating revokes the old one.
+/// R-LOB-01, R-INV-05: reusable while the group is in LOBBY. Permanent: never replaced or turned off.
 model InviteLink {
   id        String    @id @default(uuid())
   groupId   String    @map("group_id")
@@ -209,7 +209,7 @@ model InviteLink {
   @@map("invite_links")
 }
 
-/// R-LOB-03, R-CLM-02: single-use. One live link per placeholder; a new one revokes the old.
+/// R-LOB-03, R-CLM-02: single-use. One permanent link per placeholder, until claimed.
 model ClaimLink {
   id              String    @id @default(uuid())
   slotId          String    @map("slot_id")

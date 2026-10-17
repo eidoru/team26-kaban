@@ -86,7 +86,6 @@ export async function launchGroup(groupId: string, actorUserId: string) {
       where: { id: groupId },
       data: { state: "LAUNCHED", launchedAt: new Date() },
     });
-    await tx.inviteLink.updateMany({ where: { groupId, revokedAt: null }, data: { revokedAt: new Date() } });
     await audit(tx, {
       groupId,
       actorUserId,

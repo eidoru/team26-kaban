@@ -121,9 +121,9 @@ No payout happens on the start date itself.
 
 | ID | Rule |
 |---|---|
-| R-LOB-01 | The organizer can generate an **invite link** for the paluwagan. |
+| R-LOB-01 | The organizer can generate an **invite link** for the paluwagan. The link is permanent: it can't be replaced or turned off. |
 | R-LOB-02 | The organizer can **add a placeholder** to an empty slot. |
-| R-LOB-03 | The organizer can generate a **claim link** for a specific placeholder. |
+| R-LOB-03 | The organizer can generate a **claim link** for a specific placeholder. The link is permanent until claimed: it can't be replaced or turned off. |
 | R-LOB-04 | The organizer can **delete a placeholder**. |
 | R-LOB-05 | The organizer can **kick a joined member**. A kicked member may rejoin through the same invite link. |
 | R-LOB-06 | The organizer can **cancel** the paluwagan → `CANCELLED`. |

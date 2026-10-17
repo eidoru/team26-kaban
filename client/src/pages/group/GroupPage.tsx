@@ -801,10 +801,6 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
         onClose={() => setPayoutRound(null)}
         onHandOver={async (round, proofPath) => !!(await run("handover", () => api.markHandedOver(group.id, round, proofPath)))}
         onConfirm={async (round) => !!(await run("confirm", () => api.confirmReceipt(group.id, round)))}
-        onManageSlot={(slotId) => {
-          setPayoutRound(null);
-          setSelectedSlotId(slotId);
-        }}
       />
       {isOrganizer && (
         <ReviewSheet
@@ -825,7 +821,6 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
         pending={pending}
         onClose={() => setSelectedSlotId(null)}
         onCreateClaimLink={(slot) => void run("claim-link", () => api.createClaimLink(group.id, slot.id))}
-        onRevokeClaimLink={(slot) => void run("claim-link", () => api.revokeClaimLink(group.id, slot.id))}
         onRemove={(slot) => void removeSlot(slot)}
       />
     </div>
