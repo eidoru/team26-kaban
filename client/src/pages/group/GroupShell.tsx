@@ -6,7 +6,6 @@ import { CompleteSeal } from "../../components/CompleteSeal";
 import { groupKey, useGroup } from "../../lib/groupQueries";
 import { ui } from "../../lib/ui";
 import { useGroupRealtime } from "../../lib/useGroupRealtime";
-import { hasDebtsView } from "./active/period";
 import { hasViews, type GroupShellContext } from "./groupShell";
 
 /**
@@ -108,10 +107,8 @@ function GroupNav({ detail }: { detail: GroupDetail }) {
     { to: base, label: "Dashboard", short: "Dashboard", icon: LayoutDashboard },
     { to: `${base}/schedule`, label: "Schedule", short: "Schedule", icon: CalendarDays },
     { to: `${base}/members`, label: "Members", short: "Members", icon: Users },
-    // Only while there's a debt or refund to show or act on.
-    ...(hasDebtsView(detail) || pathname === `${base}/debts`
-      ? [{ to: `${base}/debts`, label: "Debts", short: "Debts", icon: HandCoins }]
-      : []),
+    // Always there, so members know where debts will show; empty, it says nobody owes anything.
+    { to: `${base}/debts`, label: "Debts", short: "Debts", icon: HandCoins },
     ...(started
       ? [{ to: `${base}/money`, label: "Money & records", short: "Money", icon: Wallet, also: [`${base}/history`] }]
       : []),
