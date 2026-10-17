@@ -5,6 +5,7 @@ import { submissionAmountError } from "@domain/submissions";
 import type { GroupDetail, SlotView } from "../../../api/client";
 import { AmountField } from "../../../components/flow/AmountField";
 import { Sheet } from "../../../components/flow/Sheet";
+import { SheetDone } from "../../../components/flow/SheetDone";
 import { formatPeso, parsePesoInput, pesoInputValue } from "../../../lib/money";
 import { proofFileError, uploadProof } from "../../../lib/proofUpload";
 import { ui } from "../../../lib/ui";
@@ -65,6 +66,8 @@ function PayForm({
   const preview = useMemo(() => (file ? URL.createObjectURL(file) : null), [file]);
   const [stage, setStage] = useState<"idle" | "uploading" | "sending">("idle");
   const [error, setError] = useState("");
+  // Once sent: what was sent, shown instead of closing on the spot.
+  const [sent, setSent] = useState<number | null>(null);
   const fileId = useId();
   const noteId = useId();
 
@@ -88,12 +91,23 @@ function PayForm({
         proofPath = await uploadProof(detail.group.id, file);
       }
       setStage("sending");
-      if (await onSubmit({ slotId: slot.id, type: mode, amount, proofPath, note: note.trim() || undefined })) onClose();
+      if (await onSubmit({ slotId: slot.id, type: mode, amount, proofPath, note: note.trim() || undefined })) setSent(amount);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't send it. Try again.");
     } finally {
       setStage("idle");
     }
+  }
+
+  if (sent !== null) {
+    // R-SUB-03: everything waits for the organizer's review, the organizer's own reports included.
+    const reviewer = detail.viewer.isOrganizer ? "you approve it in the review queue" : `${detail.group.organizerName} approves it`;
+    return (
+      <SheetDone title={forSomeoneElse ? `Recorded for ${slot.name}` : "Sent for review"} onClose={onClose}>
+        {formatPeso(sent)}
+        {isDebt ? " toward the debt" : ""} counts once {reviewer}.
+      </SheetDone>
+    );
   }
 
   return (
