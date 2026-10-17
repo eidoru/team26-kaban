@@ -790,6 +790,7 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
       {isOrganizer && inLobby && (
         <PlaceholderSheet
           open={inviteOpen}
+          full={full}
           pending={pending}
           onClose={() => setInviteOpen(false)}
           onAddPlaceholder={async (input) => !!(await run("placeholder", () => api.addPlaceholder(group.id, input)))}
@@ -841,8 +842,10 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
       />
       {isOrganizer && (
         <ReviewSheet
-          // A new key per entry point, so a focused open starts on its item.
-          key={typeof reviewOpen === "string" ? reviewOpen : "queue"}
+          // A new key per entry point, so a focused open starts on its item, and per opening, so what was
+          // decided last time doesn't count toward a stack now: a denied payment's round still has room,
+          // and the member's next payment for it would otherwise read "2 of 2" and get a finished step.
+          key={typeof reviewOpen === "string" ? reviewOpen : reviewOpen ? "queue" : "closed"}
           open={reviewOpen !== false}
           initialKey={typeof reviewOpen === "string" ? reviewOpen : null}
           detail={detail}

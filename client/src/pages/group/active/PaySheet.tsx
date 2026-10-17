@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useState } from "react";
 import { Camera, X } from "lucide-react";
 import { NOTE_MAX_LENGTH } from "@domain/constants";
-import { submissionAmountError } from "@domain/submissions";
+import { contributionAmountError, roundsLabel, splitContribution, submissionAmountError } from "@domain/submissions";
 import type { GroupDetail, SlotView } from "../../../api/client";
 import { AmountField } from "../../../components/flow/AmountField";
 import { Sheet } from "../../../components/flow/Sheet";
@@ -9,7 +9,7 @@ import { SheetDone } from "../../../components/flow/SheetDone";
 import { formatPeso, parsePesoInput, pesoInputValue } from "../../../lib/money";
 import { proofFileError, uploadProof } from "../../../lib/proofUpload";
 import { ui } from "../../../lib/ui";
-import { debtReportable, owedBy, standingOf } from "./period";
+import { debtReportable, owedBy, payRooms, standingOf } from "./period";
 
 export type PayMode = "CONTRIBUTION" | "DEBT_PAYMENT";
 type PayInput = { slotId: string; type: PayMode; amount: number; proofPath?: string; note?: string };
@@ -18,6 +18,8 @@ type PayInput = { slotId: string; type: PayMode; amount: number; proofPath?: str
  * Report a payment (R-SUB-01): a contribution for the open period, or a payment toward debt
  * (R-DBT-04). Members report their own; the organizer records for themselves and placeholders
  * (R-SUB-02). The amount defaults to what's left and can't go over it (R-SUB-06). Proof is optional.
+ * A contribution fills what's left of the open round, then later rounds in order once the debt is
+ * covered (paying ahead, R-DEC-31); the server splits it, one part per round (R-DEC-33).
  */
 export function PaySheet({
   detail,
@@ -58,16 +60,22 @@ function PayForm({
   onSubmit: (input: PayInput) => Promise<boolean>;
 }) {
   const isDebt = mode === "DEBT_PAYMENT";
-  const standing = isDebt ? null : standingOf(detail, slot.id)!;
-  const cap = isDebt ? debtReportable(detail, slot.id) : standing!.reportable;
-  const [amountText, setAmountText] = useState(cap > 0 ? pesoInputValue(cap) : "");
+  const open = isDebt ? null : standingOf(detail, slot.id)!;
+  const openRound = detail.period?.number ?? null;
+  const pay = isDebt ? null : payRooms(detail, slot.id);
+  const cap = isDebt ? debtReportable(detail, slot.id) : pay!.cap;
+  // Nothing left this round: the whole payment goes ahead (R-DEC-31).
+  const aheadOnly = !!pay && pay.openRoom === 0 && pay.cap > 0;
+  // By default what's left this round, or one round's worth when paying ahead.
+  const suggested = isDebt ? cap : (pay!.rooms[0]?.room ?? 0);
+  const [amountText, setAmountText] = useState(suggested > 0 ? pesoInputValue(suggested) : "");
   const [note, setNote] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const preview = useMemo(() => (file ? URL.createObjectURL(file) : null), [file]);
   const [stage, setStage] = useState<"idle" | "uploading" | "sending">("idle");
   const [error, setError] = useState("");
   // Once sent: what was sent, shown instead of closing on the spot.
-  const [sent, setSent] = useState<number | null>(null);
+  const [sent, setSent] = useState<{ amount: number; rounds: number[] } | null>(null);
   const fileId = useId();
   const noteId = useId();
 
@@ -77,7 +85,14 @@ function PayForm({
   }, [preview]);
 
   const amount = parsePesoInput(amountText);
-  const amountError = Number.isNaN(amount) ? "Enter an amount like 1000 or 1,000.50." : submissionAmountError(amount, cap);
+  const amountError = Number.isNaN(amount)
+    ? "Enter an amount like 1000 or 1,000.50."
+    : isDebt
+      ? submissionAmountError(amount, cap)
+      : contributionAmountError(amount, cap, pay!.blockedByDebt);
+  // R-DEC-33: how the server will split it, shown once it reaches past this round.
+  const parts = pay && !amountError ? splitContribution(amount, pay.rooms) : [];
+  const reachesAhead = parts.some((p) => p.round !== openRound);
   const noteError = note.trim().length > NOTE_MAX_LENGTH ? `Up to ${NOTE_MAX_LENGTH} characters.` : null;
   const forSomeoneElse = !slot.isViewer;
 
@@ -91,7 +106,9 @@ function PayForm({
         proofPath = await uploadProof(detail.group.id, file);
       }
       setStage("sending");
-      if (await onSubmit({ slotId: slot.id, type: mode, amount, proofPath, note: note.trim() || undefined })) setSent(amount);
+      if (await onSubmit({ slotId: slot.id, type: mode, amount, proofPath, note: note.trim() || undefined })) {
+        setSent({ amount, rounds: parts.map((p) => p.round) });
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't send it. Try again.");
     } finally {
@@ -104,8 +121,8 @@ function PayForm({
     const reviewer = detail.viewer.isOrganizer ? "you approve it in the review queue" : `${detail.group.organizerName} approves it`;
     return (
       <SheetDone title={forSomeoneElse ? `Recorded for ${slot.name}` : "Sent for review"} onClose={onClose}>
-        {formatPeso(sent)}
-        {isDebt ? " toward the debt" : ""} counts once {reviewer}.
+        {formatPeso(sent.amount)}
+        {isDebt ? " toward the debt" : ` for ${roundsLabel(sent.rounds)}`} counts once {reviewer}.
       </SheetDone>
     );
   }
@@ -121,12 +138,18 @@ function PayForm({
             : "Pay toward your debt"
           : forSomeoneElse
             ? `Record a payment for ${slot.name}`
-            : "Report a payment"
+            : aheadOnly
+              ? "Pay ahead"
+              : "Report a payment"
       }
       subtitle={
         isDebt
           ? `Owes ${formatPeso(owedBy(detail, slot.id))} · ${formatPeso(cap)} left to report`
-          : `Round ${detail.period!.number} · ${formatPeso(cap)} left to report`
+          : pay!.openRoom > 0
+            ? `Round ${openRound} · ${formatPeso(pay!.openRoom)} left${
+                pay!.ahead > 0 ? ` · up to ${formatPeso(cap)} with later rounds` : " to report"
+              }`
+            : `Round ${openRound} is covered · up to ${formatPeso(cap)} ahead`
       }
       footer={
         <button
@@ -148,15 +171,37 @@ function PayForm({
       >
         {/* The one rule worth stating here: how a debt payment is applied (R-DBT). */}
         {isDebt && <p className="text-sm text-ink-600">Pays interest first, then the rest.</p>}
+        {/* R-DEC-31: what paying ahead means for the member. */}
+        {pay && pay.ahead > 0 && (
+          <p className="text-sm text-ink-600">
+            {aheadOnly ? "It" : "Anything over this round"} goes to the next rounds in order, and counts toward each
+            when it opens.
+          </p>
+        )}
         <AmountField
           label="Amount paid"
           value={amountText}
           onChange={setAmountText}
           error={amountError}
           helper={
-            standing && standing.approved > 0 ? `${formatPeso(standing.approved)} already approved this round.` : undefined
+            !aheadOnly && open && open.approved > 0
+              ? `${formatPeso(open.approved)} already approved this round.`
+              : undefined
           }
         />
+        {reachesAhead && (
+          <ul aria-label="How it's split" className="divide-y divide-ink-100 rounded-2xl bg-ink-50 px-4 text-sm">
+            {parts.map((p) => (
+              <li key={p.round} className="flex justify-between gap-3 py-2">
+                <span className="text-ink-700">
+                  Round {p.round}
+                  {p.round === openRound && <span className="text-ink-500"> (this round)</span>}
+                </span>
+                <span className="font-semibold text-ink-900 tabular-nums">{formatPeso(p.amount)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
 
         <div>
           <span className={ui.label}>Proof (optional)</span>

@@ -1,3 +1,4 @@
+import { PAY_AHEAD_MAX_ROUNDS } from "./constants.js";
 import { formatPeso, type Centavos } from "./money.js";
 
 /** R-SUB-01 */
@@ -12,6 +13,60 @@ export type PeriodStatus = "PAID" | "PARTIAL" | "UNPAID";
  */
 export function submissionCap(due: Centavos, approved: Centavos, pending: Centavos): Centavos {
   return Math.max(0, due - approved - pending);
+}
+
+/** The room a round still has for a slot's contributions (R-DEC-29). */
+export type RoundRoom = { round: number; room: Centavos };
+
+/**
+ * R-DEC-31 / R-DEC-33: the rounds a contribution may fill, in the order it fills them: what's left
+ * of the open round, then later rounds (paying ahead) once the slot's debt is covered, up to
+ * `maxAhead` rounds after the open one (`PAY_AHEAD_MAX_ROUNDS`; null: no limit, R-DEC-12).
+ */
+export function contributionRooms(input: {
+  open: RoundRoom;
+  upcoming: RoundRoom[];
+  debtLeft: Centavos;
+  maxAhead?: number | null;
+}): RoundRoom[] {
+  const maxAhead = input.maxAhead === undefined ? PAY_AHEAD_MAX_ROUNDS : input.maxAhead;
+  const rooms = input.open.room > 0 ? [input.open] : [];
+  if (input.debtLeft > 0) return rooms;
+  const ahead = [...input.upcoming]
+    .sort((a, b) => a.round - b.round)
+    .filter((r) => r.room > 0 && r.round > input.open.round)
+    .filter((r) => maxAhead == null || r.round - input.open.round <= maxAhead);
+  return [...rooms, ...ahead];
+}
+
+/** R-DEC-33: one payment split over `rooms` in order, each round taking what it has room for. */
+export function splitContribution(amount: Centavos, rooms: RoundRoom[]): { round: number; amount: Centavos }[] {
+  const parts: { round: number; amount: Centavos }[] = [];
+  let left = amount;
+  for (const { round, room } of rooms) {
+    if (left <= 0) break;
+    const take = Math.min(left, room);
+    parts.push({ round, amount: take });
+    left -= take;
+  }
+  return parts;
+}
+
+/** "round 3" or "rounds 1–4", for a payment's parts. */
+export function roundsLabel(rounds: number[]): string {
+  if (rounds.length === 0) return "";
+  const sorted = [...rounds].sort((a, b) => a - b);
+  return sorted.length === 1 ? `round ${sorted[0]}` : `rounds ${sorted[0]}–${sorted.at(-1)}`;
+}
+
+/**
+ * R-SUB-06 / R-DEC-31: why a contribution of `amount` can't be sent, or null. `cap` is the room in
+ * every round it may fill; `blockedByDebt` says paying ahead would be possible but for the debt.
+ */
+export function contributionAmountError(amount: Centavos, cap: Centavos, blockedByDebt: boolean): string | null {
+  const error = submissionAmountError(amount, cap);
+  if (!error || !blockedByDebt || !Number.isInteger(amount) || amount <= 0) return error;
+  return `${error} Pay off the debt before paying ahead.`;
 }
 
 /** Why `amount` can't be submitted, or null. */
