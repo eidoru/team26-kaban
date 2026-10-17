@@ -134,7 +134,7 @@ export function AppLayout() {
   ];
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-cream">
+    <div className="min-h-screen overflow-x-clip bg-cream">
       <header className="sticky top-0 z-40 border-b border-ink-200 bg-cream/90 backdrop-blur">
         {/* Equal side columns keep the nav centered whatever the logo and account name widths. */}
         <div className={`mx-auto grid h-16 w-full min-w-0 ${ui.page} grid-cols-[1fr_auto_1fr] items-center gap-4 px-4 sm:px-6`}>
@@ -158,7 +158,10 @@ export function AppLayout() {
         </div>
       </header>
 
-      <main className={`mx-auto min-w-0 px-4 pb-28 pt-8 sm:px-6 md:pb-12 md:pt-10 ${ui.page}`}>
+      {/* The bottom padding clears the phone nav, plus an ActionBar while one is open (it sets the variable). */}
+      <main
+        className={`mx-auto min-w-0 px-4 pt-8 pb-[calc(7rem+var(--action-bar-height,0px))] sm:px-6 md:pt-10 md:pb-[calc(3rem+var(--action-bar-height,0px))] ${ui.page}`}
+      >
         <Outlet />
       </main>
 
