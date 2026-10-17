@@ -5,7 +5,14 @@ import { canTransition, can } from "./lifecycle.js";
 import { formatPeso, interestOn, pesos, rateFromPercent } from "./money.js";
 import { processPayout, type PayoutResult } from "./payout.js";
 import { buildSchedule, payoutDates } from "./schedule.js";
-import { disputeAmountError, periodStatus, refundFor, submissionAmountError, submissionCap } from "./submissions.js";
+import {
+  contributionApprovalError,
+  disputeAmountError,
+  periodStatus,
+  refundFor,
+  submissionAmountError,
+  submissionCap,
+} from "./submissions.js";
 
 describe("money", () => {
   it("charges interest to the nearest centavo, half up (R-AMT-04)", () => {
@@ -98,6 +105,13 @@ describe("submissions (R-SUB-06, R-SUB-07)", () => {
     expect(periodStatus(pesos(2_000), pesos(2_000), 0)).toEqual({ status: "PAID", pendingReview: false });
     expect(periodStatus(pesos(2_000), pesos(500), 1)).toEqual({ status: "PARTIAL", pendingReview: true });
     expect(periodStatus(pesos(2_000), 0, 2)).toEqual({ status: "UNPAID", pendingReview: true });
+  });
+
+  it("won't approve a contribution past the contribution once the period has filled", () => {
+    // R-DEC-29: ₱1,000, ₱500, ₱500 sent; a problem report raised the ₱1,000 to ₱1,500.
+    expect(contributionApprovalError("Ana", pesos(500), pesos(1_500), pesos(2_000))).toBeNull();
+    expect(contributionApprovalError("Ana", pesos(500), pesos(2_000), pesos(2_000))).toMatch(/already paid in full/);
+    expect(contributionApprovalError("Ana", pesos(1_000), pesos(1_500), pesos(2_000))).toMatch(/only ₱500 left/);
   });
 });
 
