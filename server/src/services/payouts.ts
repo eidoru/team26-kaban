@@ -211,7 +211,7 @@ export async function closeOpenRound(groupId: string, actorUserId: string | null
       await notifyUsers(tx, await memberUserIds(tx, groupId), {
         groupId,
         kind: "period.opened",
-        title: `${group.name}: round ${next.number} is open`,
+        title: `Round ${next.number} is open`,
         body: `Contributions of ${formatPeso(contribution)} are due by ${formatDisplayDate(next.payoutDate)}.`,
       });
       return { closed: round.number, completed: false };

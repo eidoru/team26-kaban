@@ -112,7 +112,7 @@ export async function editGroup(groupId: string, actorUserId: string, input: Set
     await notifyUsers(tx, others, {
       groupId,
       kind: "group.edited",
-      title: `${after.name}: details changed`,
+      title: "Details changed",
       body: changes.map((c) => `${c.label}: ${c.before} → ${c.after}`).join("\n"),
       data: { changes },
     });

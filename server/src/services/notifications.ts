@@ -64,13 +64,21 @@ export async function notifyUsers(
   });
 }
 
+/** Older alerts were titled "<Group>: round 2 is open"; the group name already shows under the title. */
+function withoutGroupPrefix(title: string, groupName: string | undefined) {
+  const prefix = groupName ? `${groupName}: ` : null;
+  if (!prefix || !title.startsWith(prefix)) return title;
+  const rest = title.slice(prefix.length);
+  return rest.charAt(0).toUpperCase() + rest.slice(1);
+}
+
 function serialize(n: Prisma.NotificationGetPayload<{ include: { group: { select: { name: true } } } }>) {
   return {
     id: n.id,
     groupId: n.groupId,
     groupName: n.group?.name ?? null,
     kind: n.kind,
-    title: n.title,
+    title: withoutGroupPrefix(n.title, n.group?.name),
     body: n.body,
     link: n.link,
     data: n.data,
