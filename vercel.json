@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "npm run db:generate && npx prisma migrate deploy && npm run build -w client",
+  "buildCommand": "npm run db:generate && ([ \"$VERCEL_ENV\" != production ] || npx prisma migrate deploy) && npm run build -w client",
   "installCommand": "npm install",
   "outputDirectory": "client/dist",
   "regions": ["sin1"],
