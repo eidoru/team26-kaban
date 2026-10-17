@@ -4,6 +4,7 @@ import { disputeAmountError, refundFor } from "@domain/submissions";
 import type { GroupDetail, SubmissionView } from "../../../api/client";
 import { AmountField } from "../../../components/flow/AmountField";
 import { Sheet } from "../../../components/flow/Sheet";
+import { SheetDone } from "../../../components/flow/SheetDone";
 import { formatDueDate } from "../../../lib/dates";
 import { formatPeso, parsePesoInput, pesoInputValue } from "../../../lib/money";
 import { ui } from "../../../lib/ui";
@@ -45,12 +46,14 @@ function DisputeForm({
   const [reason, setReason] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
+  const [sent, setSent] = useState(false);
   const reasonId = useId();
 
   const value = parsePesoInput(amountText);
   const amountError = Number.isNaN(value)
     ? "Enter an amount like 1500, or 0."
-    : disputeAmountError(value, current, standing?.approved ?? current, standing?.due ?? current);
+    : // R-DEC-29: what's waiting for review holds its room, so it limits an increase.
+      disputeAmountError(value, current, standing?.approved ?? current, standing?.due ?? current, standing?.waiting ?? 0);
   const reasonError =
     reason.trim().length > DISPUTE_REASON_MAX_LENGTH ? `Up to ${DISPUTE_REASON_MAX_LENGTH} characters.` : null;
   const refund = Number.isNaN(value) ? 0 : refundFor(current, value);
@@ -61,12 +64,22 @@ function DisputeForm({
     setSending(true);
     setError("");
     try {
-      if (await onSubmit({ submissionId: submission.id, proposedAmount: value, reason: reason.trim() })) onClose();
+      if (await onSubmit({ submissionId: submission.id, proposedAmount: value, reason: reason.trim() })) setSent(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't send it. Try again.");
     } finally {
       setSending(false);
     }
+  }
+
+  if (sent) {
+    const organizer = detail.viewer.isOrganizer ? null : detail.group.organizerName;
+    return (
+      <SheetDone title={organizer ? `Sent to ${organizer}` : "Sent for review"} onClose={onClose}>
+        {organizer ? `${organizer} decides ${payout}.` : `Decide it in your review queue ${payout}.`} Until then,{" "}
+        {formatPeso(current)} stands.
+      </SheetDone>
+    );
   }
 
   return (

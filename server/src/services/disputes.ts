@@ -45,8 +45,10 @@ export async function raiseDispute(
     if (submission.disputes.length > 0) throw conflict("This payment already has an open dispute.", "ALREADY_DISPUTED");
 
     const current = Number(submission.effectiveAmount ?? submission.amount);
-    const { approved } = await periodTotals(tx, submission.slotId, submission.roundId!);
-    const error = disputeAmountError(input.proposedAmount, current, approved, Number(group.contribution));
+    // R-DEC-29: what's waiting for review (payments, other corrections' increases) holds its room.
+    const totals = await periodTotals(tx, submission.slotId, submission.roundId!);
+    const waiting = totals.pending + totals.pendingIncrease;
+    const error = disputeAmountError(input.proposedAmount, current, totals.approved, Number(group.contribution), waiting);
     if (error) throw new AppError(400, error, "BAD_AMOUNT", { proposedAmount: error });
 
     const dispute = await tx.dispute.create({
@@ -108,10 +110,12 @@ export async function reviewDispute(
     let refund = 0;
 
     if (decision.approve) {
-      // Other approvals since it was raised may have used up room for an increase (R-DEC-13).
-      const { approved } = await periodTotals(tx, dispute.slotId, dispute.submission.roundId!);
+      // Safety net (R-DEC-29): the room it held when raised is still there, so this only fails for
+      // requests made before the room rule.
+      const totals = await periodTotals(tx, dispute.slotId, dispute.submission.roundId!, dispute.id);
       const current = Number(dispute.submission.effectiveAmount ?? dispute.submission.amount);
-      const error = disputeAmountError(proposed, current, approved, Number(group.contribution));
+      const waiting = totals.pending + totals.pendingIncrease;
+      const error = disputeAmountError(proposed, current, totals.approved, Number(group.contribution), waiting);
       if (error) throw conflict(`${error} Deny this report instead.`, "BAD_AMOUNT");
       await tx.submission.update({ where: { id: dispute.submissionId }, data: { effectiveAmount: BigInt(proposed) } });
       refund = refundFor(current, proposed);
