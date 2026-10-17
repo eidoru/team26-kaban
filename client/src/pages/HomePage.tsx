@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   ArrowLeftRight,
   Banknote,
+  BellRing,
   CalendarDays,
   Check,
   ChevronRight,
@@ -31,6 +32,14 @@ function waitingItems(groups: Group[]) {
     if (w.payoutsToHandOver) items.push({ groupId: g.id, icon: Banknote, text: `A payout to hand over in ${g.name}` });
     if (w.receiptsToConfirm) items.push({ groupId: g.id, icon: Banknote, text: `Confirm you got your payout from ${g.name}` });
     if (w.swapsToAnswer) items.push({ groupId: g.id, icon: ArrowLeftRight, text: `A turn swap to answer in ${g.name}` });
+    if (w.placeholdersToRecord) {
+      const n = w.placeholdersToRecord;
+      items.push({ groupId: g.id, icon: HandCoins, text: `${n} placeholder payment${n === 1 ? "" : "s"} to record in ${g.name}` });
+    }
+    if (w.membersToRemind) {
+      const n = w.membersToRemind;
+      items.push({ groupId: g.id, icon: BellRing, text: `${n} member${n === 1 ? "" : "s"} to remind in ${g.name}` });
+    }
   }
   return items;
 }

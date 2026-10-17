@@ -285,7 +285,14 @@ export interface HomeDashboard {
     myStanding: { due: number; approved: number; pending: number; reportable: number } | null;
     myTurn: { round: number; payoutDate: string; paid: boolean } | null;
     owed: number;
-    waiting: { reviews: number; swapsToAnswer: number; payoutsToHandOver: number; receiptsToConfirm: number };
+    waiting: {
+      reviews: number;
+      swapsToAnswer: number;
+      payoutsToHandOver: number;
+      receiptsToConfirm: number;
+      placeholdersToRecord: number;
+      membersToRemind: number;
+    };
   }[];
   due: { groupId: string; groupName: string; kind: "CONTRIBUTION" | "DEBT"; amount: number; dueDate: string | null; round: number | null }[];
 }

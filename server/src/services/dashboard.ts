@@ -1,6 +1,8 @@
+import { REMINDER_DAYS_BEFORE } from "../domain/constants.js";
 import { roundHealth } from "../domain/health.js";
 import { outstanding } from "../domain/debt.js";
 import { processPayout } from "../domain/payout.js";
+import { daysBetween } from "../domain/schedule.js";
 import { frequencyLabel } from "../domain/setup.js";
 import { forbidden, notFound } from "../lib/errors.js";
 import { prisma } from "../lib/prisma.js";
@@ -8,7 +10,7 @@ import { todayInManila, toCalendarDate } from "../lib/today.js";
 import { slotName } from "./common.js";
 import { debtOf } from "./debts.js";
 import { completionSummary, recordEvents } from "./records.js";
-import { periodTotals } from "./submissions.js";
+import { openPeriodView, periodTotals } from "./submissions.js";
 
 /**
  * What each slot would get if its round paid out today, through the same rules as a real payout
@@ -181,7 +183,29 @@ export async function homeDashboard(userId: string) {
       swapsToAnswer: group.swaps.filter((s) => s.status === "AWAITING_TARGET" && speaksFor(s.targetSlotId)).length,
       payoutsToHandOver: slot.isOrganizer ? group.rounds.filter((r) => r.payout?.status === "AWAITING_HANDOVER").length : 0,
       receiptsToConfirm: group.rounds.filter((r) => r.recipientSlotId === slot.id && r.payout?.status === "HANDED_OVER").length,
+      placeholdersToRecord: 0,
+      membersToRemind: 0,
     };
+    // The organizer's collection tasks, on the same terms as the group page's To do list.
+    if (slot.isOrganizer && open) {
+      const period = await openPeriodView(prisma, group.id, contribution);
+      const userOf = new Map(group.slots.map((s) => [s.id, s.userId]));
+      // Placeholders pay the organizer outside the app; the organizer records it for them (R-SUB-02).
+      waiting.placeholdersToRecord =
+        period?.slots.filter((s) => !userOf.get(s.slotId) && s.due - s.approved - s.pending > 0).length ?? 0;
+      // Late payers once the reminder window opens (§12), not reminded in the last day.
+      if (daysBetween(todayInManila(), toCalendarDate(open.payoutDate)) <= REMINDER_DAYS_BEFORE) {
+        waiting.membersToRemind =
+          period?.slots.filter(
+            (s) =>
+              !!userOf.get(s.slotId) &&
+              s.slotId !== slot.id &&
+              s.status !== "PAID" &&
+              s.pending === 0 &&
+              !s.remindedRecently,
+          ).length ?? 0;
+      }
+    }
 
     groups.push({
       id: group.id,
