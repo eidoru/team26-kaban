@@ -11,8 +11,10 @@ import {
   ClipboardCheck,
   HandCoins,
   Hourglass,
+  NotebookPen,
   Rocket,
   Shuffle,
+  TriangleAlert,
   Users,
 } from "lucide-react";
 import {
@@ -412,6 +414,7 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
       todos.push({
         id: "review",
         icon: ClipboardCheck,
+        tone: "brand",
         title: `Review ${parts.join(" and ")}`,
         detail:
           disputes > 0
@@ -428,6 +431,7 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
       todos.push({
         id: `payout-${payout.round}`,
         icon: Banknote,
+        tone: "sun",
         title: confirming
           ? `Confirm you got ${formatPeso(payout.net)}`
           : ownPayout
@@ -453,6 +457,7 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
       todos.push({
         id: "pay",
         icon: HandCoins,
+        tone: "sun",
         title: mine.approved + mine.pending > 0 ? `Pay the remaining ${amount}` : `Pay your ${amount}`,
         // The one place a member sees their own money in review, beside what's still to pay.
         detail: [mine.pending > 0 && `${formatPeso(mine.pending)} in review`, due.replace(/\.$/, "")]
@@ -474,7 +479,8 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
         const listed = names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
         todos.push({
           id: "record",
-          icon: HandCoins,
+          icon: NotebookPen,
+          tone: "brand",
           title:
             toRecord.length === 1
               ? `Record ${first.slot.name}'s ${formatPeso(first.owes)}`
@@ -498,6 +504,7 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
         todos.push({
           id: "remind",
           icon: BellRing,
+          tone: "calm",
           title: `Remind ${remindable.length === 1 ? names : `${remindable.length} members`} to pay`,
           detail: `${due} Not paid yet: ${names}.`,
           action: { label: "Remind", onClick: () => void remindAll(remindable.map((s) => s.slotId)), disabled: pending?.startsWith("remind-") },
@@ -513,6 +520,7 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
       todos.push({
         id: `swap-${swap.id}`,
         icon: ArrowLeftRight,
+        tone: "brand",
         title:
           as === "target"
             ? `Answer ${requester?.name}'s swap request`
@@ -538,7 +546,8 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
     if (debtLeft > 0) {
       todos.push({
         id: "debt",
-        icon: HandCoins,
+        icon: TriangleAlert,
+        tone: "danger",
         title: `Pay toward your ${formatPeso(owed)} debt`,
         detail:
           group.interestRate > 0 && group.state === "ACTIVE"
