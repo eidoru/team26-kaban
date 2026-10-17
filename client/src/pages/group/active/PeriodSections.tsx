@@ -186,8 +186,8 @@ function StatusChip({ standing }: { standing: PeriodSlot }) {
 /**
  * Everyone's standing this round, in payout order (R-SUB-07, R-DEC-06). The viewer's own row is
  * always tappable to pay, whatever the Now panel is showing; the organizer's placeholder rows too,
- * to record their payments (R-SUB-02). Once that slot has paid this round in full (approved), the
- * same row pays ahead (R-DEC-31); every row says what its slot has paid ahead (R-DEC-06).
+ * to record their payments (R-SUB-02). Once that slot's payments cover this round, approved or in
+ * review (R-DEC-29), the same row pays ahead (R-DEC-31); every row says what its slot has paid ahead (R-DEC-06).
  */
 export function PeriodStatusList({
   detail,
@@ -212,16 +212,16 @@ export function PeriodStatusList({
       <ul className="divide-y divide-ink-100 overflow-hidden rounded-3xl border border-ink-200 bg-white">
         {slots.map((slot) => {
           const standing = period.slots.find((s) => s.slotId === slot.id)!;
-          const recordable =
-            onRecord &&
-            (slot.isViewer || (detail.viewer.isOrganizer && slot.kind === "PLACEHOLDER")) &&
-            standing.status !== "PAID";
-          // R-DEC-31: only once this round is approved in full, and paying ahead is open to the slot.
-          const payableAhead =
-            onRecord &&
-            (slot.isViewer || (detail.viewer.isOrganizer && slot.kind === "PLACEHOLDER")) &&
-            standing.status === "PAID" &&
-            payRooms(detail, slot.id).ahead > 0;
+          // What a payment from this row would fill (R-DEC-29, R-DEC-31): pending money already holds
+          // this round's room, so once it's covered, approved or in review, the row pays ahead instead.
+          const rooms =
+            onRecord && (slot.isViewer || (detail.viewer.isOrganizer && slot.kind === "PLACEHOLDER"))
+              ? payRooms(detail, slot.id)
+              : null;
+          const recordable = !!rooms && rooms.openRoom > 0;
+          const payableAhead = !!rooms && rooms.openRoom === 0 && rooms.ahead > 0;
+          // A button takes the place of the In review chip, so the amount line says it.
+          const inReview = (recordable || payableAhead) && standing.status !== "PAID" && standing.pending > 0;
           const paidAhead = detail.ahead.filter((a) => a.slotId === slot.id && a.approved + a.pending > 0);
           const aheadTotal = paidAhead.reduce((total, a) => total + a.approved + a.pending, 0);
           const body = (
@@ -235,7 +235,9 @@ export function PeriodStatusList({
                   {standing.status === "PAID"
                     ? // The button takes the place of the Paid chip, so the line says it.
                       `${payableAhead ? "Paid " : ""}${formatPeso(standing.approved)}`
-                    : `${formatPeso(standing.approved)} of ${formatPeso(standing.due)}`}
+                    : `${formatPeso(standing.approved)} of ${formatPeso(standing.due)}${
+                        inReview ? ` · ${formatPeso(standing.pending)} in review` : ""
+                      }`}
                 </span>
                 {aheadTotal > 0 && (
                   <span className="block text-xs text-brand-700 tabular-nums">
@@ -259,11 +261,11 @@ export function PeriodStatusList({
             <li key={slot.id} className={`flex min-h-16 items-center gap-3 px-4 py-3 ${slot.isViewer ? "bg-brand-50" : ""}`}>
               {body}
               {recordable ? (
-                <button type="button" onClick={() => onRecord(slot)} className={`${ui.btnSecondarySm} ${TRAILING}`}>
+                <button type="button" onClick={() => onRecord!(slot)} className={`${ui.btnSecondarySm} ${TRAILING}`}>
                   {slot.isViewer && !detail.viewer.isOrganizer ? "Report" : "Record"}
                 </button>
               ) : payableAhead ? (
-                <button type="button" onClick={() => onRecord(slot)} className={`${ui.btnSecondarySm} ${TRAILING}`}>
+                <button type="button" onClick={() => onRecord!(slot)} className={`${ui.btnSecondarySm} ${TRAILING}`}>
                   {slot.isViewer && !detail.viewer.isOrganizer ? "Pay ahead" : "Record ahead"}
                 </button>
               ) : remindable ? (
