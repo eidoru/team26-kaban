@@ -111,6 +111,14 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
   const inLobby = group.state === "LOBBY";
   const full = detail.openSlots === 0;
   const ordered = currentOrder(detail) !== null;
+  // Before launch, the schedule waits until every slot is filled, then takes over from the member list.
+  // Animate only when that changes while the page is open, not on load.
+  const [wasFull, setWasFull] = useState(full);
+  const [listSwapped, setListSwapped] = useState(false);
+  if (wasFull !== full) {
+    setWasFull(full);
+    setListSwapped(true);
+  }
   const mySpot = detail.schedule.find((r) => r.recipientSlotId === viewer.slotId);
 
   async function removeSlot(slot: SlotView) {
@@ -623,6 +631,7 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
       onSelect={group.state === "ACTIVE" ? undefined : selectSlot}
       onOpenPayout={setPayoutRound}
       onSwap={group.state === "ACTIVE" ? (slot) => setSwapWithSlotId(slot.id) : undefined}
+      animateIn={!navMode && listSwapped}
     />
   );
 
@@ -651,15 +660,19 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
               </button>
             </p>
           )}
-          {/* Once everyone has a turn, the schedule lists every member too, so it replaces the member list. */}
-          {!ordered && (
-            <SlotsList
-              detail={detail}
-              onSelect={selectSlot}
-              onOpenSlot={isOrganizer && inLobby ? () => setInviteOpen(true) : undefined}
-            />
+          {/* Once every slot is filled, the schedule lists every member too, so it replaces the member list
+              (R-ORD-01). Removing someone opens a slot again, and the member list comes back. */}
+          {full ? (
+            schedule
+          ) : (
+            <div className={listSwapped ? "animate-rise" : ""}>
+              <SlotsList
+                detail={detail}
+                onSelect={selectSlot}
+                onOpenSlot={isOrganizer && inLobby ? () => setInviteOpen(true) : undefined}
+              />
+            </div>
           )}
-          {schedule}
           <GroupDetails detail={detail} />
           {inLobby && !isOrganizer && (
             <div className="text-center">
