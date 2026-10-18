@@ -11,9 +11,10 @@ Maps the rules in [PRODUCT_SPEC.md](./PRODUCT_SPEC.md) to automated tests and [U
 | §5.3–5.4 | Invite and claim links | `api.smoke.test.ts` (auth required) | A2, F2–F3 |
 | R-LCH-02, R-DEC-27/28 | Launch | `domain/setup.test.ts` (launchBlockers) | A4 |
 | R-DEC-03 | Cancel only from the lobby | `domain/domain.test.ts` (lifecycle) | F4 |
-| R-SUB-02–04 | Submissions and review | — | A6–A8, C5 |
+| R-SUB-02–04 | Submissions and review | — | A6–A8, C8 |
 | R-SUB-05/06/07, R-DEC-29/30 | Caps, stacking, room rule | `domain/submissions.test.ts`, `domain/domain.test.ts` (submissions) | C1–C3 |
-| R-DEC-31/33 | Paying ahead | `domain/submissions.test.ts` (R-DEC-31 / R-DEC-33) | C4 |
+| R-DEC-31/33 | Paying ahead, one payment across rounds | `domain/submissions.test.ts` (R-DEC-31 / R-DEC-33) | C4–C6, C8 |
+| R-DEC-32 | Problem reports on payments made ahead | — | C7 |
 | R-DSP-01/03, R-DEC-13 | Problem reports | `domain/domain.test.ts` (disputes) | D1–D2 |
 | R-DEC-21 | Problem report expiry | — | D3 |
 | §7, R-PAY-02/03/04 | Payout processing | `domain/domain.test.ts` (payout processing, §8.1 worked example) | A10, B2, B6 |
