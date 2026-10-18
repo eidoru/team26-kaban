@@ -1,73 +1,59 @@
-# React + TypeScript + Vite
+# Kaban web client
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+The React app for Kaban. Setup, environment and deployment are in the [root README](../README.md); the paluwagan
+rules are in [`docs/PRODUCT_SPEC.md`](../docs/PRODUCT_SPEC.md).
 
-Currently, two official plugins are available:
+## Stack
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+React 19, React Router 7, TanStack Query 5, Tailwind CSS v4 and Vite, with lucide-react icons and Supabase JS for
+Realtime and proof uploads.
 
-## React Compiler
+## Running it
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+From the repo root, `npm run dev:local` starts this app (Vite on port 5173) with the API on port 3001. Vite proxies
+`/api` to the API, and reads `.env*` files from the repo root (`envDir`).
 
-## Expanding the ESLint configuration
+| Command (from `client/`) | What it does |
+|---|---|
+| `npm run dev` | Vite dev server only |
+| `npm run build` | Type-check (`tsc -b`) and build to `client/dist` |
+| `npx tsc --noEmit -p tsconfig.app.json` | Type-check without building (`tsc -p .` checks nothing) |
+| `npx eslint src` | Lint; keep it at 0 problems |
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## Environment
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+| Variable | Purpose |
+|---|---|
+| `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` | Supabase Realtime and Storage uploads (publishable key only) |
+| `VITE_DEMO_TOOLS` | Builds in the organizer demo tools (Start now, Close round now); each browser still turns them on in Profile → Developer |
+| `VITE_API_URL` | Optional API base URL; defaults to `/api/v1` on the same origin |
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+Production values live in the committed `.env.production`. Don't set `VITE_` variables in Vercel: they would override
+that file.
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## Layout
+
+```
+src/
+  api/client.ts        fetch wrapper, tokens and refresh
+  context/             auth and dialog providers
+  lib/                 query hooks (groupQueries, homeQueries), realtime, money and dates, ui.ts class presets
+  components/          app shell, route guards, dialogs and shared UI
+  components/flow/     Sheet, SheetDone, NowPanel, TodoPanel, ActionBar, Stepper, AmountField, ...
+  pages/create/        setup wizard
+  pages/join/          invite and claim tickets
+  pages/group/         GroupShell, the group views and their sheets (active/, debts/, swaps/, records/, ...)
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Conventions
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+- **Shared rules:** `@domain` points at `server/src/domain`, so forms check amounts and settings with the server's
+  own code and messages. Validate as the user types, with the message under the field.
+- **Group data:** queries live under `["group", id, ...]`. Group actions return the fresh `GroupDetail`, and
+  `useGroupActions` writes it into the cache. Realtime invalidates the group key.
+- **Styling:** design tokens are in `src/index.css`, class presets in `src/lib/ui.ts`. Design for 390px first; nothing
+  may sit behind the fixed bottom nav.
+- **Sheets:** details and actions open in a `Sheet`; a finished action shows `SheetDone` (what happened, what comes
+  next) instead of closing. The `ActionBar` portals to `<body>`, so a submit button inside it needs a `form`
+  attribute.
+- **Money** is integer centavos; format it with `formatPeso`.

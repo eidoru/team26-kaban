@@ -11,7 +11,7 @@ It's built phone-first for Filipino users (₱, Philippine time).
 ## Features
 
 - **Setup and lobby:** the organizer creates a paluwagan (contribution, frequency, start date, optional shortfall interest), fills the slots with members (reusable invite link) or placeholders (single-use claim link), sets the payout order and launches. Settings lock at launch, and the group goes active on its start date.
-- **Contributions:** members report payments, with an optional proof photo. The organizer reports for placeholders and for themselves. The organizer reviews every report, including their own. Partial payments can stack.
+- **Contributions:** members report payments, with an optional proof photo. The organizer reports for placeholders and for themselves. The organizer reviews every report, including their own. Partial payments can stack. A member with no open debt can pay ahead for later rounds, and one payment bigger than this round's share is split across rounds and reviewed as one.
 - **Payouts:** on each payout date the period closes, the organizer covers any shortfall so the pot stays whole, and the recipient's own shortfall and debt are deducted. The organizer records the handover and the recipient confirms receipt.
 - **Debts:** a covered shortfall becomes debt to the organizer, with optional simple interest per period. Members repay through the same review flow.
 - **Problem reports:** a member can ask to correct or refund an approved contribution before that period's payout.
