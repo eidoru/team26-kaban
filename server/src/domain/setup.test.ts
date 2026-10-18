@@ -49,6 +49,13 @@ describe("setupErrors (§4.1)", () => {
     expect(setupErrors({ ...valid, interestPercent: null }, TODAY)).toEqual({});
   });
 
+  it("caps names at 250 characters and slots at 30 (R-SET-01, R-SET-02, R-DEC-35)", () => {
+    expect(setupErrors({ ...valid, name: "a".repeat(250) }, TODAY)).toEqual({});
+    expect(setupErrors({ ...valid, name: "a".repeat(251) }, TODAY).name).toBe("Names can be up to 250 characters.");
+    expect(setupErrors({ ...valid, slotCount: 30 }, TODAY)).toEqual({});
+    expect(setupErrors({ ...valid, slotCount: 31 }, TODAY).slotCount).toBe("A paluwagan can have up to 30 slots.");
+  });
+
   it("caps interest at 100% per period (R-SET-06, R-DEC-34)", () => {
     expect(setupErrors({ ...valid, interestPercent: 100 }, TODAY)).toEqual({});
     expect(setupErrors({ ...valid, interestPercent: 100.01 }, TODAY).interestPercent).toBe("Interest can be at most 100%.");
