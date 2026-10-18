@@ -3,7 +3,8 @@ import { Camera, X } from "lucide-react";
 import type { GroupDetail, PayoutView } from "../../../api/client";
 import { Sheet } from "../../../components/flow/Sheet";
 import { SheetDone } from "../../../components/flow/SheetDone";
-import { formatDueDate } from "../../../lib/dates";
+import { RECEIPT_AUTO_CONFIRM_DAYS } from "@domain/constants";
+import { formatDueDate, formatLocalDate } from "../../../lib/dates";
 import { formatPeso } from "../../../lib/money";
 import { proofFileError, uploadProof } from "../../../lib/proofUpload";
 import { ui } from "../../../lib/ui";
@@ -217,7 +218,11 @@ function PayoutForm({
         )}
         {payout.status === "CONFIRMED" && (
           <p className="text-sm text-ink-600">
-            {payout.autoConfirmed ? "Nothing to hand over." : `Received${payout.confirmedAt ? ` ${new Date(payout.confirmedAt).toLocaleDateString()}` : ""}.`}
+            {payout.net === 0
+              ? "Nothing to hand over."
+              : payout.autoConfirmed
+                ? `Marked received automatically ${formatLocalDate(payout.confirmedAt)}: not confirmed within ${RECEIPT_AUTO_CONFIRM_DAYS} days.`
+                : `Received${payout.confirmedAt ? ` ${formatLocalDate(payout.confirmedAt)}` : ""}.`}
           </p>
         )}
         {payout.proofUrl && (

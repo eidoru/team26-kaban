@@ -1,11 +1,12 @@
 // Configurable limits from docs/PRODUCT_SPEC.md. `null` marks a value the spec leaves TBD
 // (R-OQ-01, R-DEC-12): the rule isn't enforced until a value is decided. Don't fill these in without a decision.
 
-/** R-SET-01 */
-export const MAX_NAME_LENGTH: number | null = null;
+/** R-SET-01, R-DEC-35 */
+export const MAX_NAME_LENGTH: number | null = 250;
 /** R-SET-02 (minimum is an assumption) */
 export const MIN_SLOTS = 2;
-export const MAX_SLOTS: number | null = null;
+/** R-SET-02, R-DEC-35 */
+export const MAX_SLOTS: number | null = 30;
 /** R-SET-05 */
 export const MIN_START_LEAD_DAYS = 7;
 /** R-SET-06, R-DEC-34 */
@@ -18,14 +19,12 @@ export const MIN_CUSTOM_INTERVAL_DAYS = 7;
 export const MIN_HALF_MONTH_DAYS = 15;
 /** R-SWP-03 */
 export const SWAP_LOCK_DAYS = 3;
-/** R-SWP-04 */
-export const SWAP_REQUEST_EXPIRY_DAYS: number | null = null;
+/** R-SWP-04, R-DEC-35 */
+export const SWAP_REQUEST_EXPIRY_DAYS: number | null = 7;
 /** §12 (assumption) */
 export const REMINDER_DAYS_BEFORE = 3;
-/** R-DEC-07 */
-export const RECEIPT_AUTO_CONFIRM_DAYS: number | null = null;
-/** R-DEC-31: how many rounds after the open one a contribution can be paid ahead (TBD: no limit yet). */
-export const PAY_AHEAD_MAX_ROUNDS: number | null = null;
+/** R-DEC-07, R-DEC-35 */
+export const RECEIPT_AUTO_CONFIRM_DAYS: number | null = 7;
 /** Notes on submissions and denial reasons (the pre-rewrite note limit; the spec sets none). */
 export const NOTE_MAX_LENGTH = 500;
 /** Largest proof image, matching the bucket's limit (assumption; the spec sets none). */
