@@ -1,6 +1,7 @@
 import { CalendarDays, Info } from "lucide-react";
 import { MAX_SLOTS, MIN_CUSTOM_INTERVAL_DAYS, MIN_SLOTS } from "@domain/constants";
-import { interestOn, pesos, rateFromPercent } from "@domain/money";
+import { addDebt, chargePeriodInterest, NO_DEBT, outstanding } from "@domain/debt";
+import { pesos, rateFromPercent } from "@domain/money";
 import { frequencyLabel, type SetupErrors } from "@domain/setup";
 import type { Frequency } from "@domain/schedule";
 import { AmountField } from "../../components/flow/AmountField";
@@ -163,16 +164,37 @@ export function ScheduleSection({ draft, set, errors, earliestStart }: SectionPr
   );
 }
 
-export function InterestSection({ draft, set, errors }: SectionProps) {
+/** How many payouts the interest example walks through. */
+const EXAMPLE_ROUNDS = 3;
+
+/**
+ * A worked example for the interest step, from the draft's own numbers: a member pays half their
+ * contribution at the first payout and repays nothing after. R-DBT-02 charges interest when the debt is
+ * created, R-DBT-03 again at each later payout, on principal only.
+ */
+function interestExample(draft: SetupDraft, errors: SetupErrors) {
   const percent = Number(draft.interestText);
-  const example =
-    draft.interestOn && !errors.interestPercent && percent > 0 ? interestOn(pesos(1_000), rateFromPercent(percent)) : null;
+  if (!draft.interestOn || errors.interestPercent || !(percent > 0)) return null;
+  const rate = rateFromPercent(percent);
+  const contribution = previewAmounts(draft)?.contribution ?? null;
+  const half = contribution != null ? pesos(Math.floor(contribution / pesos(1) / 2)) : 0;
+  const shortfall = half > 0 ? half : (contribution ?? pesos(1_000));
+  const dates = previewDates(draft, errors)?.all ?? null;
+  const count = Math.min(EXAMPLE_ROUNDS, dates?.length ?? draft.slotCount);
+
+  let { debt, interestCharged } = addDebt(NO_DEBT, shortfall, rate);
+  const rounds = [{ date: dates?.[0] ?? null, interestCharged, owed: outstanding(debt) }];
+  for (let k = 1; k < count; k++) {
+    ({ debt, interestCharged } = chargePeriodInterest(debt, rate));
+    rounds.push({ date: dates?.[k] ?? null, interestCharged, owed: outstanding(debt) });
+  }
+  return { contribution, shortfall, rounds };
+}
+
+export function InterestSection({ draft, set, errors }: SectionProps) {
+  const example = interestExample(draft, errors);
   return (
     <div className="space-y-5">
-      <p className="text-sm text-ink-600">
-        If someone pays less than their share, you cover the gap so the pot stays whole. The gap becomes a debt they owe you.
-        You can charge simple interest on it.
-      </p>
       <div className="rounded-2xl border border-ink-200 bg-white p-4">
         <ToggleSwitch
           id="interestOn"
@@ -186,7 +208,6 @@ export function InterestSection({ draft, set, errors }: SectionProps) {
           label="Interest per period (%)"
           error={errors.interestPercent}
           hasValue={draft.interestText.trim() !== ""}
-          helper="Up to 2 decimal places, e.g. 1.25."
         >
           {(props) => (
             <input
@@ -200,11 +221,45 @@ export function InterestSection({ draft, set, errors }: SectionProps) {
           )}
         </Field>
       )}
-      {example != null && (
-        <p className="rounded-2xl bg-ink-50 px-4 py-3 text-sm text-ink-700">
-          Someone ₱1,000 short would owe <b>{formatPeso(pesos(1_000) + example)}</b>, plus <b>{formatPeso(example)}</b> at
-          every later payout until it&apos;s repaid. Interest is never charged on interest.
-        </p>
+      {example && (
+        <div className="rounded-2xl bg-ink-50 p-4 text-sm text-ink-700" aria-live="polite">
+          <p className="text-xs font-bold uppercase tracking-wide text-ink-500">Example</p>
+          <p className="mt-1">
+            A member pays only{" "}
+            {example.contribution != null && example.contribution > example.shortfall ? (
+              <>
+                <b className="tabular-nums">{formatPeso(example.contribution - example.shortfall)}</b> of their{" "}
+                <b className="tabular-nums">{formatPeso(example.contribution)}</b>
+              </>
+            ) : (
+              <b>nothing</b>
+            )}
+            , so you cover <b className="tabular-nums">{formatPeso(example.shortfall)}</b> for them.
+          </p>
+          <ol className="mt-3 space-y-2">
+            {example.rounds.map((round, i) => (
+              <li key={i} className="flex items-center gap-3 rounded-xl bg-white px-3 py-2">
+                <span className="h-2 w-2 shrink-0 rounded-full bg-brand-600" aria-hidden />
+                <span className="min-w-0 flex-1">
+                  <span className="block font-semibold text-ink-900">
+                    {round.date ? formatDueDate(round.date) : `Round ${i + 1}`}
+                  </span>
+                  <span className="block text-xs text-ink-500">
+                    {i === 0 ? "Debt starts" : "Still unpaid"} · +{formatPeso(round.interestCharged)} interest
+                  </span>
+                </span>
+                <span className="text-right">
+                  <span className="block text-xs text-ink-500">Owes</span>
+                  <b className="tabular-nums text-ink-900">{formatPeso(round.owed)}</b>
+                </span>
+              </li>
+            ))}
+          </ol>
+          <p className="mt-3">
+            Interest is charged only on the {formatPeso(example.shortfall)} they&apos;re short, never on interest. It
+            stops once they repay, or when the debt is taken from their payout.
+          </p>
+        </div>
       )}
     </div>
   );

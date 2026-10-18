@@ -78,7 +78,7 @@ Submitting the setup form creates the paluwagan in **LOBBY** with the organizer 
 | R-SET-03 | Amount mode | Organizer enters **either** the total pot **or** the contribution per member. The mode is stored, because it determines recalculation when slots change (R-LOB-10). |
 | R-SET-04 | Frequency | One of `WEEKLY`, `BI_WEEKLY`, `TWICE_MONTHLY`, `MONTHLY`, `CUSTOM`. See §4.3. |
 | R-SET-05 | Start date | Must be ≥ today + `MIN_START_LEAD_DAYS` (7). |
-| R-SET-06 | Shortfall interest | Optional. Percentage. 0 < value ≤ `MAX_INTEREST_PERCENT` (**TBD**). At most `INTEREST_DECIMAL_PLACES` (2, *assumption*) decimal places. |
+| R-SET-06 | Shortfall interest | Optional. Percentage. 0 < value ≤ `MAX_INTEREST_PERCENT` (100, R-DEC-34). At most `INTEREST_DECIMAL_PLACES` (2, *assumption*) decimal places. |
 
 ### 4.2 Amount calculation
 
@@ -354,7 +354,7 @@ Test cases worth covering: the first recipient (all debt is post-payout), the la
 
 | ID | Question |
 |---|---|
-| R-OQ-01 | Values for `MAX_NAME_LENGTH`, `MAX_SLOTS`, `MAX_INTEREST_PERCENT`, `SWAP_REQUEST_EXPIRY_DAYS`. **Still open.** |
+| R-OQ-01 | Values for `MAX_NAME_LENGTH`, `MAX_SLOTS`, `SWAP_REQUEST_EXPIRY_DAYS`. **Still open.** |
 | R-OQ-02 | `TWICE_MONTHLY`: must the start date fall on a 15th or a month-end, or is the first payout the first 15th/month-end at least one full half-month after the start? |
 | R-OQ-03 | Can a paluwagan be cancelled after launch (in LAUNCHED or ACTIVE)? |
 | R-OQ-04 | What happens to submissions or disputes still `PENDING` when a payout date arrives? (Options: block payout until resolved; auto-expire; convert pending contributions into debt payments after the debt is created.) |
@@ -398,3 +398,4 @@ Test cases worth covering: the first recipient (all debt is post-payout), the la
 | R-DEC-31 | (R-SUB-01, R-SUB-06, R-DEC-29, 2026-10-17) **Paying ahead.** A contribution fills what's left of the open round first, then later rounds in order (paying ahead), up to `PAY_AHEAD_MAX_ROUNDS` (**TBD**; unenforced, so any remaining round) after the open one. Paying ahead needs the slot's debt covered (owed − pending debt payments = 0); until then a contribution can't go past the open round. The room rule applies to each round on its own, and rounds already covered are skipped. Approved money counts toward its round when that round closes, so the member starts that round paid. The organizer pays ahead for placeholders as for other payments (R-SUB-02), each slot judged on its own. Known limit, left as is: if an open-round payment is denied or withdrawn after paying ahead, the advance stays on its round; the organizer can deny the advance instead. |
 | R-DEC-32 | (R-DSP-01, R-DSP-04, R-DEC-21, 2026-10-17) A payment made ahead can be corrected (a problem report) while its round is upcoming or open; the report still expires at that round's payout. |
 | R-DEC-33 | (R-SUB-05, R-DEC-30, R-DEC-31, 2026-10-17) **One payment across rounds.** A contribution bigger than what's left this round is split by R-DEC-31's order into one part per round (e.g. ₱1,000 left this round + ₱6,000 → rounds 1–4), linked as one payment. It is reviewed, approved or denied, and withdrawn as one, and counts as one in the review queue; approval re-checks every part and fails whole if one fails. Once approved, each part is its round's own contribution and can be corrected on its own (R-DEC-32). A part whose round closes before review applies to debt like any late contribution (R-DEC-04). |
+| R-DEC-34 | (R-SET-06, R-DEC-12, 2026-10-19) `MAX_INTEREST_PERCENT` is **100**: shortfall interest can be at most 100% per period. Without a cap any number was accepted (e.g. 999,999.99%). Checked as you type and on the server, on create and edit. |
