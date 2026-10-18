@@ -1,194 +1,173 @@
 # Kaban
 
-Kaban keeps the records for a **paluwagan**, a rotating savings group: every period each member contributes the same amount, and the whole pot goes to one slot, in a payout order the organizer sets, until every slot has had its turn. Kaban records contributions, payouts, refunds and debts, and shows the record to every member. It never holds or moves money.
+Kaban is a record-keeper for paluwagan, the rotating savings groups common in the Philippines. Each period every
+member puts in the same amount and one slot takes the whole pot, in an order the organizer sets, until everyone has
+had a turn. Kaban tracks who has paid, who gets paid next, and who owes what, and every member can see the same
+record. It doesn't hold or move any money.
 
-It's built phone-first for Filipino users (₱, Philippine time).
+The app is designed for phones first, with amounts in pesos and dates in Philippine time.
 
-## Product spec
+## What it does
 
-**[`docs/PRODUCT_SPEC.md`](docs/PRODUCT_SPEC.md) is the source of truth** for the paluwagan process: the user journey, lifecycle states and business rules. Every rule has an ID (`R-PAY-03`, `R-DBT-05`, ...), and the code, tests and commit messages cite those IDs. Decisions on the spec's open questions are in §16.1 (`R-DEC-*`).
+- Organizers set up a group (contribution amount, frequency, start date, optional interest on shortfalls), invite
+  members or add placeholders for people without an account, set the payout order and launch.
+- Members report their payments, optionally with a photo of the receipt, and the organizer approves them. Partial
+  payments add up, and members with no debt can pay ahead for later rounds.
+- On each payout date the round closes. If someone came up short, the organizer covers the gap so the recipient still
+  gets the full pot, and the shortfall becomes a debt to the organizer. The recipient confirms when they've received
+  the money.
+- Members can report a problem with an approved payment before that round's payout, and two members who haven't
+  been paid yet can ask to swap positions.
+- There's an activity log of every change, a personal payment history, and PDF/CSV exports (member statement,
+  organizer ledger, completion summary).
+- Members get in-app notifications and daily reminders, and group pages update live while open.
 
-## Features
+A group goes from `LOBBY` to `LAUNCHED` to `ACTIVE` to `COMPLETED` (or `COMPLETED_WITH_OUTSTANDING_DEBT`), and can be
+cancelled while still in the lobby. The full process and its rules are written up in
+[docs/PRODUCT_SPEC.md](docs/PRODUCT_SPEC.md).
 
-- **Setup and lobby:** the organizer creates a paluwagan (contribution, frequency, start date, optional shortfall interest), fills the slots with members (reusable invite link) or placeholders (single-use claim link), sets the payout order and launches. Settings lock at launch, and the group goes active on its start date.
-- **Contributions:** members report payments, with an optional proof photo. The organizer reports for placeholders and for themselves. The organizer reviews every report, including their own. Partial payments can stack. A member with no open debt can pay ahead for later rounds, and one payment bigger than this round's share is split across rounds and reviewed as one.
-- **Payouts:** on each payout date the period closes, the organizer covers any shortfall so the pot stays whole, and the recipient's own shortfall and debt are deducted. The organizer records the handover and the recipient confirms receipt.
-- **Debts:** a covered shortfall becomes debt to the organizer, with optional simple interest per period. Members repay through the same review flow.
-- **Problem reports:** a member can ask to correct or refund an approved contribution before that period's payout.
-- **Swaps:** two members who haven't been paid yet can trade payout positions, with the organizer's approval.
-- **Records:** a public activity (audit) log, a personal history, and PDF/CSV exports: member statement, organizer ledger and completion summary.
-- **Dashboards and alerts:** a Now panel with your next step on every group page, a home dashboard across your groups, in-app notifications and daily payment reminders.
-- **Live updates:** changes appear on other members' screens within seconds (Supabase Realtime, with a polling fallback).
+## Stack
 
-A group moves through `LOBBY → LAUNCHED → ACTIVE → COMPLETED` (or `COMPLETED_WITH_OUTSTANDING_DEBT`). It can be `CANCELLED` from the lobby.
+- Client: React 19, React Router 7, TanStack Query 5, Tailwind CSS 4, Vite
+- Server: Express, Zod, Prisma 6, JWT auth, PDFKit
+- Supabase for Postgres, Realtime and Storage (payment proof photos)
+- Hosted on Vercel: static client, one serverless function for the API, one daily cron job
 
-## Tech stack
-
-| Layer | Tools |
-|---|---|
-| Client | React 19, React Router 7, TanStack Query 5, Tailwind CSS 4, Vite, lucide-react |
-| Server | Node.js, Express, Zod, JWT auth (short-lived access token + rotating refresh token), bcrypt, PDFKit |
-| Data | PostgreSQL on Supabase, Prisma 6 ORM |
-| Realtime and files | Supabase Realtime (broadcasts, Postgres changes), Supabase Storage (payment proofs) |
-| Hosting | Vercel (static client, one serverless function for the API, one daily cron job) |
-
-## Repository layout
+## Project layout
 
 ```
-client/          React app
-  src/pages/       create/ (setup wizard), join/ (invite and claim), group/ (group views and sheets)
-  src/components/  flow/ (Sheet, NowPanel, TodoPanel, ActionBar, ...) and shared UI
-  src/lib/         queries, realtime, formatting, UI class presets (ui.ts)
-server/          Express API
-  src/domain/      pure business rules (money, schedule, payouts, debts, swaps, ...), also used by the client
-  src/services/    one module per area (groups, submissions, payouts, debts, disputes, swaps, exports, ...)
-  src/routes/      thin HTTP routes
-  assets/fonts/    fonts embedded in PDF exports
-api/             Vercel serverless entry point that loads the Express app
-prisma/          schema.prisma and SQL migrations
-supabase/        local Supabase stack config
-scripts/         local stack helpers and the API benchmark
-docs/            product spec, security checklist, UAT scenarios, test traceability
+client/      React app (pages/, components/, lib/)
+server/      Express API
+  src/domain/    business rules with no I/O, shared with the client
+  src/services/  one module per feature area
+  src/routes/    HTTP routes
+api/         Vercel function entry point
+prisma/      schema and migrations
+supabase/    local Supabase config
+scripts/     local database helpers and the API benchmark
+docs/        product spec, UAT scenarios, test traceability, security checklist
 ```
 
-It's an npm workspace: `client` and `server` share one `node_modules` at the root.
+The repo is an npm workspace with `client` and `server` sharing the root `node_modules`. The client imports
+`server/src/domain/` through the `@domain` alias so both sides validate input the same way.
 
-The client imports `server/src/domain/` through the `@domain` alias, so forms show exactly the server's validation messages. Configurable limits live in `server/src/domain/constants.ts`.
+## Running locally
 
-## Getting started
-
-### Prerequisites
-
-- Node.js 20 or newer
-- Docker, for the local Supabase stack
-
-### 1. Install
+You'll need Node.js 20+ and Docker.
 
 ```bash
-npm install          # also runs `prisma generate`
+npm install
+npm run db:local:start   # starts Supabase in Docker, writes .env.localdb, runs migrations
+npm run dev:local        # client on :5173, API on :3001
 ```
 
-### 2. Start the local database
+Open <http://localhost:5173>; Vite proxies `/api` to the API. The first `db:local:start` pulls the Docker images and
+takes a few minutes. Supabase Studio runs at <http://127.0.0.1:54323>.
+
+Other local database commands:
 
 ```bash
-npm run db:local:start
+npm run db:local:migrate   # apply new migrations
+npm run db:local:reset     # wipe data and re-run migrations
+npm run db:local:stop      # stop the stack
 ```
 
-This starts Supabase (Postgres, Realtime, Storage, Studio) in Docker, writes `.env.localdb` with local URLs, keys and JWT secrets, and applies the migrations. The first start downloads the images and takes a few minutes.
-
-### 3. Run
-
-```bash
-npm run dev:local
-```
-
-This starts the client on <http://localhost:5173> and the API on <http://localhost:3001>. Vite proxies `/api` to the API, so open the client URL.
-
-- Browse data in Studio at <http://127.0.0.1:54323>.
-- `npm run db:local:migrate` applies new migrations to the local database.
-- `npm run db:local:reset` wipes the local database and re-applies the migrations.
-- `npm run db:local:stop` shuts the stack down.
-
-> **Keep commands on the local stack.** `.env.localdb` overrides `.env` for the `*:local` commands. A bare `npm run dev`, `npm run db:migrate` or `npx prisma ...` reads the root `.env` instead. If that file holds the shared or production credentials, those commands run against that database.
+Note that only the `*:local` commands use `.env.localdb`. Plain `npm run dev`, `npm run db:migrate` and `npx prisma`
+read the root `.env`, so check what that file points at before running them.
 
 ## Environment variables
 
-The server and the Vite client both read the root `.env`, or `.env.localdb` for the `*:local` commands. Every `.env*` file is git-ignored except `.env.production`.
+Both the server and the client read the root `.env` (or `.env.localdb` for the local commands). All `.env*` files are
+git-ignored except `.env.production`, which holds the public client values.
 
-**Server**
+Server:
 
-| Variable | Required | Purpose |
-|---|---|---|
-| `DATABASE_URL` | Yes | Postgres connection used by the app. On Supabase, use the transaction pooler (port 6543) with `?pgbouncer=true&connection_limit=1` |
-| `DIRECT_URL` | Yes | Postgres connection for Prisma migrations (the session pooler, port 5432) |
-| `JWT_ACCESS_SECRET` | Yes | Signing secret for access tokens. Refresh tokens are opaque and stored in the database |
-| `JWT_ACCESS_EXPIRES_IN` / `JWT_REFRESH_EXPIRES_IN` | No | Token lifetimes (default `15m` and `7d`) |
-| `CLIENT_ORIGIN` | Production | Allowed CORS origin for the deployed client |
-| `CRON_SECRET` | Production | Bearer secret Vercel Cron sends to `/api/v1/cron/daily` |
-| `SUPABASE_URL` | For realtime and proofs | Supabase project URL |
-| `SUPABASE_SECRET_KEY` | For realtime and proofs | Secret API key (`sb_secret_…`). Sends broadcasts and signs upload and view URLs for the private `payment-proofs` bucket |
-| `SUPABASE_JWT_SIGNING_KEY` | For realtime | Private ES256 JWK imported into the project's JWT signing keys. Signs the short-lived tokens browsers use to subscribe |
-| `ALLOW_DEMO_TOOLS` | No | `true` allows the demo tools on Vercel production |
-| `PORT` | No | API port locally (default `3001`) |
+| Variable | Notes |
+|---|---|
+| `DATABASE_URL` | Required. On Supabase, the transaction pooler (port 6543) with `?pgbouncer=true&connection_limit=1` |
+| `DIRECT_URL` | Required. Session pooler (port 5432), used by migrations |
+| `JWT_ACCESS_SECRET` | Required. Signs access tokens |
+| `JWT_ACCESS_EXPIRES_IN`, `JWT_REFRESH_EXPIRES_IN` | Optional, default `15m` and `7d` |
+| `CLIENT_ORIGIN` | Allowed CORS origin in production |
+| `CRON_SECRET` | Secret Vercel Cron sends to `/api/v1/cron/daily` |
+| `SUPABASE_URL`, `SUPABASE_SECRET_KEY` | Realtime broadcasts and signed URLs for the `payment-proofs` bucket |
+| `SUPABASE_JWT_SIGNING_KEY` | Private ES256 JWK used to sign Realtime tokens for the browser |
+| `ALLOW_DEMO_TOOLS` | Set to `true` to allow the demo tools in production |
+| `PORT` | API port, default `3001` |
 
-Generate a signing key with `supabase gen signing-key` **outside** this repo: run inside it, the command overwrites the local-only `supabase/signing_keys.json`.
+Client (read at build time):
 
-**Client** (read at build time)
+| Variable | Notes |
+|---|---|
+| `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` | Realtime and proof photos |
+| `VITE_DEMO_TOOLS` | Set to `true` to include the demo tools |
+| `VITE_API_URL` | Defaults to `/api/v1` |
 
-| Variable | Required | Purpose |
-|---|---|---|
-| `VITE_SUPABASE_URL` / `VITE_SUPABASE_PUBLISHABLE_KEY` | For realtime and proofs | Supabase project URL and publishable key (`sb_publishable_…`) |
-| `VITE_DEMO_TOOLS` | No | `true` builds in the demo tools (still off until turned on per browser) |
-| `VITE_API_URL` | No | API base URL; defaults to `/api/v1` on the same origin |
+Without the Supabase variables the app still runs, but there are no proof photos and pages poll for changes instead
+of updating live.
 
-Without the Supabase variables the app still works, minus proof photos: screens refresh by polling instead of updating live.
+If you generate a signing key with `supabase gen signing-key`, run it outside the repo. Inside it, the command
+overwrites `supabase/signing_keys.json`, the key the local stack uses.
 
 ## Scripts
 
-Run from the repo root.
-
-| Command | What it does |
+| Command | |
 |---|---|
-| `npm run dev:local` | Client and API with hot reload, against the local stack |
-| `npm run db:local:start` / `stop` / `reset` / `migrate` | Manage the local Supabase stack (see [Getting started](#getting-started)) |
-| `npm run dev` | Client and API against whatever the root `.env` points at |
+| `npm run dev:local` | Client and API against the local stack |
+| `npm run dev` | Client and API against the root `.env` |
 | `npm run build` | Generate the Prisma client and build the client |
-| `npm test` | Server test suite (Vitest) |
+| `npm test` | Server tests (Vitest) |
 | `npm run typecheck` | Type-check server and client |
-| `npm run db:migrate` / `db:deploy` / `db:studio` | Prisma against the root `.env` (see the warning above) |
-| `npm run bench` | Time the main API endpoints (see [Performance](#performance)) |
+| `npm run db:migrate`, `db:deploy`, `db:studio` | Prisma against the root `.env` |
+| `npm run bench` | API latency benchmark |
 
-- Type-check only the client with `npx tsc --noEmit -p client/tsconfig.app.json`. `tsc -p client` checks nothing.
-- Lint the client with `cd client && npx eslint src`. Keep it at 0 problems.
+Lint the client with `cd client && npx eslint src`.
 
 ## Realtime
 
-- Each group page subscribes to the Supabase channel `group:<id>`. After any change, the server sends a small `group_update` broadcast, and the page refetches the group. If the channel isn't connected, the page polls every 15 seconds instead.
-- Notifications come from Postgres change events on `notifications`, filtered to the signed-in user (channel `notifications:<userId>`), with a 30-second poll as the fallback.
-- Row-level security is on for every table. The browser subscribes with a short-lived token from the API, signed with `SUPABASE_JWT_SIGNING_KEY`.
+Each group page subscribes to a Supabase channel (`group:<id>`). When something changes, the server broadcasts a
+small update and the page refetches. Notifications use Postgres change events on the `notifications` table. If a
+channel can't connect, pages fall back to polling (15 seconds for groups, 30 for notifications).
 
-In development, the browser console warns when a channel fails to connect.
+All tables have row-level security enabled. The browser subscribes using a short-lived token from the API.
 
-## Performance
+## Deployment
 
-Every API response carries a `Server-Timing` header (`db` = summed query time and count, `app` = everything else, `total`), shown in the browser under Network → a request → **Timing**. Requests slower than 800 ms are also logged, so they appear in Vercel's logs.
+Everything is in `vercel.json`:
 
-To benchmark the read endpoints against any deployment:
+- Production builds run `prisma migrate deploy` before building the client. Preview builds skip migrations.
+- `api/index.ts` serves the Express app under `/api/*`; all other paths serve the client.
+- The function runs in `sin1` (Singapore), the same region as the Supabase database. Keep them together, since every
+  query crosses between the two.
+- A cron job hits `/api/v1/cron/daily` at 00:05 Manila time. It activates groups that have reached their start date,
+  closes due rounds, expires old swap requests, and sends reminders.
 
-```bash
-BENCH_URL=https://your-app.vercel.app BENCH_EMAIL=you@example.com BENCH_PASSWORD=… npm run bench
-```
-
-It logs in with that account and compares client round-trip time with server time, so the difference is network overhead. It only reads data.
-
-## Deploying to Vercel
-
-`vercel.json` configures everything:
-
-- **Production** builds run `prisma generate`, **`prisma migrate deploy`** and the client build, so migrations apply on deploy. **Preview** builds skip the migration (a `VERCEL_ENV` check), so a preview never migrates whatever database its environment points at.
-- `api/index.ts` serves the Express app as one function under `/api/*`. Every other path serves the client. The function bundle includes `server/assets/` (PDF fonts).
-- The function runs in **`sin1` (Singapore)**, the same region as the Supabase database (`ap-southeast-1`). Keep the two in the same region: every query crosses the gap between them, and a mismatch adds tens to hundreds of milliseconds per query.
-- The **public** client values (`VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, `VITE_DEMO_TOOLS`) are committed in `.env.production` rather than set in Vercel. They're visible in the browser anyway, and Vercel won't store `VITE_` variables as sensitive. Don't add them to Vercel's Production or Preview variables: values set there override the file.
-- One cron job, `GET /api/v1/cron/daily`, runs at 00:05 Manila time. In order, it activates groups whose start date has come, closes due periods (payouts, debts, expired problem reports), expires swap requests, sends reminders, and nudges recipients who haven't confirmed a payout.
-
-Set the environment variables separately for **Preview** and **Production**.
+The public `VITE_` values are committed in `.env.production` instead of being set in Vercel. Values set in Vercel
+would override the file, so don't add them there.
 
 ### Demo tools
 
-Organizers can skip ahead without waiting for the calendar: start a launched group now, or close the current round now. This lets you walk through a whole cycle in one sitting. The API also has `POST /api/v1/dev/groups/:id/send-reminders` to send today's reminders, with no button in the app.
+For demos and testing, organizers can start a launched group right away or close the current round early instead of
+waiting for the calendar. There's also `POST /api/v1/dev/groups/:id/send-reminders`, which has no button.
 
-- **Local and preview:** build with `VITE_DEMO_TOOLS=true` (local dev always has them), then turn on **Profile → Developer → Show demo tools**. This setting is saved per browser.
-- **Production:** also set `ALLOW_DEMO_TOOLS=true`. Remove both variables once real users are on the app.
+Build with `VITE_DEMO_TOOLS=true` (always on in local dev), then enable them in Profile → Developer. In production
+`ALLOW_DEMO_TOOLS=true` is also needed. Turn both off before real users are on the app.
+
+### Performance
+
+API responses include a `Server-Timing` header that splits database time from the rest, and requests over 800 ms are
+logged. To measure a deployment:
+
+```bash
+BENCH_URL=https://your-app.vercel.app BENCH_EMAIL=you@example.com BENCH_PASSWORD=... npm run bench
+```
+
+The benchmark logs in and only calls read endpoints.
 
 ## Testing
 
-```bash
-npm test
-```
+`npm test` runs the server tests, which cover the domain rules, the activity log and the auth code. See also:
 
-Server tests cover the domain rules (money, schedule, setup, submissions, payouts, debts, swaps, group health), the activity log sentences, auth middleware and helpers. Tests cite the spec's rule IDs. More in `docs/`:
-
-- [`docs/PRODUCT_SPEC.md`](docs/PRODUCT_SPEC.md): process and business rules
-- [`docs/UAT.md`](docs/UAT.md): user acceptance scenarios
-- [`docs/TEST_TRACEABILITY.md`](docs/TEST_TRACEABILITY.md): requirements to tests
-- [`docs/SECURITY.md`](docs/SECURITY.md): security checklist
+- [docs/UAT.md](docs/UAT.md): acceptance scenarios
+- [docs/TEST_TRACEABILITY.md](docs/TEST_TRACEABILITY.md): which tests cover which requirements
+- [docs/SECURITY.md](docs/SECURITY.md): security checklist
