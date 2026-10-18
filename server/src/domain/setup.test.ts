@@ -49,6 +49,12 @@ describe("setupErrors (§4.1)", () => {
     expect(setupErrors({ ...valid, interestPercent: null }, TODAY)).toEqual({});
   });
 
+  it("caps interest at 100% per period (R-SET-06, R-DEC-34)", () => {
+    expect(setupErrors({ ...valid, interestPercent: 100 }, TODAY)).toEqual({});
+    expect(setupErrors({ ...valid, interestPercent: 100.01 }, TODAY).interestPercent).toBe("Interest can be at most 100%.");
+    expect(setupErrors({ ...valid, interestPercent: 999_999.99 }, TODAY).interestPercent).toBeDefined();
+  });
+
   it("won't shrink below the occupied slots on edit (R-LOB-10)", () => {
     expect(setupErrors({ ...valid, slotCount: 3 }, TODAY, 4).slotCount).toMatch(/4 slots are already taken/);
     expect(setupErrors({ ...valid, slotCount: 4 }, TODAY, 4).slotCount).toBeUndefined();
