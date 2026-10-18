@@ -111,8 +111,11 @@
   }
 }
 
+/* No rubber-band bounce (iOS) or overscroll stretch (Android Chrome) on the page: either one drags the fixed
+   bottom nav and ActionBar away from the screen edge when the user scrolls past the top or bottom. */
 html {
   scrollbar-gutter: stable;
+  overscroll-behavior-y: none;
 }
 
 body {
