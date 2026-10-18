@@ -38,6 +38,7 @@ import { invalidateHomeLists } from "../../lib/homeQueries";
 import { formatPeso } from "../../lib/money";
 import { ui } from "../../lib/ui";
 import { GroupDetails } from "./GroupDetails";
+import { GroupMenu } from "./GroupMenu";
 import { InviteLinkPanel, PlaceholderSheet, SlotSheet } from "./GroupSheets";
 import { PayoutSchedule } from "./PayoutSchedule";
 import { currentOrder } from "./slots";
@@ -630,11 +631,16 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
       {!navMode ? (
         // Before launch (and once cancelled): one page, top to bottom.
         <>
-          <header>
-            {STATE_LABELS[group.state] && (
-              <p className="mb-1 text-xs font-bold uppercase tracking-wide text-ink-500">{STATE_LABELS[group.state]}</p>
+          <header className="flex items-start gap-2">
+            <div className="min-w-0 flex-1">
+              {STATE_LABELS[group.state] && (
+                <p className="mb-1 text-xs font-bold uppercase tracking-wide text-ink-500">{STATE_LABELS[group.state]}</p>
+              )}
+              <h1 className={ui.pageTitle}>{group.name}</h1>
+            </div>
+            {isOrganizer && inLobby && (
+              <GroupMenu onCancel={() => void cancelGroup()} disabled={pending !== null} />
             )}
-            <h1 className={ui.pageTitle}>{group.name}</h1>
           </header>
           {now}
           {error && (
@@ -654,7 +660,7 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
             />
           )}
           {schedule}
-          <GroupDetails detail={detail} onCancel={() => void cancelGroup()} />
+          <GroupDetails detail={detail} />
           {inLobby && !isOrganizer && (
             <div className="text-center">
               <button type="button" onClick={() => void leave()} className={ui.btnDangerGhost}>
