@@ -38,12 +38,10 @@ export function PageLink({ to, icon: Icon, title, note }: { to: string; icon: Lu
  */
 export function GroupDetails({
   detail,
-  onCancel,
   links = true,
   heading = true,
 }: {
   detail: GroupDetail;
-  onCancel?: () => void;
   /** The "Details" heading; off on the Dashboard, where the card speaks for itself. */
   heading?: boolean;
   /** The page links (Money & records, Your history, Activity); off where the view navigation has them. */
@@ -102,13 +100,6 @@ export function GroupDetails({
           title="Activity"
           note="Everything that happens here, visible to every member"
         />
-      )}
-      {editable && onCancel && (
-        <div className="mt-4 text-right">
-          <button type="button" onClick={onCancel} className={ui.btnDangerGhost}>
-            Cancel this paluwagan
-          </button>
-        </div>
       )}
     </section>
   );
