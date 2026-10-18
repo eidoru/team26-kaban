@@ -20,7 +20,7 @@ Manual acceptance tests for evaluators. Rule IDs refer to [PRODUCT_SPEC.md](./PR
 | A5 | Organizer | **Start now** | The group is active; round 1 is open and the schedule shows every payout date |
 | A6 | Member A | **Report a payment** for the full contribution, with a proof photo | Shows as waiting for review |
 | A7 | Organizer | Review and **Approve** it | Member A shows as paid; Member A is notified |
-| A8 | Organizer | **Record payment** for the placeholder and for themselves, then approve both | Both show as paid (R-SUB-02, R-SUB-03) |
+| A8 | Organizer | **Record payment** for the placeholder and for themselves, then approve both | Both show as paid. With more than one placeholder unpaid, Record first asks who paid (R-SUB-02, R-SUB-03) |
 | A9 | Member B | Report and get approved for the full contribution | Collection shows the full pot |
 | A10 | Organizer | **Close round 1 now** | Round 1 closes; the recipient's payout appears; round 2 opens (R-PAY-06) |
 | A11 | Organizer | Mark the payout as handed over | The recipient is asked to confirm |
@@ -47,9 +47,12 @@ Create the group with **Charge interest on shortfalls** on (for example 1.25%).
 |------|-------|--------|---------------|
 | C1 | Member A | Report two partial payments before the organizer reviews | Both wait, numbered ("1 of 2") (R-SUB-05, R-DEC-30) |
 | C2 | Member A | Try to report more than what's left after the waiting payments | The form refuses it under the field (R-SUB-06, R-DEC-29) |
-| C3 | Organizer | Review | Payments are reviewed in the order they came in |
-| C4 | Member A | Once paid up, **Pay ahead** for a later round | The payment fills the next round (R-DEC-31) |
-| C5 | Member A | Withdraw a payment report while it's waiting | It shows as withdrawn (R-SUB-04) |
+| C3 | Organizer | Review | Payments are reviewed in the order they came in; deciding one opens the next of the stack (R-DEC-30) |
+| C4 | Member A | Once this round is covered (approved or waiting), **Pay ahead** for a later round | The payment fills the next round (R-DEC-31) |
+| C5 | Member B | With a debt still open, try to pay past this round | Refused: the debt must be paid first (R-DEC-31) |
+| C6 | Member A | Report one payment worth more than what's left this round (for example three contributions) | It covers this round and the next ones in order, and is reviewed, approved or denied as one payment (R-DEC-33) |
+| C7 | Member A | **Report a problem** on a payment made ahead, before its round's payout | The correction is accepted (R-DEC-32) |
+| C8 | Member A | Withdraw a payment report while it's waiting | It shows as withdrawn; a split payment is withdrawn whole (R-SUB-04, R-DEC-33) |
 
 ## Scenario D: Problem reports
 
