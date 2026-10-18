@@ -1,4 +1,3 @@
-import { PAY_AHEAD_MAX_ROUNDS } from "./constants.js";
 import { formatPeso, type Centavos } from "./money.js";
 
 /** R-SUB-01 */
@@ -20,22 +19,19 @@ export type RoundRoom = { round: number; room: Centavos };
 
 /**
  * R-DEC-31 / R-DEC-33: the rounds a contribution may fill, in the order it fills them: what's left
- * of the open round, then later rounds (paying ahead) once the slot's debt is covered, up to
- * `maxAhead` rounds after the open one (`PAY_AHEAD_MAX_ROUNDS`; null: no limit, R-DEC-12).
+ * of the open round, then every later round (paying ahead, no limit: R-DEC-36) once the slot's
+ * debt is covered.
  */
 export function contributionRooms(input: {
   open: RoundRoom;
   upcoming: RoundRoom[];
   debtLeft: Centavos;
-  maxAhead?: number | null;
 }): RoundRoom[] {
-  const maxAhead = input.maxAhead === undefined ? PAY_AHEAD_MAX_ROUNDS : input.maxAhead;
   const rooms = input.open.room > 0 ? [input.open] : [];
   if (input.debtLeft > 0) return rooms;
   const ahead = [...input.upcoming]
     .sort((a, b) => a.round - b.round)
-    .filter((r) => r.room > 0 && r.round > input.open.round)
-    .filter((r) => maxAhead == null || r.round - input.open.round <= maxAhead);
+    .filter((r) => r.room > 0 && r.round > input.open.round);
   return [...rooms, ...ahead];
 }
 

@@ -61,7 +61,7 @@ A paluwagan is a rotating savings group. Every member contributes a fixed amount
 - **ACTIVE:** start date reached; contributions are being collected.
 - **COMPLETED:** last payout done, no outstanding debt.
 - **COMPLETED_WITH_OUTSTANDING_DEBT:** last payout done, at least one member still owes the organizer. Debt records stay open until settled.
-- **CANCELLED:** only reachable from LOBBY. Cancellation after launch: see Open Questions.
+- **CANCELLED:** only reachable from LOBBY (R-DEC-03).
 
 ---
 
@@ -73,8 +73,8 @@ Submitting the setup form creates the paluwagan in **LOBBY** with the organizer 
 
 | ID | Field | Rules |
 |---|---|---|
-| R-SET-01 | Name | Required. Length ≤ `MAX_NAME_LENGTH` (**TBD**). Must be unique **among the same organizer's paluwagans** (not globally). |
-| R-SET-02 | Number of slots | Integer. `MIN_SLOTS` (2, *assumption*) ≤ slots ≤ `MAX_SLOTS` (**TBD**). |
+| R-SET-01 | Name | Required. Length ≤ `MAX_NAME_LENGTH` (250, R-DEC-35). Must be unique **among the same organizer's paluwagans** (not globally). |
+| R-SET-02 | Number of slots | Integer. `MIN_SLOTS` (2, *assumption*) ≤ slots ≤ `MAX_SLOTS` (30, R-DEC-35). |
 | R-SET-03 | Amount mode | Organizer enters **either** the total pot **or** the contribution per member. The mode is stored, because it determines recalculation when slots change (R-LOB-10). |
 | R-SET-04 | Frequency | One of `WEEKLY`, `BI_WEEKLY`, `TWICE_MONTHLY`, `MONTHLY`, `CUSTOM`. See §4.3. |
 | R-SET-05 | Start date | Must be ≥ today + `MIN_START_LEAD_DAYS` (7). |
@@ -97,7 +97,7 @@ Let `start` = start date and `N` = number of slots. Payout date _k_ (for k = 1�
 |---|---|---|
 | R-FRQ-01 | `WEEKLY` | +7 days |
 | R-FRQ-02 | `BI_WEEKLY` | +14 days (every two weeks, not twice a month) |
-| R-FRQ-03 | `TWICE_MONTHLY` ("kinsenas") | The 15th and the last day of each month. Anchoring rule relative to `start`: see Open Questions. |
+| R-FRQ-03 | `TWICE_MONTHLY` ("kinsenas") | The 15th and the last day of each month. The first payout is the first 15th or month-end at least `MIN_HALF_MONTH_DAYS` (15) days after `start` (R-DEC-02). |
 | R-FRQ-04 | `MONTHLY` | Same day-of-month as `start`, **clamped to the last day of the month** when that day doesn't exist. The anchor day is kept: Jan 31 → Feb 28 (Feb 29 in leap years) → Mar 31 → Apr 30 → May 31. |
 | R-FRQ-05 | `CUSTOM` | Every N days, with N ≥ `MIN_CUSTOM_INTERVAL_DAYS` (7). |
 
@@ -239,7 +239,7 @@ A recipient's payout is **never reduced by other members' shortfalls** — only 
 
 ### 8.1 Worked example
 
-5 slots, contribution 2,000, pot 10,000, interest 1.25%, monthly from Nov 1, 2026. Member C is 4th in the order. Everyone else always pays in full. Assumes R-OQ-05 is decided as "no new interest charge on the debtor's own payout date".
+5 slots, contribution 2,000, pot 10,000, interest 1.25%, monthly from Nov 1, 2026. Member C is 4th in the order. Everyone else always pays in full. No new interest is charged on the debtor's own payout date (R-DEC-05).
 
 | Payout date | Recipient | C paid | Effect on C |
 |---|---|---|---|
@@ -260,7 +260,7 @@ Test cases worth covering: the first recipient (all debt is post-payout), the la
 | R-SWP-01 | A member can request to swap payout positions with another member. Both must not have received their payout yet. |
 | R-SWP-02 | Flow: requester sends → target accepts or declines → organizer approves or denies → positions and payout dates update. |
 | R-SWP-03 | Swaps involving the current period's recipient are blocked within `SWAP_LOCK_DAYS` (3) of the payout date. |
-| R-SWP-04 | Pending swap requests expire after `SWAP_REQUEST_EXPIRY_DAYS` (**TBD**). |
+| R-SWP-04 | Pending swap requests expire after `SWAP_REQUEST_EXPIRY_DAYS` (7, R-DEC-35). |
 | R-SWP-05 | Every step is logged and both members are notified. |
 
 ---
@@ -352,15 +352,17 @@ Test cases worth covering: the first recipient (all debt is post-payout), the la
 
 ## 16. Open Questions
 
+All questions below are decided; see §16.1. New open questions get the next `R-OQ-*` ID.
+
 | ID | Question |
 |---|---|
-| R-OQ-01 | Values for `MAX_NAME_LENGTH`, `MAX_SLOTS`, `SWAP_REQUEST_EXPIRY_DAYS`. **Still open.** |
-| R-OQ-02 | `TWICE_MONTHLY`: must the start date fall on a 15th or a month-end, or is the first payout the first 15th/month-end at least one full half-month after the start? |
-| R-OQ-03 | Can a paluwagan be cancelled after launch (in LAUNCHED or ACTIVE)? |
-| R-OQ-04 | What happens to submissions or disputes still `PENDING` when a payout date arrives? (Options: block payout until resolved; auto-expire; convert pending contributions into debt payments after the debt is created.) |
-| R-OQ-05 | On the debtor's own payout date, is the period's interest charged before the deduction? The worked example assumes **no** charge on that date. |
-| R-OQ-06 | Can members see each other's individual payment status, or only group totals? Possibly an organizer setting at setup. |
-| R-OQ-07 | What if a recipient never confirms receipt of a payout? |
+| R-OQ-01 | Values for `MAX_NAME_LENGTH`, `MAX_SLOTS`, `MAX_INTEREST_PERCENT`, `SWAP_REQUEST_EXPIRY_DAYS`. Decided: R-DEC-34, R-DEC-35. |
+| R-OQ-02 | `TWICE_MONTHLY`: must the start date fall on a 15th or a month-end, or is the first payout the first 15th/month-end at least one full half-month after the start? Decided: R-DEC-02. |
+| R-OQ-03 | Can a paluwagan be cancelled after launch (in LAUNCHED or ACTIVE)? Decided: R-DEC-03. |
+| R-OQ-04 | What happens to submissions or disputes still `PENDING` when a payout date arrives? (Options: block payout until resolved; auto-expire; convert pending contributions into debt payments after the debt is created.) Decided: R-DEC-04. |
+| R-OQ-05 | On the debtor's own payout date, is the period's interest charged before the deduction? The worked example assumes **no** charge on that date. Decided: R-DEC-05. |
+| R-OQ-06 | Can members see each other's individual payment status, or only group totals? Possibly an organizer setting at setup. Decided: R-DEC-06. |
+| R-OQ-07 | What if a recipient never confirms receipt of a payout? Decided: R-DEC-07. |
 
 ### 16.1 Decisions (2026-10-16)
 
@@ -371,7 +373,7 @@ Test cases worth covering: the first recipient (all debt is post-payout), the la
 | R-DEC-04 | (R-OQ-04) Pending items do not block a payout. When the period closes, the shortfall is computed from approved amounts only and becomes debt as usual. Pending contribution submissions for that period stay in the review queue; if approved later they apply as **debt repayments** (R-DBT-06). |
 | R-DEC-05 | (R-OQ-05) **No** interest charge on the debtor's own payout date; the debt is deducted as it stands (matches §8.1). |
 | R-DEC-06 | (R-OQ-06) Full transparency: every member sees every member's payment status and debts. |
-| R-DEC-07 | (R-OQ-07) An unconfirmed payout auto-confirms after `RECEIPT_AUTO_CONFIRM_DAYS` (**TBD**), after reminders; the audit log marks it auto-confirmed. |
+| R-DEC-07 | (R-OQ-07) An unconfirmed payout auto-confirms after `RECEIPT_AUTO_CONFIRM_DAYS` (7, R-DEC-35), after reminders; the audit log marks it auto-confirmed. |
 | R-DEC-08 | Proof attachments are stored in a private Supabase Storage bucket, uploaded via signed URLs and readable only by members of that paluwagan. |
 | R-DEC-09 | The rewrite starts from an empty database: the migration drops all existing data, including user accounts. |
 | R-DEC-10 | (R-PAY-04) When deductions exceed the pot, the pot covers the recipient's own shortfall first, then accrued debt interest, then debt principal. What the pot can't cover stays as the recipient's existing debt; a payout never creates new debt. |
@@ -395,7 +397,9 @@ Test cases worth covering: the first recipient (all debt is post-payout), the la
 | R-DEC-28 | (R-LCH-01, 2026-10-17) No separate review screen before launch: once the order is set, the lobby page (details, schedule, members) is the summary, and Launch asks for one confirmation. |
 | R-DEC-29 | (R-SUB-06, R-DEC-13, 2026-10-17) **Room rule.** For each member and open period, approved contributions + pending contributions + the increases asked for in pending corrections never exceed the contribution. It is checked whenever money is asked for: sending a contribution (R-SUB-06 also counts pending correction increases) and raising a correction (R-DEC-13 also counts pending contributions and other pending increases). A decrease frees nothing until it is approved. So every pending item can be approved in any order without passing the contribution. When pending payments block a correction, the form says how much is waiting and that the member can withdraw those payments (R-SUB-04) if the correction includes them. Approving a contribution or a correction is re-checked against the contribution as a safety net; if it fails, the organizer denies it instead. |
 | R-DEC-30 | (R-SUB-05, 2026-10-17) Several pending payments from one member and period form a stack, reviewed in order. They are numbered ("1 of 6") so they can be told apart; the review queue lists only the next of each stack, and deciding one opens the next. |
-| R-DEC-31 | (R-SUB-01, R-SUB-06, R-DEC-29, 2026-10-17) **Paying ahead.** A contribution fills what's left of the open round first, then later rounds in order (paying ahead), up to `PAY_AHEAD_MAX_ROUNDS` (**TBD**; unenforced, so any remaining round) after the open one. Paying ahead needs the slot's debt covered (owed − pending debt payments = 0); until then a contribution can't go past the open round. The room rule applies to each round on its own, and rounds already covered are skipped. Approved money counts toward its round when that round closes, so the member starts that round paid. The organizer pays ahead for placeholders as for other payments (R-SUB-02), each slot judged on its own. Known limit, left as is: if an open-round payment is denied or withdrawn after paying ahead, the advance stays on its round; the organizer can deny the advance instead. |
+| R-DEC-31 | (R-SUB-01, R-SUB-06, R-DEC-29, 2026-10-17) **Paying ahead.** A contribution fills what's left of the open round first, then later rounds in order (paying ahead), into any remaining round (no limit, R-DEC-36). Paying ahead needs the slot's debt covered (owed − pending debt payments = 0); until then a contribution can't go past the open round. The room rule applies to each round on its own, and rounds already covered are skipped. Approved money counts toward its round when that round closes, so the member starts that round paid. The organizer pays ahead for placeholders as for other payments (R-SUB-02), each slot judged on its own. Known limit, left as is: if an open-round payment is denied or withdrawn after paying ahead, the advance stays on its round; the organizer can deny the advance instead. |
 | R-DEC-32 | (R-DSP-01, R-DSP-04, R-DEC-21, 2026-10-17) A payment made ahead can be corrected (a problem report) while its round is upcoming or open; the report still expires at that round's payout. |
 | R-DEC-33 | (R-SUB-05, R-DEC-30, R-DEC-31, 2026-10-17) **One payment across rounds.** A contribution bigger than what's left this round is split by R-DEC-31's order into one part per round (e.g. ₱1,000 left this round + ₱6,000 → rounds 1–4), linked as one payment. It is reviewed, approved or denied, and withdrawn as one, and counts as one in the review queue; approval re-checks every part and fails whole if one fails. Once approved, each part is its round's own contribution and can be corrected on its own (R-DEC-32). A part whose round closes before review applies to debt like any late contribution (R-DEC-04). |
 | R-DEC-34 | (R-SET-06, R-DEC-12, 2026-10-19) `MAX_INTEREST_PERCENT` is **100**: shortfall interest can be at most 100% per period. Without a cap any number was accepted (e.g. 999,999.99%). Checked as you type and on the server, on create and edit. |
+| R-DEC-35 | (R-OQ-01, R-SET-01, R-SET-02, R-SWP-04, R-DEC-07, R-DEC-12, 2026-10-19) `MAX_NAME_LENGTH` is **250** characters, `MAX_SLOTS` is **30**, `SWAP_REQUEST_EXPIRY_DAYS` is **7** and `RECEIPT_AUTO_CONFIRM_DAYS` is **7**. Names and slots are checked as you type and on the server, on create and edit. A swap requested from now on expires 7 days after it was asked for (swaps already pending keep no expiry, R-DEC-25). A payout handed over and not confirmed within 7 days is marked received automatically by the daily job; the payout sheet and the activity log say so. |
+| R-DEC-36 | (R-DEC-31, 2026-10-19) Paying ahead has **no limit**: once the slot's debt is covered, a member can pay every remaining round ahead. `PAY_AHEAD_MAX_ROUNDS` is removed. |
