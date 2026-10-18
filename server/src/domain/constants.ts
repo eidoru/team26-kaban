@@ -8,8 +8,8 @@ export const MIN_SLOTS = 2;
 export const MAX_SLOTS: number | null = null;
 /** R-SET-05 */
 export const MIN_START_LEAD_DAYS = 7;
-/** R-SET-06 */
-export const MAX_INTEREST_PERCENT: number | null = null;
+/** R-SET-06, R-DEC-34 */
+export const MAX_INTEREST_PERCENT: number | null = 100;
 /** R-SET-06 (assumption) */
 export const INTEREST_DECIMAL_PLACES = 2;
 /** R-FRQ-05 */

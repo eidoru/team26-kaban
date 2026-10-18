@@ -92,9 +92,9 @@ export function previewAmounts(draft: SetupDraft) {
   return computeAmounts(input.amountMode, input.amount, input.slotCount);
 }
 
-/** First and last payout dates, or null until the schedule is valid. */
+/** The payout dates (first and last pulled out), or null until the schedule is valid. */
 export function previewDates(draft: SetupDraft, errors: SetupErrors) {
   if (errors.startDate || errors.intervalDays || errors.slotCount || !draft.startDate) return null;
   const dates = payoutDates(draft.startDate, draft.frequency, draft.slotCount, Number(draft.intervalText) || undefined);
-  return { first: dates[0], last: dates[dates.length - 1], count: dates.length };
+  return { all: dates, first: dates[0], last: dates[dates.length - 1], count: dates.length };
 }
