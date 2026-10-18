@@ -3,7 +3,7 @@ import type { GroupDetail, ScheduleRound, SlotView } from "../../api/client";
 import { dueHint, formatMonthDay } from "../../lib/dates";
 import { formatPeso } from "../../lib/money";
 import { ui } from "../../lib/ui";
-import { currentOrder, slotHasActions } from "./slots";
+import { currentOrder, slotHasActions, slotTag } from "./slots";
 import { swapRequestBlocker } from "./swaps/swaps";
 
 const PAYOUT_LINE = {
@@ -34,6 +34,7 @@ export function PayoutSchedule({
   onSelect,
   onOpenPayout,
   onSwap,
+  animateIn = false,
 }: {
   detail: GroupDetail;
   /** Organizer, in the lobby, with every slot filled (R-ORD-01). */
@@ -49,18 +50,27 @@ export function PayoutSchedule({
   onOpenPayout?: (round: number) => void;
   /** While it runs: ask to swap turns with that slot (§9). Shown as a "Swap" button where allowed. */
   onSwap?: (slot: SlotView) => void;
+  /** The rows rise in one after another: the schedule has just taken over from the member list. */
+  animateIn?: boolean;
 }) {
   const { schedule, slots, group } = detail;
   const slotById = new Map(slots.map((s) => [s.id, s]));
   const order = currentOrder(detail);
-  // While arranging, the rows follow the draft; dates stay fixed to round numbers.
-  const recipients: (SlotView | undefined)[] = (draft ?? order ?? []).map((id) => slotById.get(id));
+  // Before an order is set, the organizer first, then by joining: what Arrange starts from.
+  const provisional = [...slots].sort((a, b) => Number(b.isOrganizer) - Number(a.isOrganizer)).map((s) => s.id);
+  // In the lobby this list replaces the member list once every slot is filled, so it names everyone even
+  // before an order is set (muted, with how they joined) and the organizer can still tap a row to remove
+  // someone. While arranging, the rows follow the draft; dates stay fixed to round numbers.
+  const unordered = !draft && !order && group.state === "LOBBY";
+  const recipients: (SlotView | undefined)[] = (draft ?? order ?? (unordered ? provisional : [])).map((id) =>
+    slotById.get(id),
+  );
   // If any payout falls outside this year, every date shows its year so the column lines up.
   const thisYear = String(new Date().getFullYear());
   const withYear = schedule.some((r) => !r.payoutDate.startsWith(thisYear));
 
   function startArranging() {
-    onDraftChange?.(order ?? [...slots].sort((a, b) => Number(b.isOrganizer) - Number(a.isOrganizer)).map((s) => s.id));
+    onDraftChange?.(order ?? provisional);
   }
 
   function move(index: number, by: -1 | 1) {
@@ -74,7 +84,7 @@ export function PayoutSchedule({
     "flex h-11 w-11 items-center justify-center rounded-full border-2 border-ink-200 text-ink-700 hover:bg-ink-50 disabled:opacity-30";
 
   return (
-    <section aria-labelledby="schedule-heading">
+    <section aria-labelledby="schedule-heading" className={animateIn ? "animate-rise" : undefined}>
       {/* Once it runs, the Schedule view's tab names this list: the heading is for screen readers only,
           with no margin, so the list starts where the Members list does. */}
       <div className={group.state === "LOBBY" ? "mb-3 flex flex-wrap items-end justify-between gap-2" : ""}>
@@ -138,7 +148,13 @@ export function PayoutSchedule({
               </span>
               <span className="sr-only">Round {round.number}</span>
               <span className="min-w-0 flex-1">
-                {slot ? (
+                {slot && unordered ? (
+                  // No turn yet: who's in, not who's paid when.
+                  <>
+                    <span className="block truncate text-base font-bold text-ink-500">{slot.name}</span>
+                    <span className="block truncate text-sm text-ink-500">{slotTag(slot)}</span>
+                  </>
+                ) : slot ? (
                   <>
                     <span className="block truncate text-base font-bold text-ink-900">{slot.name}</span>
                     {status && (
@@ -162,7 +178,11 @@ export function PayoutSchedule({
           // type and padding so the views read alike.
           const rowClass = "flex h-18 w-full items-center gap-3 px-5 text-left";
           return (
-            <li key={round.number}>
+            <li
+              key={round.number}
+              className={animateIn ? "animate-rise" : undefined}
+              style={animateIn ? { animationDelay: `${Math.min(index, 12) * 40}ms` } : undefined}
+            >
               {tappable ? (
                 <button
                   type="button"
