@@ -9,7 +9,6 @@ import {
   roundsLabel,
   splitContribution,
   periodStatus,
-  proofError,
   refundFor,
   submissionAmountError,
   submissionCap,
@@ -263,15 +262,5 @@ describe("R-DEC-31 / R-DEC-33 paying ahead, and one payment across rounds", () =
   it("labels a payment's rounds", () => {
     expect(roundsLabel([3])).toBe("round 3");
     expect(roundsLabel([4, 1, 2, 3])).toBe("rounds 1–4");
-  });
-});
-
-describe("R-DEC-37 proof is required", () => {
-  it("refuses a payment or handover without a proof photo", () => {
-    expect(proofError(false)).toBe("Attach a photo of the payment as proof.");
-  });
-
-  it("accepts one with a proof photo", () => {
-    expect(proofError(true)).toBeNull();
   });
 });

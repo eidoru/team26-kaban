@@ -12,7 +12,6 @@ import {
   type SetupErrors,
   type SetupInput,
 } from "../domain/setup.js";
-import { STANDARD_TERMS } from "../domain/terms.js";
 import { audit } from "../lib/audit.js";
 import { AppError, conflict } from "../lib/errors.js";
 import { prisma } from "../lib/prisma.js";
@@ -73,13 +72,7 @@ export async function createGroup(userId: string, input: SetupInput) {
   return prisma.$transaction(async (tx) => {
     await assertNameAvailable(tx, userId, input.name);
     const group = await tx.group.create({
-      // R-DEC-38: the standard terms for now; the group keeps this copy.
-      data: {
-        ...data,
-        terms: STANDARD_TERMS,
-        organizerId: userId,
-        slots: { create: { userId, isOrganizer: true } },
-      },
+      data: { ...data, organizerId: userId, slots: { create: { userId, isOrganizer: true } } },
     });
     await audit(tx, {
       groupId: group.id,
@@ -276,8 +269,7 @@ export async function groupDetail(groupId: string, viewerUserId: string, appOrig
   const swaps = started ? await visibleSwaps(prisma, groupId, viewerScope) : [];
 
   return {
-    // Terms stay out of summary(): guests see the public summary but not the terms (R-INV-08).
-    group: { ...summary(group), organizerName: group.organizer.displayName, terms: group.terms },
+    group: { ...summary(group), organizerName: group.organizer.displayName },
     viewer: { slotId: viewer.id, isOrganizer },
     slots,
     openSlots: group.slotCount - group.slots.length,

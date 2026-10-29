@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Link } from "react-router-dom";
 import {
   CalendarDays,
@@ -8,14 +7,11 @@ import {
   Pencil,
   Percent,
   Repeat,
-  ScrollText,
   UserRound,
   Wallet,
   type LucideIcon,
 } from "lucide-react";
 import type { GroupDetail } from "../../api/client";
-import { Sheet } from "../../components/flow/Sheet";
-import { TermsText } from "../../components/Terms";
 import { formatDueDate } from "../../lib/dates";
 import { formatPeso, formatRate } from "../../lib/money";
 import { ui } from "../../lib/ui";
@@ -53,7 +49,6 @@ export function GroupDetails({
 }) {
   const { group, viewer } = detail;
   const editable = viewer.isOrganizer && group.state === "LOBBY";
-  const [termsOpen, setTermsOpen] = useState(false);
   // Short labels with icons: the terms at a glance, one line each.
   const rows: { icon: LucideIcon; label: string; value: string; note?: string }[] = [
     { icon: HandCoins, label: "Each pays", value: formatPeso(group.contribution) },
@@ -96,25 +91,7 @@ export function GroupDetails({
             </dd>
           </div>
         ))}
-        {/* R-INV-08: what members agree to before joining or claiming a slot. */}
-        <div className="flex items-center gap-3 px-5 py-3">
-          <ScrollText className="h-4 w-4 shrink-0 text-ink-400" aria-hidden />
-          <dt className="shrink-0 text-sm text-ink-500">Terms</dt>
-          <dd className="min-w-0 flex-1 text-right">
-            <button type="button" onClick={() => setTermsOpen(true)} className={ui.link}>
-              Read<span className="sr-only"> the terms</span>
-            </button>
-          </dd>
-        </div>
       </dl>
-      <Sheet
-        open={termsOpen}
-        title="Terms"
-        subtitle="Members agree to these before joining."
-        onClose={() => setTermsOpen(false)}
-      >
-        <TermsText terms={group.terms} />
-      </Sheet>
       {/* Before launch there's no view navigation, so Activity is linked from here. */}
       {links && (
         <PageLink

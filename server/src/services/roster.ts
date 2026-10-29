@@ -1,5 +1,4 @@
 import { can } from "../domain/lifecycle.js";
-import { TERMS_NOT_ACCEPTED } from "../domain/terms.js";
 import { audit } from "../lib/audit.js";
 import { badRequest, conflict, forbidden, notFound } from "../lib/errors.js";
 import { prisma } from "../lib/prisma.js";
@@ -25,15 +24,7 @@ export async function createInviteLink(groupId: string, actorUserId: string) {
 
 export type InviteStatus = "OPEN" | "FULL" | "CLOSED" | "ALREADY_MEMBER";
 
-/** R-INV-08, R-CLM-07: joining or claiming needs the member's agreement to the group's terms. */
-function assertTermsAccepted(acceptTerms: boolean) {
-  if (!acceptTerms) throw badRequest(TERMS_NOT_ACCEPTED, "TERMS_NOT_ACCEPTED");
-}
-
-/**
- * R-INV-01…06: what the landing page shows for this link and viewer. The terms only for signed-in
- * viewers (R-INV-08).
- */
+/** R-INV-01…06: what the landing page shows for this link and viewer. */
 export async function getInvite(token: string, userId: string | undefined) {
   const link = await prisma.inviteLink.findUnique({
     where: { token },
@@ -50,14 +41,11 @@ export async function getInvite(token: string, userId: string | undefined) {
       : occupied >= group.slotCount
         ? "FULL"
         : "OPEN";
-  return { status, group: publicSummary(group, occupied), terms: userId ? group.terms : null };
+  return { status, group: publicSummary(group, occupied) };
 }
 
-/**
- * R-INV-03 / R-INV-07: take an open slot. Kicked members may rejoin (R-LOB-05). The audit entry keeps
- * the terms they agreed to (R-INV-08, R-DEC-38).
- */
-export async function joinViaInvite(token: string, userId: string, acceptTerms: boolean) {
+/** R-INV-03 / R-INV-07: take an open slot. Kicked members may rejoin (R-LOB-05). */
+export async function joinViaInvite(token: string, userId: string) {
   const link = await prisma.inviteLink.findUnique({ where: { token } });
   if (!link || link.revokedAt) throw notFound("Invite link");
   return withGroupLock(link.groupId, async (tx, group) => {
@@ -66,7 +54,6 @@ export async function joinViaInvite(token: string, userId: string, acceptTerms: 
     if (!can.join(group.state)) throw conflict("This paluwagan is no longer accepting members.", "CLOSED");
     const occupied = await tx.slot.count({ where: { groupId: group.id } });
     if (occupied >= group.slotCount) throw conflict("This paluwagan is full.", "FULL");
-    assertTermsAccepted(acceptTerms);
 
     const slot = await tx.slot.create({ data: { groupId: group.id, userId }, include: { user: true } });
     await audit(tx, {
@@ -75,7 +62,6 @@ export async function joinViaInvite(token: string, userId: string, acceptTerms: 
       action: "member.joined",
       targetSlotId: slot.id,
       targetName: slotName(slot),
-      after: { termsAccepted: true, terms: group.terms },
     });
     const others = (await memberUserIds(tx, group.id)).filter((id) => id !== userId);
     await notifyUsers(tx, others, {
@@ -218,12 +204,11 @@ export async function getClaim(token: string, userId: string | undefined) {
     status,
     group: publicSummary(group, group.slots.length),
     placeholder: { slotId: slot.id, name: slot.placeholderName, position: slot.position },
-    terms: userId ? group.terms : null,
   };
 }
 
-/** R-CLM-01…07: the claimer agrees to the terms and takes the slot and everything tied to it. */
-export async function claimPlaceholder(token: string, userId: string, acceptTerms: boolean) {
+/** R-CLM-01…06: the claimer takes the slot and everything tied to it. */
+export async function claimPlaceholder(token: string, userId: string) {
   const link = await liveClaim(token);
   return withGroupLock(link.slot.groupId, async (tx, group) => {
     const fresh = await tx.claimLink.findUniqueOrThrow({ where: { id: link.id }, include: { slot: true } });
@@ -233,7 +218,6 @@ export async function claimPlaceholder(token: string, userId: string, acceptTerm
     if (await tx.slot.findFirst({ where: { groupId: group.id, userId } })) {
       throw conflict("You already hold a slot in this paluwagan.", "ALREADY_MEMBER");
     }
-    assertTermsAccepted(acceptTerms);
 
     const now = new Date();
     const slot = await tx.slot.update({
@@ -249,7 +233,7 @@ export async function claimPlaceholder(token: string, userId: string, acceptTerm
       targetSlotId: slot.id,
       targetName: slotName(slot),
       before: { placeholderName: fresh.slot.placeholderName },
-      after: { name: slotName(slot), termsAccepted: true, terms: group.terms },
+      after: { name: slotName(slot) },
     });
     const others = (await memberUserIds(tx, group.id)).filter((id) => id !== userId);
     await notifyUsers(tx, others, {
