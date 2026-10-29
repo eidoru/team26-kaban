@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, api } from "../../api/client";
 import { Avatar } from "../../components/Avatar";
 import { Spinner } from "../../components/Splash";
+import { TermsAgreement } from "../../components/Terms";
 import { useAuth } from "../../context/useAuth";
 import { useDialog } from "../../context/useDialog";
 import { invalidateHomeLists } from "../../lib/homeQueries";
@@ -23,6 +24,7 @@ export function ClaimPage() {
   const queryClient = useQueryClient();
   const [claimError, setClaimError] = useState("");
   const [claiming, setClaiming] = useState(false);
+  const [agreed, setAgreed] = useState(false);
   const { data, error, isPending } = useQuery({
     queryKey: ["claim", token, user?.id ?? null],
     queryFn: () => api.getClaim(token),
@@ -133,7 +135,14 @@ export function ClaimPage() {
           </div>
         ) : (
           <div className="space-y-3">
-            <button type="button" onClick={() => void claim()} disabled={claiming} className={`${ui.btnPrimaryFull} min-h-11`}>
+            {/* R-CLM-07: the same terms as joining, agreed before claiming. */}
+            {data.terms && <TermsAgreement terms={data.terms} agreed={agreed} onAgreedChange={setAgreed} />}
+            <button
+              type="button"
+              onClick={() => void claim()}
+              disabled={claiming || !agreed}
+              className={`${ui.btnPrimaryFull} min-h-11`}
+            >
               {claiming ? "Claiming…" : `Claim as ${user.displayName}`}
             </button>
             {claimError && <p className={ui.error}>{claimError}</p>}
