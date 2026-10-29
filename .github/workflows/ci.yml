@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, dev]
   pull_request:
-    branches: [main, master]
+    branches: [main, dev]
 
 jobs:
   test:
@@ -25,6 +25,9 @@ jobs:
 
       - name: Typecheck server
         run: npm run build -w server
+
+      - name: Lint client
+        run: npm run lint -w client
 
       - name: Typecheck client
         run: npm run build -w client
