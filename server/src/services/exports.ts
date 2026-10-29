@@ -33,6 +33,8 @@ function totalsFacts(m: MemberTotals): [string, string][] {
     ["Contributed", formatPeso(m.contributed)],
     ["Received", formatPeso(m.received)],
     ["Refunds owed to you", formatPeso(m.refunds)],
+    // R-DEC-39: only when there's a fee to show.
+    ...(m.fees > 0 ? [["Organizing fees paid", formatPeso(m.fees)] as [string, string]] : []),
     ["Debt incurred (with interest)", formatPeso(m.debtIncurred)],
     ["Debt settled", formatPeso(m.debtSettled)],
     ["Debt outstanding", formatPeso(m.debtOutstanding)],
@@ -56,7 +58,8 @@ export async function buildExport(input: {
     include: { organizer: { select: { displayName: true } }, rounds: true, slots: { include: { user: true } } },
   });
   const viewer = group.slots.find((s) => s.userId === input.viewerUserId)!;
-  const terms = `${formatPeso(Number(group.contribution))} ${frequencyLabel(group.frequency, group.intervalDays).toLowerCase()} · ${group.slotCount} slots · ${formatPeso(Number(group.pot))} pot`;
+  const fee = group.organizerFeeRate > 0 ? ` · ${group.organizerFeeRate / 100}% organizing fee` : "";
+  const terms = `${formatPeso(Number(group.contribution))} ${frequencyLabel(group.frequency, group.intervalDays).toLowerCase()} · ${group.slotCount} slots · ${formatPeso(Number(group.pot))} pot${fee}`;
   const generated = `Generated ${when(new Date())} (Philippine time)`;
   const base = slug(group.name);
 
@@ -84,6 +87,7 @@ export async function buildExport(input: {
         ["Paid out", formatPeso(totals.paidOut)],
         ["Shortfalls the organizer covered", formatPeso(totals.coveredByOrganizer)],
         ["Still owed to the organizer", formatPeso(totals.debtOutstanding)],
+        ...(totals.fees > 0 ? [["Organizing fees", formatPeso(totals.fees)] as [string, string]] : []),
       ]);
     if (!complete) report.note("The paluwagan is still running, so these totals will change.");
     const columns: Column[] = [
@@ -194,6 +198,7 @@ export async function buildExport(input: {
       ["Shortfalls you covered", formatPeso(totals.coveredByOrganizer)],
       ["Still owed to you", formatPeso(totals.debtOutstanding)],
       ["Refunds owed by you", formatPeso(totals.refunds)],
+      ...(totals.fees > 0 ? [["Organizing fees", formatPeso(totals.fees)] as [string, string]] : []),
     ])
     .heading("Periods")
     .table(

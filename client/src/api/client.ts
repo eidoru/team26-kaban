@@ -58,6 +58,8 @@ export interface GroupSummary {
   startDate: string;
   /** Hundredths of a percent: 125 is 1.25%. */
   interestRate: number;
+  /** R-SET-08, R-DEC-39: organizing fee on each payment, hundredths of a percent; 0 for none. */
+  organizerFeeRate: number;
   createdAt: string;
   launchedAt: string | null;
   activatedAt: string | null;
@@ -102,6 +104,8 @@ export interface PayoutView {
   ownShortfall: number;
   interestDeducted: number;
   principalDeducted: number;
+  /** R-DEC-39: organizing fee on the own shortfall and the principal deducted. */
+  feeDeducted: number;
   net: number;
   status: "AWAITING_HANDOVER" | "HANDED_OVER" | "CONFIRMED";
   handedOverAt: string | null;
@@ -169,6 +173,9 @@ export interface SubmissionView {
   appliedAs: "CONTRIBUTION" | "DEBT_PAYMENT" | null;
   amount: number;
   effectiveAmount: number | null;
+  /** R-DEC-39: organizing fee paid on top of the amount, and the one in effect after corrections. */
+  fee: number;
+  effectiveFee: number | null;
   status: "PENDING" | "APPROVED" | "DENIED" | "CANCELLED";
   note: string | null;
   proofAttached: boolean;
@@ -201,6 +208,8 @@ export interface DisputeView {
   mine: boolean;
   /** The refund an approved decrease created (R-DSP-03), owed by the organizer. */
   refund: number | null;
+  /** R-DEC-39: the organizing fee returned with the refund. */
+  refundFee: number | null;
 }
 
 /** A request to trade payout turns (§9). */
@@ -223,6 +232,8 @@ export interface MemberTotals {
   contributed: number;
   received: number;
   refunds: number;
+  /** R-DEC-39: organizing fees paid. */
+  fees: number;
   coveredByOrganizer: number;
   debtIncurred: number;
   debtSettled: number;
@@ -231,7 +242,14 @@ export interface MemberTotals {
 
 export interface GroupSummaryTotals {
   members: MemberTotals[];
-  totals: { collected: number; paidOut: number; coveredByOrganizer: number; refunds: number; debtOutstanding: number };
+  totals: {
+    collected: number;
+    paidOut: number;
+    coveredByOrganizer: number;
+    refunds: number;
+    fees: number;
+    debtOutstanding: number;
+  };
 }
 
 export type ActivityCategory = "payments" | "debts" | "payouts" | "disputes" | "swaps" | "members" | "settings";
@@ -256,7 +274,16 @@ export type Health = "ON_TRACK" | "AT_RISK" | "SHORT";
 /** §15.1 / §15.3 for one paluwagan. Amounts in centavos. */
 export interface GroupStats {
   openRound: { number: number; periodStart: string; payoutDate: string; health: Health; projectedPayout: number | null } | null;
-  money: { collected: number; paidOut: number; toPayOut: number; coveredByOrganizer: number; owedToOrganizer: number; refunds: number };
+  money: {
+    collected: number;
+    paidOut: number;
+    toPayOut: number;
+    coveredByOrganizer: number;
+    owedToOrganizer: number;
+    refunds: number;
+    /** R-DEC-39: organizing fees, outside the pot. */
+    fees: number;
+  };
   /**
    * Approved share of each pot: final for closed rounds; for the open round so far, and for later
    * rounds what was paid ahead (R-DEC-31), up to the last one with any.

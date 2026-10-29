@@ -1,4 +1,5 @@
-import { addDebt, applyRepayment, chargePeriodInterest, type DebtState } from "./debt.js";
+import { addDebt, chargePeriodInterest, type DebtState } from "./debt.js";
+import { feeOn, feeRateFor, principalWithFee } from "./fees.js";
 import type { Centavos, RateBasisPoints } from "./money.js";
 
 export interface PayoutMemberInput {
@@ -14,6 +15,8 @@ export interface PayoutInput {
   contribution: Centavos;
   pot: Centavos;
   rate: RateBasisPoints;
+  /** The organizing fee (R-DEC-39); 0 for none. */
+  feeRate: RateBasisPoints;
   recipientId: string;
   members: PayoutMemberInput[];
 }
@@ -37,6 +40,8 @@ export interface RecipientOutcome {
   ownShortfall: Centavos;
   /** The part of the recipient's accumulated debt settled out of the pot (R-PAY-03). */
   debtDeducted: { interest: Centavos; principal: Centavos };
+  /** R-DEC-39: the organizing fee on the own shortfall and the principal deducted. */
+  feeDeducted: Centavos;
   /** What the organizer hands over (R-PAY-04: never below zero). */
   netPayout: Centavos;
   /** Debt left after the deduction; non-zero only when deductions exceed the pot. */
@@ -53,7 +58,8 @@ export interface PayoutResult {
 
 /**
  * Steps 2–4 of §7 on payout date k: cover every non-recipient's shortfall (it becomes debt, with
- * interest), and pay the recipient the pot less their own shortfall and their whole accumulated debt.
+ * interest), and pay the recipient the pot less their own shortfall and their whole accumulated debt,
+ * with the organizing fee on both (R-DEC-39).
  * A recipient is never charged for anyone else's shortfall.
  */
 export function processPayout(input: PayoutInput): PayoutResult {
@@ -91,16 +97,22 @@ export function processPayout(input: PayoutInput): PayoutResult {
 
   // R-DEC-05: no interest charge on the recipient's own payout date. R-DEC-10: the pot
   // covers the recipient's own shortfall first, then debt interest, then principal; whatever the pot
-  // can't cover stays as existing debt, so payout day never creates new debt.
+  // can't cover stays as existing debt, so payout day never creates new debt. R-DEC-39: the shortfall
+  // and the principal each bring their organizing fee; interest carries none.
+  const feeRate = feeRateFor(recipientInput.isOrganizer, input.feeRate);
+  const { debt } = recipientInput;
   const ownShortfall = Math.max(0, contribution - recipientInput.approved);
-  const afterShortfall = Math.max(0, pot - ownShortfall);
-  const deduction = applyRepayment(recipientInput.debt, afterShortfall);
+  const shortfallFee = Math.min(feeOn(ownShortfall, feeRate), Math.max(0, pot - ownShortfall));
+  const afterShortfall = Math.max(0, pot - ownShortfall - shortfallFee);
+  const toInterest = Math.min(afterShortfall, debt.interest);
+  const toPrincipal = principalWithFee(afterShortfall - toInterest, debt.principal, feeRate);
   const recipient: RecipientOutcome = {
     id: recipientId,
     ownShortfall,
-    debtDeducted: { interest: deduction.toInterest, principal: deduction.toPrincipal },
-    netPayout: deduction.excess,
-    debt: deduction.debt,
+    debtDeducted: { interest: toInterest, principal: toPrincipal.principal },
+    feeDeducted: shortfallFee + toPrincipal.fee,
+    netPayout: afterShortfall - toInterest - toPrincipal.principal - toPrincipal.fee,
+    debt: { principal: debt.principal - toPrincipal.principal, interest: debt.interest - toInterest },
   };
 
   return {

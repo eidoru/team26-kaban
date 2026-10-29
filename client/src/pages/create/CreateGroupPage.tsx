@@ -14,14 +14,14 @@ import { groupKey } from "../../lib/groupQueries";
 import { invalidateHomeLists } from "../../lib/homeQueries";
 import { formatPeso } from "../../lib/money";
 import { ui } from "../../lib/ui";
-import { BasicsSection, InterestSection, MoneySection, PotCard, ScheduleSection } from "./SetupFields";
+import { BasicsSection, FeeSection, InterestSection, MoneySection, PotCard, ScheduleSection } from "./SetupFields";
 import { draftErrors, emptyDraft, previewAmounts, STEP_FIELDS, toInput, type SetupDraft } from "./setupDraft";
 
 const STEPS = [
   { label: "Basics", title: "Name your paluwagan", subtitle: "You can change these until it launches." },
   { label: "Money", title: "How much goes in?", subtitle: "Set what each member pays, or the total pot." },
   { label: "Schedule", title: "When are payouts?", subtitle: "One member gets the whole pot on each payout date." },
-  { label: "Shortfalls", title: "If someone pays short", subtitle: "Optional. Decide this now so everyone knows upfront." },
+  { label: "Charges", title: "Interest and fees", subtitle: "Both optional. Decide now so everyone knows upfront." },
   { label: "Review", title: "Check everything", subtitle: "Next, you'll invite members from the lobby." },
 ];
 
@@ -100,7 +100,12 @@ export function CreateGroupPage() {
         {step === 0 && <BasicsSection {...sectionProps} />}
         {step === 1 && <MoneySection {...sectionProps} />}
         {step === 2 && <ScheduleSection {...sectionProps} earliestStart={earliestStartDate(today)} />}
-        {step === 3 && <InterestSection {...sectionProps} />}
+        {step === 3 && (
+          <>
+            <InterestSection {...sectionProps} />
+            <FeeSection {...sectionProps} />
+          </>
+        )}
         {step === 4 && <Review draft={draft} onEdit={setStep} />}
         {submitError && <p className={ui.error}>{submitError}</p>}
 
@@ -131,6 +136,7 @@ function Review({ draft, onEdit }: { draft: SetupDraft; onEdit: (step: number) =
     { label: "Frequency", value: frequencyLabel(draft.frequency, Number(draft.intervalText) || null), step: 2 },
     { label: "Start date", value: formatDueDate(draft.startDate), step: 2 },
     { label: "Shortfall interest", value: draft.interestOn ? `${draft.interestText}% per period` : "None", step: 3 },
+    { label: "Organizing fee", value: draft.feeOn ? `${draft.feeText}% of each payment` : "None", step: 3 },
   ];
   return (
     <>

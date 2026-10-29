@@ -3,6 +3,7 @@ import {
   INTEREST_DECIMAL_PLACES,
   MAX_INTEREST_PERCENT,
   MAX_NAME_LENGTH,
+  MAX_ORGANIZER_FEE_PERCENT,
   MAX_SLOTS,
   MIN_CUSTOM_INTERVAL_DAYS,
   MIN_SLOTS,
@@ -24,6 +25,8 @@ export interface SetupInput {
   startDate: CalendarDate;
   /** Percent per period, e.g. 1.25; null or 0 for none. */
   interestPercent?: number | null;
+  /** R-SET-08: organizing fee, percent of each payment, e.g. 2; null or 0 for none. */
+  organizerFeePercent?: number | null;
 }
 
 export type SetupField = keyof SetupInput;
@@ -39,6 +42,7 @@ export interface GroupSettings extends GroupAmounts {
   intervalDays: number | null;
   startDate: CalendarDate;
   interestRate: RateBasisPoints;
+  organizerFeeRate: RateBasisPoints;
 }
 
 /** R-SET-05: the earliest start date allowed today. */
@@ -51,8 +55,17 @@ function decimalPlaces(value: number): number {
   return text.includes(".") ? text.split(".")[1].length : 0;
 }
 
+/** Why an optional percentage (R-SET-06, R-SET-08) isn't valid, or null. Null and 0 mean none. */
+function percentError(value: number | null | undefined, max: number | null, label: string): string | null {
+  if (value == null || value === 0) return null;
+  if (!Number.isFinite(value) || value < 0) return "Enter a positive percentage.";
+  if (decimalPlaces(value) > INTEREST_DECIMAL_PLACES) return `Use at most ${INTEREST_DECIMAL_PLACES} decimal places.`;
+  if (max !== null && value > max) return `${label} can be at most ${max}%.`;
+  return null;
+}
+
 /**
- * Field-level problems with a setup or edit (R-SET-01…06, R-FRQ-05). Name uniqueness needs the
+ * Field-level problems with a setup or edit (R-SET-01…06, R-SET-08, R-FRQ-05). Name uniqueness needs the
  * database and is checked by the service. `minSlots` is the occupied-slot floor for edits (R-LOB-10).
  */
 export function setupErrors(input: SetupInput, today: CalendarDate, minSlots = MIN_SLOTS): SetupErrors {
@@ -92,15 +105,11 @@ export function setupErrors(input: SetupInput, today: CalendarDate, minSlots = M
     errors.startDate = `The start date must be at least ${MIN_START_LEAD_DAYS} days from today.`;
   }
 
-  const interest = input.interestPercent;
-  if (interest != null && interest !== 0) {
-    if (!Number.isFinite(interest) || interest < 0) errors.interestPercent = "Enter a positive percentage.";
-    else if (decimalPlaces(interest) > INTEREST_DECIMAL_PLACES) {
-      errors.interestPercent = `Use at most ${INTEREST_DECIMAL_PLACES} decimal places.`;
-    } else if (MAX_INTEREST_PERCENT !== null && interest > MAX_INTEREST_PERCENT) {
-      errors.interestPercent = `Interest can be at most ${MAX_INTEREST_PERCENT}%.`;
-    }
-  }
+  const interest = percentError(input.interestPercent, MAX_INTEREST_PERCENT, "Interest");
+  if (interest) errors.interestPercent = interest;
+  // R-DEC-39: at most MAX_ORGANIZER_FEE_PERCENT (10%).
+  const fee = percentError(input.organizerFeePercent, MAX_ORGANIZER_FEE_PERCENT, "The fee");
+  if (fee) errors.organizerFeePercent = fee;
   return errors;
 }
 
@@ -117,6 +126,7 @@ export function toSettings(input: SetupInput): GroupSettings {
     intervalDays: input.frequency === "CUSTOM" ? (input.intervalDays ?? null) : null,
     startDate: input.startDate,
     interestRate: input.interestPercent ? rateFromPercent(input.interestPercent) : 0,
+    organizerFeeRate: input.organizerFeePercent ? rateFromPercent(input.organizerFeePercent) : 0,
   };
 }
 
@@ -135,7 +145,7 @@ export function frequencyLabel(frequency: Frequency, intervalDays: number | null
 
 /** One changed setting, with display values, for the R-LOB-09 notification and audit entry. */
 export interface SettingChange {
-  field: "name" | "slotCount" | "contribution" | "pot" | "frequency" | "startDate" | "interestRate";
+  field: "name" | "slotCount" | "contribution" | "pot" | "frequency" | "startDate" | "interestRate" | "organizerFeeRate";
   label: string;
   before: string;
   after: string;
@@ -144,6 +154,7 @@ export interface SettingChange {
 /** What changed between two settings, in display form. Pot and contribution are listed separately. */
 export function settingChanges(before: GroupSettings, after: GroupSettings): SettingChange[] {
   const rate = (bp: number) => (bp === 0 ? "None" : `${bp / 100}% per period`);
+  const feeRate = (bp: number) => (bp === 0 ? "None" : `${bp / 100}% of each payment`);
   const rows: SettingChange[] = [
     { field: "name", label: "Name", before: before.name, after: after.name },
     { field: "slotCount", label: "Slots", before: String(before.slotCount), after: String(after.slotCount) },
@@ -157,6 +168,12 @@ export function settingChanges(before: GroupSettings, after: GroupSettings): Set
     },
     { field: "startDate", label: "Start date", before: before.startDate, after: after.startDate },
     { field: "interestRate", label: "Shortfall interest", before: rate(before.interestRate), after: rate(after.interestRate) },
+    {
+      field: "organizerFeeRate",
+      label: "Organizing fee",
+      before: feeRate(before.organizerFeeRate),
+      after: feeRate(after.organizerFeeRate),
+    },
   ];
   return rows.filter((row) => row.before !== row.after);
 }
