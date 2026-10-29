@@ -235,7 +235,7 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
     slotId: string;
     type: PayMode;
     amount: number;
-    proofPath?: string;
+    proofPath: string;
     note?: string;
   }) {
     let message = "";
