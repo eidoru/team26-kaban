@@ -3,6 +3,7 @@ import { computeAmounts } from "./amounts.js";
 import { addDebt, applyRepayment, debtBreakdown, NO_DEBT, outstanding, type DebtState } from "./debt.js";
 import { canTransition, can } from "./lifecycle.js";
 import { formatPeso, interestOn, pesos, rateFromPercent } from "./money.js";
+import { debtPaymentFee, feeOn, feeRateFor, principalWithFee } from "./fees.js";
 import { processPayout, type PayoutResult } from "./payout.js";
 import { buildSchedule, payoutDates } from "./schedule.js";
 import {
@@ -186,6 +187,7 @@ describe("lifecycle (§3)", () => {
 function runCycle(options: {
   contribution: number;
   ratePercent: number;
+  feePercent?: number;
   order: string[];
   paid: Record<string, number>[];
   repayBefore?: Record<number, Record<string, number>>;
@@ -203,6 +205,7 @@ function runCycle(options: {
       contribution,
       pot,
       rate,
+      feeRate: rateFromPercent(options.feePercent ?? 0),
       recipientId,
       members: options.order.map((id) => ({
         id,
@@ -323,6 +326,7 @@ describe("payout processing (§7, worked example §8.1)", () => {
       contribution: pesos(1_000),
       pot: pesos(2_000),
       rate: 125,
+      feeRate: 0,
       recipientId: "M",
       members: [
         { id: "O", isOrganizer: true, approved: 0, debt: NO_DEBT },
@@ -331,5 +335,82 @@ describe("payout processing (§7, worked example §8.1)", () => {
     });
     expect(result.others[0]).toMatchObject({ coveredByOrganizer: pesos(1_000), debt: NO_DEBT });
     expect(result.recipient.netPayout).toBe(pesos(2_000));
+  });
+});
+
+describe("organizing fee (R-SET-08, R-DEC-39)", () => {
+  it("is rate × payment, half up, and the organizer pays none", () => {
+    expect(feeOn(pesos(2_000), rateFromPercent(2))).toBe(pesos(40));
+    expect(feeOn(pesos(333.33), rateFromPercent(2))).toBe(pesos(6.67));
+    expect(feeOn(pesos(2_000), 0)).toBe(0);
+    expect(feeRateFor(true, 200)).toBe(0);
+    expect(feeRateFor(false, 200)).toBe(200);
+  });
+
+  it("charges a debt payment only on its principal part: interest is paid first (R-DBT-05)", () => {
+    // 56.25 interest owed: 1,000 pays it, 943.75 goes to principal.
+    expect(debtPaymentFee(pesos(1_000), pesos(56.25), rateFromPercent(2))).toBe(pesos(18.88));
+    expect(debtPaymentFee(pesos(50), pesos(56.25), rateFromPercent(2))).toBe(0);
+    // Pending payments already cover the interest.
+    expect(debtPaymentFee(pesos(1_000), -pesos(10), rateFromPercent(2))).toBe(pesos(20));
+  });
+
+  it("settles as much principal as the money covers with its fee", () => {
+    expect(principalWithFee(pesos(3_000), pesos(2_500), 200)).toEqual({ principal: pesos(2_500), fee: pesos(50) });
+    const partial = principalWithFee(pesos(1_020), pesos(2_500), 200);
+    expect(partial).toEqual({ principal: pesos(1_000), fee: pesos(20) });
+    // 980.39 + 19.61: the money runs short, so all of it is used.
+    expect(principalWithFee(pesos(1_000), pesos(2_500), 200)).toEqual({ principal: pesos(980.39), fee: pesos(19.61) });
+    expect(principalWithFee(pesos(500), pesos(2_500), 0)).toEqual({ principal: pesos(500), fee: 0 });
+  });
+
+  it("§8.1 at 2%: C's payout also loses the fee on the own shortfall and the debt principal", () => {
+    const { results, debts } = runCycle({
+      contribution: 2_000,
+      ratePercent: 1.25,
+      feePercent: 2,
+      order: ["A", "B", "D", "C", "E"],
+      paid: [{ C: 1_000 }, { C: 2_000 }, { C: 500 }, { C: 800 }, { C: 0 }],
+    });
+    const payout = results[3].recipient;
+    // 10,000 − (1,200 + 24) − 56.25 − (2,500 + 50).
+    expect(payout.feeDeducted).toBe(pesos(74));
+    expect(payout.debtDeducted).toEqual({ interest: pesos(56.25), principal: pesos(2_500) });
+    expect(payout.netPayout).toBe(pesos(6_169.75));
+    // The fee never touches debt or anyone else's payout.
+    expect(debts.C).toEqual({ principal: pesos(2_000), interest: pesos(25) });
+    for (const k of [0, 1, 2, 4]) expect(results[k].recipient).toMatchObject({ netPayout: pesos(10_000), feeDeducted: 0 });
+  });
+
+  it("leaves principal the pot can't cover, with its fee, as debt (R-DEC-10)", () => {
+    const { results, debts } = runCycle({
+      contribution: 1_000,
+      ratePercent: 10,
+      feePercent: 10,
+      order: ["A", "B", "C"],
+      paid: [{ C: 0 }, { C: 0 }, { C: 0 }],
+    });
+    // Pot 3,000: own shortfall 1,000 + 100 fee, 300 interest, then 1,600 for principal + fee.
+    const payout = results[2].recipient;
+    expect(payout.netPayout).toBe(0);
+    expect(payout.debtDeducted.interest).toBe(pesos(300));
+    expect(payout.debtDeducted.principal).toBe(pesos(1_454.54));
+    expect(payout.feeDeducted).toBe(pesos(100) + pesos(145.46));
+    expect(debts.C).toEqual({ principal: pesos(545.46), interest: 0 });
+  });
+
+  it("charges an organizer recipient no fee", () => {
+    const result = processPayout({
+      contribution: pesos(1_000),
+      pot: pesos(2_000),
+      rate: 0,
+      feeRate: 200,
+      recipientId: "O",
+      members: [
+        { id: "O", isOrganizer: true, approved: pesos(500), debt: NO_DEBT },
+        { id: "M", isOrganizer: false, approved: pesos(1_000), debt: NO_DEBT },
+      ],
+    });
+    expect(result.recipient).toMatchObject({ feeDeducted: 0, netPayout: pesos(1_500) });
   });
 });

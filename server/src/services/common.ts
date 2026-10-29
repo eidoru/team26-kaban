@@ -39,6 +39,7 @@ export function settingsOf(group: Group): GroupSettings {
     intervalDays: group.intervalDays,
     startDate: toCalendarDate(group.startDate),
     interestRate: group.interestRate,
+    organizerFeeRate: group.organizerFeeRate,
   };
 }
 
