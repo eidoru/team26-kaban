@@ -79,6 +79,7 @@ Submitting the setup form creates the paluwagan in **LOBBY** with the organizer 
 | R-SET-04 | Frequency | One of `WEEKLY`, `BI_WEEKLY`, `TWICE_MONTHLY`, `MONTHLY`, `CUSTOM`. See §4.3. |
 | R-SET-05 | Start date | Must be ≥ today + `MIN_START_LEAD_DAYS` (7). |
 | R-SET-06 | Shortfall interest | Optional. Percentage. 0 < value ≤ `MAX_INTEREST_PERCENT` (100, R-DEC-34). At most `INTEREST_DECIMAL_PLACES` (2, *assumption*) decimal places. |
+| R-SET-07 | Terms | The terms members agree to before joining or claiming a slot (R-INV-08, R-CLM-07). For now every paluwagan gets the standard terms and they can't be edited; the review step shows them (R-DEC-38). |
 
 ### 4.2 Amount calculation
 
@@ -150,6 +151,7 @@ No payout happens on the start date itself.
 | R-INV-05 | Paluwagan is full | Tell them it's full. The link stays valid; if a slot opens later, the link works again. |
 | R-INV-06 | Paluwagan is no longer in LOBBY | Tell them it's no longer accepting members *(assumption)*. |
 | R-INV-07 | One user can hold only **one** slot per paluwagan. Multiple slots per user is not supported. |
+| R-INV-08 | Logged in, not a member | Show the paluwagan's terms (R-SET-07) with an "I agree to the terms" checkbox; **Join** stays disabled until it's ticked. Guests don't see the terms until they log in. After logging in or registering through the link, the visitor returns to the invite page to agree instead of joining straight away (refines R-INV-02). |
 
 ### 5.4 Claim link flows (placeholders)
 
@@ -161,6 +163,7 @@ No payout happens on the start date itself.
 | R-CLM-04 | The claimer must be logged in (same login/register token flow as R-INV-02) and must not already be a member of this paluwagan. |
 | R-CLM-05 | Before confirming, show the placeholder's full record: payout position, contributions so far, shortfalls, outstanding debt, payouts received. |
 | R-CLM-06 | On claim, the user **inherits everything** tied to the placeholder: position, contribution history, debts, payouts. History stays labeled as inherited. |
+| R-CLM-07 | The claimer agrees to the terms the same way as a joining member (R-INV-08) before claiming. |
 
 ### 5.5 Payout order and launch
 
@@ -182,14 +185,14 @@ No payout happens on the start date itself.
 
 | ID | Rule |
 |---|---|
-| R-SUB-01 | A member submits a payment report: amount, type (`CONTRIBUTION` or `DEBT_PAYMENT`), optional proof attachment (image). |
+| R-SUB-01 | A member submits a payment report: amount, type (`CONTRIBUTION` or `DEBT_PAYMENT`), proof attachment (image, required: R-DEC-37). |
 | R-SUB-02 | The organizer submits on behalf of **placeholders**, and for themselves. |
 | R-SUB-03 | Every submission starts as `PENDING` and requires the organizer's review — including the organizer's own. |
 | R-SUB-04 | Review outcome: `APPROVED` (counts toward the ledger) or `DENIED` (discarded). The submitter can `CANCEL` while pending. |
 | R-SUB-05 | Submissions can be **stacked**: multiple pending partial submissions for the same member and period are allowed and reviewed individually, in submission order. |
 | R-SUB-06 | **Cap:** a new contribution submission's amount must be ≤ contribution − approved − pending for that member and period. Same cap for debt payments against outstanding debt. |
 | R-SUB-07 | Only approved amounts count. A member's period status: `PAID` (approved = contribution), `PARTIAL`, `UNPAID`, plus a `PENDING_REVIEW` indicator. |
-| R-SUB-08 | Proof of payment is **optional**. Submissions without proof show a "No proof attached" badge in the review queue and the audit log. |
+| R-SUB-08 | Proof of payment is **required** (R-DEC-37; it was optional before). Older submissions without proof show a "No proof attached" badge in the review queue and the audit log. |
 | R-SUB-09 | Self-approved submissions (organizer approving their own) are flagged in the audit log. |
 
 ### 6.2 Disputes (refunds and corrections)
@@ -214,7 +217,7 @@ On payout date _k_, in this order:
 | 2 | R-PAY-02 | For every **non-recipient** member with a shortfall: the organizer covers it, so the pot stays complete. The shortfall becomes **debt** to the organizer (§8). |
 | 3 | R-PAY-03 | For the **recipient**: net payout = pot − recipient's own shortfall this period − recipient's **total accumulated debt** (principal + accrued interest). The accumulated debt portion is settled to the organizer. |
 | 4 | R-PAY-04 | If deductions exceed the pot, the net payout is 0 and the remainder stays as debt. |
-| 5 | R-PAY-05 | The organizer records the payout as handed over (optional proof). The recipient confirms receipt. For a placeholder recipient, the organizer records and confirms on its behalf. |
+| 5 | R-PAY-05 | The organizer records the payout as handed over, with proof (R-DEC-37). The recipient confirms receipt. For a placeholder recipient, the organizer records and confirms on its behalf. |
 | 6 | R-PAY-06 | If _k_ < N, Contribution Period _k+1_ opens and members are notified. If _k_ = N, the paluwagan completes (§10). |
 
 A recipient's payout is **never reduced by other members' shortfalls** — only by their own.
@@ -228,7 +231,7 @@ A recipient's payout is **never reduced by other members' shortfalls** — only 
 | R-DBT-01 | Debt is created when the organizer covers a non-recipient member's shortfall (R-PAY-02). |
 | R-DBT-02 | If shortfall interest is set, an interest charge of rate × principal is added when the debt is created (e.g. 1,000 shortfall at 1.25% → 1,012.50 owed). |
 | R-DBT-03 | At every **later** payout date while principal remains unpaid, another charge of rate × **remaining unpaid principal** is added. **No interest on interest** (simple, not compounding). |
-| R-DBT-04 | Members repay through submissions of type `DEBT_PAYMENT` (same review flow, optional proof). |
+| R-DBT-04 | Members repay through submissions of type `DEBT_PAYMENT` (same review flow, proof required: R-DEC-37). |
 | R-DBT-05 | Repayments are applied to **accrued interest first**, then principal. Partial repayments reduce the principal on which future interest is charged. |
 | R-DBT-06 | Late payments for a closed period are treated as debt repayments. |
 | R-DBT-07 | Interest stops when the debt is fully paid, when it is deducted from the member's payout (R-PAY-03), or when the paluwagan completes. |
@@ -403,3 +406,5 @@ All questions below are decided; see §16.1. New open questions get the next `R-
 | R-DEC-34 | (R-SET-06, R-DEC-12, 2026-10-19) `MAX_INTEREST_PERCENT` is **100**: shortfall interest can be at most 100% per period. Without a cap any number was accepted (e.g. 999,999.99%). Checked as you type and on the server, on create and edit. |
 | R-DEC-35 | (R-OQ-01, R-SET-01, R-SET-02, R-SWP-04, R-DEC-07, R-DEC-12, 2026-10-19) `MAX_NAME_LENGTH` is **250** characters, `MAX_SLOTS` is **30**, `SWAP_REQUEST_EXPIRY_DAYS` is **7** and `RECEIPT_AUTO_CONFIRM_DAYS` is **7**. Names and slots are checked as you type and on the server, on create and edit. A swap requested from now on expires 7 days after it was asked for (swaps already pending keep no expiry, R-DEC-25). A payout handed over and not confirmed within 7 days is marked received automatically by the daily job; the payout sheet and the activity log say so. |
 | R-DEC-36 | (R-DEC-31, 2026-10-19) Paying ahead has **no limit**: once the slot's debt is covered, a member can pay every remaining round ahead. `PAY_AHEAD_MAX_ROUNDS` is removed. |
+| R-DEC-37 | (R-SUB-01, R-SUB-08, R-DBT-04, R-PAY-05, 2026-10-29) **Proof is required.** Every payment needs a proof photo: contributions, debt payments and the payments the organizer records for placeholders (R-SUB-02). So does a payout handover, except the organizer's own payout (they already hold the pot). Problem reports stay without proof. Checked in the form and on the server. Payments and handovers recorded before this keep their "No proof attached" badge. |
+| R-DEC-38 | (R-SET-07, R-INV-02, R-INV-08, R-CLM-07, R-AUD-01, 2026-10-29) **Terms and conditions.** Before joining or claiming a slot, a member agrees to the paluwagan's terms, to cover the legal side. The terms are text only: nothing in the app enforces them or penalizes breaking them. For now every paluwagan uses one standard text (`STANDARD_TERMS`), which the organizer can't edit; each group keeps its own copy, so changing the standard text never changes terms someone already agreed to. Existing paluwagans got the standard terms in the migration. The server refuses a join or claim without agreement, and the audit entry for the join or claim records the agreement and the text agreed to. Members already in a group (including the organizer) aren't asked again. Members can read the terms in the group's Details. When organizer editing comes, the terms lock once the first member joins. |

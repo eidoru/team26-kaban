@@ -1,7 +1,13 @@
 import { useEffect, useId, useMemo, useState } from "react";
 import { Camera, X } from "lucide-react";
 import { NOTE_MAX_LENGTH } from "@domain/constants";
-import { contributionAmountError, roundsLabel, splitContribution, submissionAmountError } from "@domain/submissions";
+import {
+  contributionAmountError,
+  proofError,
+  roundsLabel,
+  splitContribution,
+  submissionAmountError,
+} from "@domain/submissions";
 import type { GroupDetail, SlotView } from "../../../api/client";
 import { AmountField } from "../../../components/flow/AmountField";
 import { Sheet } from "../../../components/flow/Sheet";
@@ -12,14 +18,14 @@ import { ui } from "../../../lib/ui";
 import { debtReportable, owedBy, payRooms, standingOf } from "./period";
 
 export type PayMode = "CONTRIBUTION" | "DEBT_PAYMENT";
-type PayInput = { slotId: string; type: PayMode; amount: number; proofPath?: string; note?: string };
+type PayInput = { slotId: string; type: PayMode; amount: number; proofPath: string; note?: string };
 
 /**
  * Report a payment (R-SUB-01): a contribution for the open period, or a payment toward debt
  * (R-DBT-04). Members report their own; the organizer records for themselves and placeholders
- * (R-SUB-02). The amount defaults to what's left and can't go over it (R-SUB-06). Proof is optional.
- * A contribution fills what's left of the open round, then later rounds in order once the debt is
- * covered (paying ahead, R-DEC-31); the server splits it, one part per round (R-DEC-33).
+ * (R-SUB-02). The amount defaults to what's left and can't go over it (R-SUB-06). A proof photo is
+ * required (R-DEC-37). A contribution fills what's left of the open round, then later rounds in order
+ * once the debt is covered (paying ahead, R-DEC-31); the server splits it, one part per round (R-DEC-33).
  */
 export function PaySheet({
   detail,
@@ -94,17 +100,15 @@ function PayForm({
   const parts = pay && !amountError ? splitContribution(amount, pay.rooms) : [];
   const reachesAhead = parts.some((p) => p.round !== openRound);
   const noteError = note.trim().length > NOTE_MAX_LENGTH ? `Up to ${NOTE_MAX_LENGTH} characters.` : null;
+  const missingProof = proofError(!!file);
   const forSomeoneElse = !slot.isViewer;
 
   async function submit() {
-    if (amountError || noteError || stage !== "idle") return;
+    if (amountError || noteError || !file || stage !== "idle") return;
     setError("");
     try {
-      let proofPath: string | undefined;
-      if (file) {
-        setStage("uploading");
-        proofPath = await uploadProof(detail.group.id, file);
-      }
+      setStage("uploading");
+      const proofPath = await uploadProof(detail.group.id, file);
       setStage("sending");
       if (await onSubmit({ slotId: slot.id, type: mode, amount, proofPath, note: note.trim() || undefined })) {
         setSent({ amount, rounds: parts.map((p) => p.round) });
@@ -155,7 +159,7 @@ function PayForm({
         <button
           type="button"
           onClick={() => void submit()}
-          disabled={!!amountError || !!noteError || stage !== "idle"}
+          disabled={!!amountError || !!noteError || !!missingProof || stage !== "idle"}
           className={`${ui.btnPrimaryFull} min-h-11`}
         >
           {stage === "uploading" ? "Uploading photo…" : stage === "sending" ? "Sending…" : "Send for review"}
@@ -204,7 +208,7 @@ function PayForm({
         )}
 
         <div>
-          <span className={ui.label}>Proof (optional)</span>
+          <span className={ui.label}>Proof</span>
           {file && preview ? (
             <div className="relative overflow-hidden rounded-2xl border-2 border-ink-200 bg-ink-50">
               <img src={preview} alt="Proof to attach" className="max-h-64 w-full object-contain" />
