@@ -1,9 +1,8 @@
-import { useEffect, useState } from "react";
-import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, api } from "../../api/client";
 import { Spinner } from "../../components/Splash";
-import { TermsAgreement } from "../../components/Terms";
 import { useAuth } from "../../context/useAuth";
 import { invalidateHomeLists } from "../../lib/homeQueries";
 import { clearPendingLink, stashPendingLink } from "../../lib/pendingInvite";
@@ -18,19 +17,14 @@ export function InvitePage() {
   const queryClient = useQueryClient();
   const [joinError, setJoinError] = useState("");
   const [joining, setJoining] = useState(false);
-  const [agreed, setAgreed] = useState(false);
+  const [searchParams] = useSearchParams();
   const { data, error, isPending } = useQuery({
     queryKey: ["invite", token, user?.id ?? null],
     queryFn: () => api.getInvite(token),
     retry: false,
   });
 
-  useEffect(() => {
-    if (data) clearPendingLink();
-  }, [data]);
-
-  // R-INV-08: joining needs the terms agreed, so even after signing in to join (R-INV-02) it waits for the tick.
-  async function join() {
+  const join = useCallback(async () => {
     setJoining(true);
     setJoinError("");
     try {
@@ -43,7 +37,17 @@ export function InvitePage() {
     } finally {
       setJoining(false);
     }
-  }
+  }, [navigate, queryClient, token]);
+
+  // Arriving here after signing in to join (?join=1) finishes the join without another tap (R-INV-02).
+  const autoJoined = useRef(false);
+  const autoJoin = searchParams.get("join") === "1" && !!user && data?.status === "OPEN";
+  useEffect(() => {
+    if (data) clearPendingLink();
+    if (!autoJoin || autoJoined.current) return;
+    autoJoined.current = true;
+    void join();
+  }, [data, autoJoin, join]);
 
   if (isPending) {
     return (
@@ -100,13 +104,7 @@ export function InvitePage() {
           </div>
         ) : (
           <div className="space-y-3">
-            {data.terms && <TermsAgreement terms={data.terms} agreed={agreed} onAgreedChange={setAgreed} />}
-            <button
-              type="button"
-              onClick={() => void join()}
-              disabled={joining || !agreed}
-              className={`${ui.btnPrimaryFull} min-h-11`}
-            >
+            <button type="button" onClick={() => void join()} disabled={joining} className={`${ui.btnPrimaryFull} min-h-11`}>
               {joining ? "Joining…" : `Join as ${user.displayName}`}
             </button>
             {joinError && <p className={ui.error}>{joinError}</p>}

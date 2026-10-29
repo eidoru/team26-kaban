@@ -132,8 +132,6 @@ model Group {
   startDate    DateTime   @map("start_date") @db.Date
   /// Hundredths of a percent; 0 means no shortfall interest (R-SET-06).
   interestRate Int        @default(0) @map("interest_rate_bp")
-  /// R-SET-07, R-DEC-38: what members agree to before joining or claiming. Copied at creation.
-  terms        String
   launchedAt   DateTime?  @map("launched_at")
   activatedAt  DateTime?  @map("activated_at")
   completedAt  DateTime?  @map("completed_at")
