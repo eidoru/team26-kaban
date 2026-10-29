@@ -97,7 +97,10 @@ export function DebtsView({
                     outside the app.
                   </span>
                 </span>
-                <span className="shrink-0 text-sm font-bold tabular-nums text-ink-900">{formatPeso(d.refund!)}</span>
+                {/* R-DEC-39: the fee on the refunded part goes back with it. */}
+                <span className="shrink-0 text-sm font-bold tabular-nums text-ink-900">
+                  {formatPeso(d.refund! + (d.refundFee ?? 0))}
+                </span>
               </li>
             );
           })}

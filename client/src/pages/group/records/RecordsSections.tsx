@@ -51,6 +51,7 @@ export function Recap({ detail }: { detail: GroupDetail }) {
                 <span className="block text-xs text-ink-500 tabular-nums">
                   Paid in {formatPeso(m.contributed)} · got {formatPeso(m.received)}
                   {m.refunds > 0 && ` · refunds ${formatPeso(m.refunds)}`}
+                  {m.fees > 0 && ` · fees ${formatPeso(m.fees)}`}
                 </span>
               </span>
             </li>

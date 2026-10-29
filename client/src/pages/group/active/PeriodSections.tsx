@@ -5,7 +5,7 @@ import { Avatar } from "../../../components/Avatar";
 import { daysUntil, formatMonthDay } from "../../../lib/dates";
 import { formatPeso } from "../../../lib/money";
 import { ui } from "../../../lib/ui";
-import { asPayments, isAhead, latestDispute, payRooms } from "./period";
+import { asPayments, feeOfPayment, isAhead, latestDispute, payRooms } from "./period";
 import { HealthChip } from "../dashboard/StatsSections";
 
 type StageState = "done" | "active" | "todo";
@@ -374,6 +374,10 @@ export function MyPayments({
                   <span className="block text-sm font-bold text-ink-900 tabular-nums">
                     {formatPeso(s.effectiveAmount ?? s.amount)}
                     {changed && <span className="font-semibold text-ink-500"> (was {formatPeso(s.amount)})</span>}
+                    {/* R-DEC-39 */}
+                    {feeOfPayment(s) > 0 && (
+                      <span className="font-semibold text-ink-500"> + {formatPeso(feeOfPayment(s))} fee</span>
+                    )}
                     {!slot?.isViewer && <span className="font-semibold text-ink-600"> for {slot?.name}</span>}
                     {(s.type === "DEBT_PAYMENT" || s.appliedAs === "DEBT_PAYMENT") && (
                       <span className="font-semibold text-ink-600"> toward debt</span>

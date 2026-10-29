@@ -1,5 +1,6 @@
 import { computeAmounts, type AmountMode } from "@domain/amounts";
 import { MIN_SLOTS } from "@domain/constants";
+import { rateFromPercent } from "@domain/money";
 import { payoutDates, type Frequency } from "@domain/schedule";
 import { setupErrors, type SetupErrors, type SetupInput } from "@domain/setup";
 import type { GroupSummary } from "../../api/client";
@@ -16,6 +17,8 @@ export interface SetupDraft {
   startDate: string;
   interestOn: boolean;
   interestText: string;
+  feeOn: boolean;
+  feeText: string;
 }
 
 export const emptyDraft = (): SetupDraft => ({
@@ -28,6 +31,8 @@ export const emptyDraft = (): SetupDraft => ({
   startDate: "",
   interestOn: false,
   interestText: "",
+  feeOn: false,
+  feeText: "",
 });
 
 /** A saved group back into a draft, for the edit page. */
@@ -42,6 +47,8 @@ export function draftFromGroup(group: GroupSummary): SetupDraft {
     startDate: group.startDate,
     interestOn: group.interestRate > 0,
     interestText: group.interestRate > 0 ? String(group.interestRate / 100) : "",
+    feeOn: group.organizerFeeRate > 0,
+    feeText: group.organizerFeeRate > 0 ? String(group.organizerFeeRate / 100) : "",
   };
 }
 
@@ -55,6 +62,7 @@ export function toInput(draft: SetupDraft): SetupInput {
     intervalDays: draft.frequency === "CUSTOM" ? Number(draft.intervalText) || null : null,
     startDate: draft.startDate,
     interestPercent: draft.interestOn ? Number(draft.interestText) : null,
+    organizerFeePercent: draft.feeOn ? Number(draft.feeText) : null,
   };
 }
 
@@ -73,6 +81,11 @@ export function draftErrors(draft: SetupDraft, today: string, minSlots = MIN_SLO
     else if (!/^\d*\.?\d+$/.test(draft.interestText.trim())) errors.interestPercent = "Enter a number like 1.25.";
     else if (Number(draft.interestText) === 0) errors.interestPercent = "Enter a percentage above 0, or turn interest off.";
   }
+  if (draft.feeOn) {
+    if (!draft.feeText.trim()) errors.organizerFeePercent = "Enter a percentage, or turn the fee off.";
+    else if (!/^\d*\.?\d+$/.test(draft.feeText.trim())) errors.organizerFeePercent = "Enter a number like 2.";
+    else if (Number(draft.feeText) === 0) errors.organizerFeePercent = "Enter a percentage above 0, or turn the fee off.";
+  }
   return errors;
 }
 
@@ -81,7 +94,7 @@ export const STEP_FIELDS: (keyof SetupErrors)[][] = [
   ["name", "slotCount"],
   ["amount"],
   ["frequency", "intervalDays", "startDate"],
-  ["interestPercent"],
+  ["interestPercent", "organizerFeePercent"],
   [],
 ];
 
@@ -90,6 +103,12 @@ export function previewAmounts(draft: SetupDraft) {
   const input = toInput(draft);
   if (!Number.isFinite(input.amount) || input.amount <= 0 || !(input.slotCount >= MIN_SLOTS)) return null;
   return computeAmounts(input.amountMode, input.amount, input.slotCount);
+}
+
+/** R-DEC-39: the fee rate in basis points, or null while it's off or not valid yet. */
+export function previewFeeRate(draft: SetupDraft, errors: SetupErrors) {
+  const percent = Number(draft.feeText);
+  return draft.feeOn && !errors.organizerFeePercent && percent > 0 ? rateFromPercent(percent) : null;
 }
 
 /** The payout dates (first and last pulled out), or null until the schedule is valid. */

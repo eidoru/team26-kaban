@@ -1,5 +1,6 @@
+import { debtPaymentFee, feeOn, feeRateFor } from "@domain/fees";
 import { contributionRooms, periodStatus, submissionCap } from "@domain/submissions";
-import type { DisputeView, GroupDetail, PeriodSlot, SubmissionView } from "../../../api/client";
+import type { DisputeView, GroupDetail, PeriodSlot, SlotView, SubmissionView } from "../../../api/client";
 
 /** Pending submissions in the order they came in, each part of a split payment on its own. */
 function pendingPayments(detail: GroupDetail) {
@@ -113,6 +114,48 @@ export function pendingTowardDebt(detail: GroupDetail, slotId: string) {
 export function debtReportable(detail: GroupDetail, slotId: string) {
   const pending = pendingTowardDebt(detail, slotId).reduce((total, s) => total + s.amount, 0);
   return submissionCap(owedBy(detail, slotId), 0, pending);
+}
+
+/** R-DEC-39: the organizing fee rate `slot` pays; the organizer pays none. */
+export function feeRateOf(detail: GroupDetail, slot: SlotView) {
+  return feeRateFor(slot.isOrganizer, detail.group.organizerFeeRate);
+}
+
+/**
+ * R-DEC-39: the fee the server will record with a payment, worked out the same way: on each part of
+ * a contribution, or on the principal part of a debt payment, after the interest pending debt
+ * payments haven't covered.
+ */
+export function paymentFee(
+  detail: GroupDetail,
+  slot: SlotView,
+  payment: { type: "CONTRIBUTION"; parts: { amount: number }[] } | { type: "DEBT_PAYMENT"; amount: number },
+) {
+  const rate = feeRateOf(detail, slot);
+  if (rate === 0) return 0;
+  if (payment.type === "CONTRIBUTION") return payment.parts.reduce((total, p) => total + feeOn(p.amount, rate), 0);
+  const pending = pendingTowardDebt(detail, slot.id).reduce((total, s) => total + s.amount, 0);
+  return debtPaymentFee(payment.amount, slot.debt.interest - pending, rate);
+}
+
+/**
+ * R-DEC-39: the fee follows a corrected amount, as the server applies it on approval. `refundFee`
+ * goes back with a refund; `extraFee` is owed on an increase.
+ */
+export function correctionFees(detail: GroupDetail, submission: SubmissionView, proposed: number) {
+  const slot = detail.slots.find((s) => s.id === submission.slotId);
+  const current = submission.effectiveAmount ?? submission.amount;
+  const currentFee = submission.effectiveFee ?? submission.fee;
+  const fee = slot ? feeOn(proposed, feeRateOf(detail, slot)) : currentFee;
+  return {
+    refundFee: proposed < current ? Math.max(0, currentFee - fee) : 0,
+    extraFee: proposed > current ? Math.max(0, fee - currentFee) : 0,
+  };
+}
+
+/** A payment's organizing fee, a split payment's parts added up (R-DEC-33, R-DEC-39). */
+export function feeOfPayment(payment: Payment) {
+  return payment.parts.reduce((total, p) => total + (p.effectiveFee ?? p.fee), 0);
 }
 
 /**

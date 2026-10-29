@@ -10,13 +10,15 @@ import { formatPeso } from "../../../lib/money";
 import { proofFileError, uploadProof } from "../../../lib/proofUpload";
 import { ui } from "../../../lib/ui";
 
-/** How a payout's net amount was reached (R-PAY-03): the pot, less what the recipient owed. */
+/** How a payout's net amount was reached (R-PAY-03, R-DEC-39): the pot, less what the recipient owed. */
 export function PayoutBreakdown({ payout }: { payout: PayoutView }) {
   const rows = [
     { label: "Pot", value: payout.gross, sign: "" },
     { label: "Their unpaid share this round", value: payout.ownShortfall, sign: "−" },
     { label: "Debt interest", value: payout.interestDeducted, sign: "−" },
     { label: "Debt principal", value: payout.principalDeducted, sign: "−" },
+    // R-DEC-39: the fee on the unpaid share and the principal.
+    { label: "Organizing fee", value: payout.feeDeducted, sign: "−" },
   ].filter((row, i) => i === 0 || row.value > 0);
   return (
     <dl className="divide-y divide-ink-100 rounded-2xl border border-ink-200 bg-white text-sm">
