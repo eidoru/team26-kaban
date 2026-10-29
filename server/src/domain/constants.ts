@@ -13,6 +13,8 @@ export const MIN_START_LEAD_DAYS = 7;
 export const MAX_INTEREST_PERCENT: number | null = 100;
 /** R-SET-06 (assumption) */
 export const INTEREST_DECIMAL_PLACES = 2;
+/** R-SET-08, R-DEC-39: the organizing fee is at most 10% of each payment. Same decimal places as interest. */
+export const MAX_ORGANIZER_FEE_PERCENT: number | null = 10;
 /** R-FRQ-05 */
 export const MIN_CUSTOM_INTERVAL_DAYS = 7;
 /** R-DEC-02: the first TWICE_MONTHLY payout is at least this many days after the start. */
