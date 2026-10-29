@@ -10,6 +10,7 @@ import {
   contributionRooms,
   correctionIncrease,
   periodStatus,
+  proofError,
   roundsLabel,
   splitContribution,
   submissionAmountError,
@@ -112,7 +113,8 @@ async function roomsFor(db: Db, slotId: string, rounds: { id: string; number: nu
  * period, then later ones once the slot's debt is covered (paying ahead, R-DEC-31); a payment that
  * reaches more than one round is stored as one submission per round, linked by a batch (R-DEC-33).
  * A DEBT_PAYMENT pays down what the slot owes (R-DBT-04), also after completion (R-DBT-11). Members
- * report their own; the organizer reports for themselves and for placeholders. All start PENDING.
+ * report their own; the organizer reports for themselves and for placeholders. All start PENDING,
+ * each with a proof photo (R-DEC-37).
  */
 export async function submitPayment(
   groupId: string,
@@ -120,10 +122,11 @@ export async function submitPayment(
   input: { slotId: string; type: SubmissionType; amount: number; proofPath?: string; note?: string },
 ) {
   const note = trimmedNote(input.note, "Notes");
-  if (input.proofPath) {
-    if (!isProofPathFor(groupId, input.proofPath)) throw badRequest("That proof doesn't belong to this paluwagan.");
-    if (!(await proofExists(input.proofPath))) throw badRequest("The proof didn't finish uploading. Attach it again.");
-  }
+  // R-DEC-37: every payment carries a proof photo.
+  const missingProof = proofError(!!input.proofPath);
+  if (missingProof) throw badRequest(missingProof);
+  if (!isProofPathFor(groupId, input.proofPath!)) throw badRequest("That proof doesn't belong to this paluwagan.");
+  if (!(await proofExists(input.proofPath!))) throw badRequest("The proof didn't finish uploading. Attach it again.");
 
   return withGroupLock(groupId, async (tx, group) => {
     const isDebt = input.type === "DEBT_PAYMENT";
@@ -174,7 +177,7 @@ export async function submitPayment(
           roundId: part.roundId,
           type: input.type,
           amount: BigInt(part.amount),
-          proofPath: input.proofPath ?? null,
+          proofPath: input.proofPath,
           note,
           submittedById: actorUserId,
           batchId,
@@ -196,7 +199,7 @@ export async function submitPayment(
         ...(batchId ? { rounds, parts: parts.map((p) => p.amount) } : {}),
         ...(ahead ? { ahead: true } : {}),
       },
-      proofAttached: !!input.proofPath,
+      proofAttached: true,
     });
     // The organizer reviews everything (R-SUB-03); they don't need telling about their own reports.
     if (!actor.isOrganizer) {
@@ -206,9 +209,7 @@ export async function submitPayment(
         title: `${slotName(slot)} reported ${formatPeso(input.amount)}${
           isDebt ? " toward their debt" : batchId ? ` for ${roundsLabel(rounds)}` : ahead ? " ahead" : ""
         }`,
-        body: `${group.name}${rounds.length === 1 ? `, round ${rounds[0]}` : ""}. ${
-          input.proofPath ? "Proof attached." : "No proof attached."
-        }`,
+        body: `${group.name}${rounds.length === 1 ? `, round ${rounds[0]}` : ""}.`,
       });
     }
   });
