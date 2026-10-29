@@ -283,7 +283,6 @@ export function FeeSection({ draft, set, errors }: SectionProps) {
           onChange={(feeOn) => set({ feeOn })}
           label="Charge an organizing fee"
         />
-        <p className="mt-1 text-xs text-ink-500">Members add this % to each payment, for you.</p>
       </div>
       {draft.feeOn && (
         <Field
