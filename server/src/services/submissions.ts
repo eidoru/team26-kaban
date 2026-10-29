@@ -11,7 +11,6 @@ import {
   contributionRooms,
   correctionIncrease,
   periodStatus,
-  proofError,
   roundsLabel,
   splitContribution,
   submissionAmountError,
@@ -123,11 +122,10 @@ export async function submitPayment(
   input: { slotId: string; type: SubmissionType; amount: number; proofPath?: string; note?: string },
 ) {
   const note = trimmedNote(input.note, "Notes");
-  // R-DEC-37: every payment carries a proof photo.
-  const missingProof = proofError(!!input.proofPath);
-  if (missingProof) throw badRequest(missingProof);
-  if (!isProofPathFor(groupId, input.proofPath!)) throw badRequest("That proof doesn't belong to this paluwagan.");
-  if (!(await proofExists(input.proofPath!))) throw badRequest("The proof didn't finish uploading. Attach it again.");
+  if (input.proofPath) {
+    if (!isProofPathFor(groupId, input.proofPath)) throw badRequest("That proof doesn't belong to this paluwagan.");
+    if (!(await proofExists(input.proofPath))) throw badRequest("The proof didn't finish uploading. Attach it again.");
+  }
 
   return withGroupLock(groupId, async (tx, group) => {
     const isDebt = input.type === "DEBT_PAYMENT";
@@ -212,7 +210,7 @@ export async function submitPayment(
         ...(batchId ? { rounds, parts: parts.map((p) => p.amount) } : {}),
         ...(ahead ? { ahead: true } : {}),
       },
-      proofAttached: true,
+      proofAttached: !!input.proofPath,
     });
     // The organizer reviews everything (R-SUB-03); they don't need telling about their own reports.
     if (!actor.isOrganizer) {
@@ -222,7 +220,9 @@ export async function submitPayment(
         title: `${slotName(slot)} reported ${formatPeso(input.amount)}${fee > 0 ? ` + ${formatPeso(fee)} fee` : ""}${
           isDebt ? " toward their debt" : batchId ? ` for ${roundsLabel(rounds)}` : ahead ? " ahead" : ""
         }`,
-        body: `${group.name}${rounds.length === 1 ? `, round ${rounds[0]}` : ""}.`,
+        body: `${group.name}${rounds.length === 1 ? `, round ${rounds[0]}` : ""}. ${
+          input.proofPath ? "Proof attached." : "No proof attached."
+        }`,
       });
     }
   });

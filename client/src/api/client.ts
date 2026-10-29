@@ -353,7 +353,7 @@ export type ExportKind = "statement" | "ledger" | "summary";
 export type ExportFormat = "pdf" | "csv";
 
 export interface GroupDetail {
-  group: GroupSummary & { organizerName: string; terms: string };
+  group: GroupSummary & { organizerName: string };
   viewer: { slotId: string; isOrganizer: boolean };
   slots: SlotView[];
   openSlots: number;
@@ -383,16 +383,12 @@ export type PublicGroup = GroupSummary & { organizerName: string; occupied: numb
 export interface InviteLanding {
   status: "OPEN" | "FULL" | "CLOSED" | "ALREADY_MEMBER";
   group: PublicGroup;
-  /** Null for guests: the terms show only once signed in (R-INV-08). */
-  terms: string | null;
 }
 
 export interface ClaimLanding {
   status: "OPEN" | "CLAIMED" | "CLOSED" | "ALREADY_MEMBER";
   group: PublicGroup;
   placeholder: { slotId: string; name: string | null; position: number | null };
-  /** Null for guests (R-CLM-07). */
-  terms: string | null;
 }
 
 export interface NotificationItem {
@@ -703,7 +699,7 @@ export const api = {
       slotId: string;
       type: "CONTRIBUTION" | "DEBT_PAYMENT";
       amount: number;
-      proofPath: string;
+      proofPath?: string;
       note?: string;
     },
   ) => send<GroupDetail>("POST", `/groups/${id}/submissions`, body),
@@ -768,10 +764,9 @@ export const api = {
   // --- Link landing pages: public, personalized when signed in.
   getInvite: (token: string) => publicRequest<InviteLanding>(`/invites/${token}`, { withAuth: true }),
   joinViaInvite: (token: string) =>
-    send<{ groupId: string; alreadyMember: boolean }>("POST", `/invites/${token}/join`, { acceptTerms: true }),
+    send<{ groupId: string; alreadyMember: boolean }>("POST", `/invites/${token}/join`),
   getClaim: (token: string) => publicRequest<ClaimLanding>(`/claims/${token}`, { withAuth: true }),
-  claimPlaceholder: (token: string) =>
-    send<{ groupId: string }>("POST", `/claims/${token}/claim`, { acceptTerms: true }),
+  claimPlaceholder: (token: string) => send<{ groupId: string }>("POST", `/claims/${token}/claim`),
 };
 
 /** An authenticated download: the file and the name the server gave it. Refreshes the token once on 401. */

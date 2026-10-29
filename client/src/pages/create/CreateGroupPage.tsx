@@ -3,12 +3,9 @@ import { Link, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
 import { earliestStartDate, frequencyLabel, type SetupErrors } from "@domain/setup";
-import { STANDARD_TERMS } from "@domain/terms";
 import { ApiError, api } from "../../api/client";
 import { ActionBar } from "../../components/flow/ActionBar";
-import { Sheet } from "../../components/flow/Sheet";
 import { Stepper } from "../../components/flow/Stepper";
-import { TermsText } from "../../components/Terms";
 import { formatDueDate, todayInManila } from "../../lib/dates";
 import { groupKey } from "../../lib/groupQueries";
 import { invalidateHomeLists } from "../../lib/homeQueries";
@@ -127,7 +124,6 @@ export function CreateGroupPage() {
 
 function Review({ draft, onEdit }: { draft: SetupDraft; onEdit: (step: number) => void }) {
   const amounts = previewAmounts(draft);
-  const [termsOpen, setTermsOpen] = useState(false);
   const rows: { label: string; value: string; step: number }[] = [
     { label: "Name", value: draft.name.trim(), step: 0 },
     { label: "Slots", value: String(draft.slotCount), step: 0 },
@@ -151,23 +147,7 @@ function Review({ draft, onEdit }: { draft: SetupDraft; onEdit: (step: number) =
             </button>
           </div>
         ))}
-        {/* R-SET-07, R-DEC-38: every paluwagan uses the standard terms for now, so they're shown, not edited. */}
-        <div className="flex items-center gap-3 px-5 py-3">
-          <dt className="w-32 shrink-0 text-sm text-ink-500">Member terms</dt>
-          <dd className="min-w-0 flex-1 truncate text-sm font-bold text-ink-900">Standard</dd>
-          <button type="button" onClick={() => setTermsOpen(true)} className={`${ui.link} shrink-0`}>
-            View<span className="sr-only"> member terms</span>
-          </button>
-        </div>
       </dl>
-      <Sheet
-        open={termsOpen}
-        title="Member terms"
-        subtitle="Members agree to these before joining."
-        onClose={() => setTermsOpen(false)}
-      >
-        <TermsText terms={STANDARD_TERMS} />
-      </Sheet>
     </>
   );
 }

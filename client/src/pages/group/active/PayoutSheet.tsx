@@ -4,7 +4,6 @@ import type { GroupDetail, PayoutView } from "../../../api/client";
 import { Sheet } from "../../../components/flow/Sheet";
 import { SheetDone } from "../../../components/flow/SheetDone";
 import { RECEIPT_AUTO_CONFIRM_DAYS } from "@domain/constants";
-import { proofError } from "@domain/submissions";
 import { formatDueDate, formatLocalDate } from "../../../lib/dates";
 import { formatPeso } from "../../../lib/money";
 import { proofFileError, uploadProof } from "../../../lib/proofUpload";
@@ -40,9 +39,8 @@ export function PayoutBreakdown({ payout }: { payout: PayoutView }) {
 }
 
 /**
- * R-PAY-05 for one payout. The organizer marks it handed over with a proof photo (R-DEC-37; none
- * for their own payout); the recipient then confirms they got it. For a placeholder, the
- * organizer's handover is also the receipt.
+ * R-PAY-05 for one payout. The organizer marks it handed over (optional proof); the recipient then
+ * confirms they got it. For a placeholder, the organizer's handover is also the receipt.
  */
 export function PayoutSheet({
   detail,
@@ -107,7 +105,6 @@ function PayoutForm({
   }, [preview]);
 
   async function handOver() {
-    if (!ownPayout && !file) return;
     setError("");
     try {
       let proofPath: string | undefined;
@@ -124,7 +121,6 @@ function PayoutForm({
   }
 
   const busy = uploading || pending === "handover" || pending === "confirm";
-  const missingProof = ownPayout ? null : proofError(!!file);
   const name = isRecipient ? "you" : (recipient?.name ?? "the recipient");
   if (done) {
     // R-PAY-05: the recipient confirms; for a placeholder the organizer's record is the receipt.
@@ -148,12 +144,7 @@ function PayoutForm({
       subtitle={`Payout date ${formatDueDate(payout.payoutDate)}`}
       footer={
         handingOver ? (
-          <button
-            type="button"
-            onClick={() => void handOver()}
-            disabled={busy || !!missingProof}
-            className={`${ui.btnPrimaryFull} min-h-11`}
-          >
+          <button type="button" onClick={() => void handOver()} disabled={busy} className={`${ui.btnPrimaryFull} min-h-11`}>
             {uploading
               ? "Uploading photo…"
               : pending === "handover"
@@ -181,7 +172,7 @@ function PayoutForm({
         )}
         {handingOver && !ownPayout && (
           <div>
-            <span className={ui.label}>Proof</span>
+            <span className={ui.label}>Proof (optional)</span>
             {file && preview ? (
               <div className="relative overflow-hidden rounded-2xl border-2 border-ink-200 bg-ink-50">
                 <img src={preview} alt="Handover proof to attach" className="max-h-56 w-full object-contain" />

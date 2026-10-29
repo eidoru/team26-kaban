@@ -2,7 +2,6 @@ import { RECEIPT_AUTO_CONFIRM_DAYS } from "../domain/constants.js";
 import { outstanding } from "../domain/debt.js";
 import { formatPeso } from "../domain/money.js";
 import { processPayout } from "../domain/payout.js";
-import { proofError } from "../domain/submissions.js";
 import { audit } from "../lib/audit.js";
 import { badRequest, conflict, forbidden, notFound } from "../lib/errors.js";
 import { prisma } from "../lib/prisma.js";
@@ -278,10 +277,7 @@ async function payoutFor(db: Db, groupId: string, roundNumber: number) {
   return round as typeof round & { payout: NonNullable<typeof round.payout> };
 }
 
-/**
- * R-PAY-05: the organizer records that the money was handed over, with a proof photo unless the
- * payout is their own (R-DEC-37).
- */
+/** R-PAY-05: the organizer records that the money was handed over, optionally with proof. */
 export async function markHandedOver(groupId: string, organizerUserId: string, roundNumber: number, proofPath?: string) {
   if (proofPath) {
     if (!isProofPathFor(groupId, proofPath)) throw badRequest("That proof doesn't belong to this paluwagan.");
@@ -294,9 +290,6 @@ export async function markHandedOver(groupId: string, organizerUserId: string, r
     // A placeholder can't confirm, so the organizer's handover is also the receipt (R-PAY-05). When
     // the organizer is the recipient they already hold the pot: taking it is the receipt too.
     const selfReceipt = placeholder || round.recipient.userId === organizerUserId;
-    // R-DEC-37: handing the pot to someone else needs a proof photo; taking their own needs none.
-    const missingProof = round.recipient.userId === organizerUserId ? null : proofError(!!proofPath);
-    if (missingProof) throw badRequest(missingProof);
     await tx.payout.update({
       where: { id: round.payout.id },
       data: {
