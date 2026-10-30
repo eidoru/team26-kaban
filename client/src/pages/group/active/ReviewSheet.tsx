@@ -8,17 +8,7 @@ import { Sheet } from "../../../components/flow/Sheet";
 import { SheetDone } from "../../../components/flow/SheetDone";
 import { formatPeso } from "../../../lib/money";
 import { ui } from "../../../lib/ui";
-import {
-  correctionFees,
-  feeOfPayment,
-  isAhead,
-  owedBy,
-  reviewItems,
-  stackOf,
-  standingOf,
-  type Payment,
-  type ReviewItem,
-} from "./period";
+import { isAhead, owedBy, reviewItems, stackOf, standingOf, type Payment, type ReviewItem } from "./period";
 
 const sentAt = (iso: string) =>
   new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
@@ -519,11 +509,6 @@ function FinishedStep({
 
 function DisputeBody({ detail, dispute, name }: { detail: GroupDetail; dispute: DisputeView; name: string }) {
   const refund = refundFor(dispute.previousAmount, dispute.proposedAmount);
-  // R-DEC-39: the fee follows the amount.
-  const submission = detail.submissions.find((s) => s.id === dispute.submissionId);
-  const { refundFee, extraFee } = submission
-    ? correctionFees(detail, submission, dispute.proposedAmount)
-    : { refundFee: 0, extraFee: 0 };
   // R-DEC-32: a payment made ahead is short for its own round.
   const roundWord = dispute.round === detail.period?.number ? "this round" : `for round ${dispute.round}`;
   return (
@@ -541,8 +526,8 @@ function DisputeBody({ detail, dispute, name }: { detail: GroupDetail; dispute: 
         After approval:{" "}
         <b>
           {refund > 0
-            ? `you owe ${name} a ${formatPeso(refund + refundFee)} refund${refundFee > 0 ? ` (with the ${formatPeso(refundFee)} fee)` : ""}, and they're ${formatPeso(refund)} short ${roundWord}`
-            : `${formatPeso(dispute.proposedAmount - dispute.previousAmount)} more counts from ${name}${extraFee > 0 ? `, plus ${formatPeso(extraFee)} fee` : ""}`}
+            ? `you owe ${name} a ${formatPeso(refund)} refund, and they're ${formatPeso(refund)} short ${roundWord}`
+            : `${formatPeso(dispute.proposedAmount - dispute.previousAmount)} more counts from ${name}`}
         </b>
       </p>
       <p className="text-xs text-ink-500">Undecided at the payout, it expires and {formatPeso(dispute.previousAmount)} stands.</p>
@@ -589,16 +574,8 @@ function PaymentBody({ detail, payment, name }: { detail: GroupDetail; payment: 
   const standing = counted ? standingOf(detail, payment.slotId, payment.round ?? undefined) : null;
   const after = standing ? periodStatus(standing.due, standing.approved + payment.amount, 0).status : null;
   const owed = owedBy(detail, payment.slotId);
-  const fee = feeOfPayment(payment);
   return (
     <>
-      {/* R-DEC-39: the fee rides in the same transfer, so the proof should show both. */}
-      {fee > 0 && (
-        <p className="text-sm text-ink-600">
-          The proof should show <b className="tabular-nums">{formatPeso(payment.amount + fee)}</b>:{" "}
-          {formatPeso(payment.amount)} plus your {formatPeso(fee)} fee.
-        </p>
-      )}
       {payment.proofUrl ? (
         <a
           href={payment.proofUrl}

@@ -7,7 +7,7 @@ import { ActionBar } from "../../components/flow/ActionBar";
 import { todayInManila } from "../../lib/dates";
 import { useGroup, useGroupActions } from "../../lib/groupQueries";
 import { ui } from "../../lib/ui";
-import { BasicsSection, FeeSection, InterestSection, MoneySection, PotCard, ScheduleSection } from "../create/SetupFields";
+import { BasicsSection, InterestSection, MoneySection, PotCard, ScheduleSection } from "../create/SetupFields";
 import { draftErrors, draftFromGroup, toInput, type SetupDraft } from "../create/setupDraft";
 
 /** R-LOB-09: every setting stays editable in the lobby, with the same rules as setup. */
@@ -80,10 +80,6 @@ function EditForm({ detail }: { detail: GroupDetail }) {
         <div>
           <h2 className={`${ui.sectionHeading} mb-3`}>Shortfalls</h2>
           <InterestSection {...sectionProps} />
-        </div>
-        <div>
-          <h2 className={`${ui.sectionHeading} mb-3`}>Organizing fee</h2>
-          <FeeSection {...sectionProps} />
         </div>
         {error && !error.fields && <p className={ui.error}>{error.message}</p>}
         <ActionBar hint={hasErrors ? "Fix the highlighted fields to save." : undefined}>

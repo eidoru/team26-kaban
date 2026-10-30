@@ -6,7 +6,6 @@ import {
   History,
   Pencil,
   Percent,
-  Receipt,
   Repeat,
   UserRound,
   Wallet,
@@ -66,10 +65,6 @@ export function GroupDetails({
       label: "Interest",
       value: group.interestRate > 0 ? `${formatRate(group.interestRate)} per period` : "None",
     },
-    // R-DEC-39: only when there is one; the organizer pays none on their own payments.
-    ...(group.organizerFeeRate > 0
-      ? [{ icon: Receipt, label: "Fee", value: `${formatRate(group.organizerFeeRate)} of each payment` }]
-      : []),
     { icon: UserRound, label: "Organizer", value: group.organizerName },
   ];
   return (

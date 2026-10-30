@@ -2,6 +2,7 @@ import { RECEIPT_AUTO_CONFIRM_DAYS } from "../domain/constants.js";
 import { outstanding } from "../domain/debt.js";
 import { formatPeso } from "../domain/money.js";
 import { processPayout } from "../domain/payout.js";
+import { proofError } from "../domain/submissions.js";
 import { audit } from "../lib/audit.js";
 import { badRequest, conflict, forbidden, notFound } from "../lib/errors.js";
 import { prisma } from "../lib/prisma.js";
@@ -19,8 +20,7 @@ import { formatDisplayDate } from "../lib/dates.js";
  * §7 on payout date k, for the open round of one group:
  *  1. close Contribution Period k (approved money only; pending stays queued, R-DEC-04);
  *  2. the organizer covers every non-recipient's shortfall, which becomes debt with interest (§8);
- *  3–4. the recipient's own shortfall and whole debt come out of the pot (R-PAY-03/04, R-DEC-10),
- *     with the organizing fee on the shortfall and the principal (R-DEC-39);
+ *  3–4. the recipient's own shortfall and whole debt come out of the pot (R-PAY-03/04, R-DEC-10);
  *  6. Period k+1 opens, or the paluwagan completes (R-CMP-01).
  * `actorUserId` is null for the scheduled run, or the organizer for the demo tool.
  */
@@ -46,7 +46,6 @@ export async function closeOpenRound(groupId: string, actorUserId: string | null
       contribution,
       pot: Number(group.pot),
       rate: group.interestRate,
-      feeRate: group.organizerFeeRate,
       recipientId: round.recipientSlotId,
       members,
     });
@@ -121,8 +120,7 @@ export async function closeOpenRound(groupId: string, actorUserId: string | null
 
     // Steps 3–4: the recipient.
     const recipient = slotById.get(result.recipient.id)!;
-    const { ownShortfall, debtDeducted, feeDeducted, netPayout } = result.recipient;
-    const deducted = ownShortfall + debtDeducted.interest + debtDeducted.principal + feeDeducted;
+    const { ownShortfall, debtDeducted, netPayout } = result.recipient;
     await tx.roundSlotResult.create({
       data: {
         roundId: round.id,
@@ -161,7 +159,6 @@ export async function closeOpenRound(groupId: string, actorUserId: string | null
         ownShortfall: BigInt(ownShortfall),
         interestDeducted: BigInt(debtDeducted.interest),
         principalDeducted: BigInt(debtDeducted.principal),
-        feeDeducted: BigInt(feeDeducted),
         net: BigInt(netPayout),
         status: nothingToHand ? "CONFIRMED" : "AWAITING_HANDOVER",
         confirmedAt: nothingToHand ? new Date() : null,
@@ -182,7 +179,6 @@ export async function closeOpenRound(groupId: string, actorUserId: string | null
         ownShortfall,
         interestDeducted: debtDeducted.interest,
         principalDeducted: debtDeducted.principal,
-        ...(feeDeducted > 0 ? { feeDeducted } : {}),
         net: netPayout,
         coveredByOrganizer: result.organizerCovered,
       },
@@ -195,8 +191,8 @@ export async function closeOpenRound(groupId: string, actorUserId: string | null
         ? `Round ${round.number}'s payout is yours: ${formatPeso(netPayout)}`
         : `Hand ${formatPeso(netPayout)} to ${slotName(recipient)}`,
       body:
-        deducted > 0
-          ? `${formatPeso(Number(group.pot))} pot, less ${formatPeso(deducted)} you owed${feeDeducted > 0 ? `, including the ${formatPeso(feeDeducted)} organizing fee` : ""}.`
+        ownShortfall + debtDeducted.interest + debtDeducted.principal > 0
+          ? `${formatPeso(Number(group.pot))} pot, less ${formatPeso(ownShortfall + debtDeducted.interest + debtDeducted.principal)} you owed.`
           : `The full ${formatPeso(Number(group.pot))} pot.`,
     });
     if (recipient.userId && recipient.userId !== group.organizerId && netPayout > 0) {
@@ -277,7 +273,10 @@ async function payoutFor(db: Db, groupId: string, roundNumber: number) {
   return round as typeof round & { payout: NonNullable<typeof round.payout> };
 }
 
-/** R-PAY-05: the organizer records that the money was handed over, optionally with proof. */
+/**
+ * R-PAY-05: the organizer records that the money was handed over, with a proof photo unless the
+ * payout is their own (R-DEC-37).
+ */
 export async function markHandedOver(groupId: string, organizerUserId: string, roundNumber: number, proofPath?: string) {
   if (proofPath) {
     if (!isProofPathFor(groupId, proofPath)) throw badRequest("That proof doesn't belong to this paluwagan.");
@@ -290,6 +289,9 @@ export async function markHandedOver(groupId: string, organizerUserId: string, r
     // A placeholder can't confirm, so the organizer's handover is also the receipt (R-PAY-05). When
     // the organizer is the recipient they already hold the pot: taking it is the receipt too.
     const selfReceipt = placeholder || round.recipient.userId === organizerUserId;
+    // R-DEC-37: handing the pot to someone else needs a proof photo; taking their own needs none.
+    const missingProof = round.recipient.userId === organizerUserId ? null : proofError(!!proofPath);
+    if (missingProof) throw badRequest(missingProof);
     await tx.payout.update({
       where: { id: round.payout.id },
       data: {
