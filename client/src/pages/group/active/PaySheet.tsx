@@ -17,9 +17,9 @@ type PayInput = { slotId: string; type: PayMode; amount: number; proofPath?: str
 /**
  * Report a payment (R-SUB-01): a contribution for the open period, or a payment toward debt
  * (R-DBT-04). Members report their own; the organizer records for themselves and placeholders
- * (R-SUB-02). The amount defaults to what's left and can't go over it (R-SUB-06). A proof photo is
- * required (R-DEC-37). A contribution fills what's left of the open round, then later rounds in order
- * once the debt is covered (paying ahead, R-DEC-31); the server splits it, one part per round (R-DEC-33).
+ * (R-SUB-02). The amount defaults to what's left and can't go over it (R-SUB-06). Proof is optional.
+ * A contribution fills what's left of the open round, then later rounds in order once the debt is
+ * covered (paying ahead, R-DEC-31); the server splits it, one part per round (R-DEC-33).
  * With an organizing fee, the sheet shows the fee and the total to send (R-DEC-39).
  */
 export function PaySheet({

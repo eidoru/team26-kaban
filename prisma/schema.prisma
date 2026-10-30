@@ -134,8 +134,6 @@ model Group {
   interestRate     Int        @default(0) @map("interest_rate_bp")
   /// Hundredths of a percent; 0 means no organizing fee (R-SET-08, R-DEC-39).
   organizerFeeRate Int        @default(0) @map("organizer_fee_rate_bp")
-  /// R-SET-07, R-DEC-38: what members agree to before joining or claiming. Copied at creation.
-  terms            String
   launchedAt       DateTime?  @map("launched_at")
   activatedAt      DateTime?  @map("activated_at")
   completedAt      DateTime?  @map("completed_at")
