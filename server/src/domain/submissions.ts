@@ -65,6 +65,14 @@ export function contributionAmountError(amount: Centavos, cap: Centavos, blocked
   return `${error} Pay off the debt before paying ahead.`;
 }
 
+/**
+ * R-DEC-37: why a payment (contribution or debt payment, also one the organizer records for a
+ * placeholder) or a payout handover can't be recorded without a proof photo, or null.
+ */
+export function proofError(attached: boolean): string | null {
+  return attached ? null : "Attach a photo of the payment as proof.";
+}
+
 /** Why `amount` can't be submitted, or null. */
 export function submissionAmountError(amount: Centavos, cap: Centavos): string | null {
   if (!Number.isInteger(amount) || amount <= 0) return "Enter an amount greater than zero.";
