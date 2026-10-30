@@ -34,7 +34,6 @@ const setupSchema = z.object({
   intervalDays: z.number().int().nullish(),
   startDate: z.string(),
   interestPercent: z.number().nullish(),
-  organizerFeePercent: z.number().nullish(),
 });
 const placeholderSchema = z.object({ name: z.string(), contact: z.string().optional() });
 const orderSchema = z.object({ slotIds: z.array(z.string()).min(1) });

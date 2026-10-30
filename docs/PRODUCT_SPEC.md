@@ -30,7 +30,6 @@ A paluwagan is a rotating savings group. Every member contributes a fixed amount
 | **Shortfall** | The unpaid part of a member's contribution when a period closes. |
 | **Debt** | A shortfall the organizer covered, owed by the member to the organizer, plus interest. |
 | **Shortfall interest** | Optional percentage charged on debt, per period. |
-| **Organizing fee** | Optional percentage members pay the organizer on top of each payment, for running the paluwagan. Outside the pot (R-DEC-39). |
 | **Invite link** | Reusable link to join a specific paluwagan's lobby. |
 | **Claim link** | Single-use link to take over a specific placeholder. |
 | **Payout order** | The sequence in which members receive payouts. |
@@ -80,7 +79,6 @@ Submitting the setup form creates the paluwagan in **LOBBY** with the organizer 
 | R-SET-04 | Frequency | One of `WEEKLY`, `BI_WEEKLY`, `TWICE_MONTHLY`, `MONTHLY`, `CUSTOM`. See §4.3. |
 | R-SET-05 | Start date | Must be ≥ today + `MIN_START_LEAD_DAYS` (7). |
 | R-SET-06 | Shortfall interest | Optional. Percentage. 0 < value ≤ `MAX_INTEREST_PERCENT` (100, R-DEC-34). At most `INTEREST_DECIMAL_PLACES` (2, *assumption*) decimal places. |
-| R-SET-08 | Organizing fee | Optional. Percentage of each payment, paid to the organizer on top of it. 0 < value ≤ `MAX_ORGANIZER_FEE_PERCENT` (10). At most `INTEREST_DECIMAL_PLACES` (2) decimal places. See R-DEC-39. |
 
 ### 4.2 Amount calculation
 
@@ -145,7 +143,7 @@ No payout happens on the start date itself.
 
 | ID | Situation | Behavior |
 |---|---|---|
-| R-INV-01 | Anyone opens the link | Show a landing page with the paluwagan's details (name, slots, contribution, pot, frequency, start date, shortfall interest, organizing fee, organizer). |
+| R-INV-01 | Anyone opens the link | Show a landing page with the paluwagan's details (name, slots, contribution, pot, frequency, start date, shortfall interest, organizer). |
 | R-INV-02 | Not logged in | Show **Log in to join** and **Register to join**. Preserve the invite token through login or registration; on success, add the user to the lobby and redirect there. |
 | R-INV-03 | Logged in, not a member | Show a **Join** button. |
 | R-INV-04 | Already a member | Tell them they've already joined and redirect to the lobby. |
@@ -405,4 +403,3 @@ All questions below are decided; see §16.1. New open questions get the next `R-
 | R-DEC-34 | (R-SET-06, R-DEC-12, 2026-10-19) `MAX_INTEREST_PERCENT` is **100**: shortfall interest can be at most 100% per period. Without a cap any number was accepted (e.g. 999,999.99%). Checked as you type and on the server, on create and edit. |
 | R-DEC-35 | (R-OQ-01, R-SET-01, R-SET-02, R-SWP-04, R-DEC-07, R-DEC-12, 2026-10-19) `MAX_NAME_LENGTH` is **250** characters, `MAX_SLOTS` is **30**, `SWAP_REQUEST_EXPIRY_DAYS` is **7** and `RECEIPT_AUTO_CONFIRM_DAYS` is **7**. Names and slots are checked as you type and on the server, on create and edit. A swap requested from now on expires 7 days after it was asked for (swaps already pending keep no expiry, R-DEC-25). A payout handed over and not confirmed within 7 days is marked received automatically by the daily job; the payout sheet and the activity log say so. |
 | R-DEC-36 | (R-DEC-31, 2026-10-19) Paying ahead has **no limit**: once the slot's debt is covered, a member can pay every remaining round ahead. `PAY_AHEAD_MAX_ROUNDS` is removed. |
-| R-DEC-39 | (R-SET-08, R-SUB-01, R-SUB-02, R-DBT-04, R-DBT-05, R-PAY-03, R-DEC-10, R-DEC-11, R-DEC-13, R-DEC-31, R-DEC-33, 2026-10-29) **Organizing fee.** The organizer may set an optional fee for running the paluwagan, at most `MAX_ORGANIZER_FEE_PERCENT` (10%) with at most 2 decimals, on the same setup step as shortfall interest. It can be edited in the lobby like any setting (R-LOB-09) and locks at launch. The fee is rate × the money, rounded half up to the centavo for each payment (R-AMT-04). **What carries it:** every contribution payment (partials, paying ahead, and each part of a split payment on its own) and the **principal** part of a debt payment (interest is paid first, R-DBT-05). Interest never carries a fee. **Who pays:** every slot but the organizer's (they would pay themselves, like R-DEC-11). Placeholders pay it, and the organizer records it with their payment (R-SUB-02). The member sends amount + fee in one transfer with one proof, reviewed as one. The fee never goes into the pot, the room rule (R-DEC-29) or debt. **Payout day:** the pot covers the recipient's own shortfall plus its fee, then debt interest, then debt principal plus its fee (refines R-PAY-03, R-DEC-10). Principal the pot can't cover stays as debt, and its fee is paid when it's repaid. When the pot runs short it is used up: a rounding centavo goes to the fee, not to the recipient. **Corrections:** the fee follows the amount (R-DEC-13). An approved decrease refunds the fee on the refunded part with the refund; an increase adds the fee on the increase. Members see the fee on the invite and claim pages, in Details, in their payment history, the activity log and the exports (R-DEC-06). **Known limits, left as is:** a debt payment's fee is worked out when it's sent, from the interest owed then less pending debt payments; if interest is charged, or a contribution's round closes so it counts toward debt (R-DEC-04), before review, the recorded fee stands. |

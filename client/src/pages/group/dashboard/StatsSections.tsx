@@ -112,8 +112,6 @@ export function MoneyOverview({ stats }: { stats: GroupStats }) {
     { label: "Still to pay out", value: stats.money.toPayOut, always: true },
     { label: "Shortfalls you covered", value: stats.money.coveredByOrganizer },
     { label: "Owed to you", value: stats.money.owedToOrganizer },
-    // R-DEC-39: outside the pot, so not part of "Collected".
-    { label: "Your organizing fees", value: stats.money.fees },
   ].filter((t) => t.always || t.value > 0);
   return (
     <section aria-label="Money so far">

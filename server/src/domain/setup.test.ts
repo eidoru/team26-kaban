@@ -36,18 +36,6 @@ describe("setupErrors (§4.1)", () => {
     expect(setupErrors({ ...valid, amount: 0 }, TODAY).amount).toBeDefined();
   });
 
-  it("caps the organizing fee at 10% with at most 2 decimals; zero or blank means none (R-SET-08, R-DEC-39)", () => {
-    expect(setupErrors({ ...valid, organizerFeePercent: 10 }, TODAY)).toEqual({});
-    expect(setupErrors({ ...valid, organizerFeePercent: 2.25 }, TODAY)).toEqual({});
-    expect(setupErrors({ ...valid, organizerFeePercent: 10.01 }, TODAY).organizerFeePercent).toBe(
-      "The fee can be at most 10%.",
-    );
-    expect(setupErrors({ ...valid, organizerFeePercent: 1.255 }, TODAY).organizerFeePercent).toBeDefined();
-    expect(setupErrors({ ...valid, organizerFeePercent: -1 }, TODAY).organizerFeePercent).toBeDefined();
-    expect(setupErrors({ ...valid, organizerFeePercent: 0 }, TODAY)).toEqual({});
-    expect(setupErrors({ ...valid, organizerFeePercent: null }, TODAY)).toEqual({});
-  });
-
   it("needs an interval of at least 7 days for a custom frequency (R-FRQ-05)", () => {
     expect(setupErrors({ ...valid, frequency: "CUSTOM", intervalDays: 6 }, TODAY).intervalDays).toBeDefined();
     expect(setupErrors({ ...valid, frequency: "CUSTOM" }, TODAY).intervalDays).toBeDefined();
@@ -87,7 +75,6 @@ describe("toSettings", () => {
       pot: pesos(10_002),
       enteredPot: pesos(10_000),
       interestRate: 125,
-      organizerFeeRate: 0,
       intervalDays: null,
     });
   });
@@ -103,9 +90,6 @@ describe("settingChanges (R-LOB-09)", () => {
       { field: "interestRate", label: "Shortfall interest", before: "1.25% per period", after: "None" },
     ]);
     expect(settingChanges(before, toSettings(valid))).toEqual([]);
-    expect(settingChanges(before, toSettings({ ...valid, organizerFeePercent: 2 }))).toEqual([
-      { field: "organizerFeeRate", label: "Organizing fee", before: "None", after: "2% of each payment" },
-    ]);
   });
 });
 

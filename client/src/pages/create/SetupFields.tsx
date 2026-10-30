@@ -1,7 +1,6 @@
 import { CalendarDays, Info } from "lucide-react";
-import { MAX_ORGANIZER_FEE_PERCENT, MAX_SLOTS, MIN_CUSTOM_INTERVAL_DAYS, MIN_SLOTS } from "@domain/constants";
+import { MAX_SLOTS, MIN_CUSTOM_INTERVAL_DAYS, MIN_SLOTS } from "@domain/constants";
 import { addDebt, chargePeriodInterest, NO_DEBT, outstanding } from "@domain/debt";
-import { feeOn } from "@domain/fees";
 import { pesos, rateFromPercent } from "@domain/money";
 import { frequencyLabel, type SetupErrors } from "@domain/setup";
 import type { Frequency } from "@domain/schedule";
@@ -12,7 +11,7 @@ import { NumberStepper } from "../../components/flow/NumberStepper";
 import { ToggleSwitch } from "../../components/ToggleSwitch";
 import { formatDueDate } from "../../lib/dates";
 import { formatPeso } from "../../lib/money";
-import { previewAmounts, previewDates, previewFeeRate, type SetupDraft } from "./setupDraft";
+import { previewAmounts, previewDates, type SetupDraft } from "./setupDraft";
 
 type SectionProps = {
   draft: SetupDraft;
@@ -261,53 +260,6 @@ export function InterestSection({ draft, set, errors }: SectionProps) {
             stops once they repay, or when the debt is taken from their payout.
           </p>
         </div>
-      )}
-    </div>
-  );
-}
-
-/**
- * R-SET-08, R-DEC-39: the optional organizing fee. Members pay it on top of each payment, outside the
- * pot; the organizer pays none. The example uses the draft's own contribution.
- */
-export function FeeSection({ draft, set, errors }: SectionProps) {
-  const rate = previewFeeRate(draft, errors);
-  const contribution = previewAmounts(draft)?.contribution ?? pesos(1_000);
-  const fee = rate != null ? feeOn(contribution, rate) : null;
-  return (
-    <div className="space-y-5">
-      <div className="rounded-2xl border border-ink-200 bg-white p-4">
-        <ToggleSwitch
-          id="feeOn"
-          checked={draft.feeOn}
-          onChange={(feeOn) => set({ feeOn })}
-          label="Charge an organizing fee"
-        />
-      </div>
-      {draft.feeOn && (
-        <Field
-          label={`Fee per payment (%, up to ${MAX_ORGANIZER_FEE_PERCENT})`}
-          error={errors.organizerFeePercent}
-          hasValue={draft.feeText.trim() !== ""}
-        >
-          {(props) => (
-            <input
-              {...props}
-              type="text"
-              inputMode="decimal"
-              value={draft.feeText}
-              onChange={(e) => set({ feeText: e.target.value })}
-              placeholder="2"
-            />
-          )}
-        </Field>
-      )}
-      {fee != null && (
-        <p className="rounded-2xl bg-ink-50 p-4 text-sm text-ink-700" aria-live="polite">
-          A member paying <b className="tabular-nums">{formatPeso(contribution)}</b> sends{" "}
-          <b className="tabular-nums">{formatPeso(contribution + fee)}</b>: {formatPeso(fee)} is your fee. It stays out
-          of the pot.
-        </p>
       )}
     </div>
   );

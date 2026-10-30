@@ -39,7 +39,6 @@ async function projectedPayouts(groupId: string) {
       contribution: Number(group.contribution),
       pot: Number(group.pot),
       rate: group.interestRate,
-      feeRate: group.organizerFeeRate,
       recipientId: recipient.id,
       members: assumed,
     });
@@ -136,8 +135,6 @@ export async function groupStats(groupId: string, viewerUserId: string) {
       coveredByOrganizer: summary.totals.coveredByOrganizer,
       owedToOrganizer: summary.totals.debtOutstanding,
       refunds: summary.totals.refunds,
-      /** R-DEC-39: organizing fees, outside the pot. */
-      fees: summary.totals.fees,
     },
     collection,
     reliability,

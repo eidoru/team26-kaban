@@ -1,5 +1,4 @@
 import { DISPUTE_REASON_MAX_LENGTH, NOTE_MAX_LENGTH } from "../domain/constants.js";
-import { feeOn, feeRateFor } from "../domain/fees.js";
 import { formatPeso } from "../domain/money.js";
 import { disputeAmountError, refundFor } from "../domain/submissions.js";
 import { audit } from "../lib/audit.js";
@@ -87,8 +86,7 @@ export async function raiseDispute(
 
 /**
  * R-DSP-02 / R-DSP-03: the organizer approves (the payment's amount changes; a decrease is recorded
- * as a refund owed to the member) or denies with a reason. The organizing fee follows the amount: a
- * refund returns the fee on the refunded part, an increase adds the fee on it (R-DEC-39).
+ * as a refund owed to the member) or denies with a reason.
  */
 export async function reviewDispute(
   groupId: string,
@@ -111,7 +109,6 @@ export async function reviewDispute(
     const previous = Number(dispute.previousAmount);
     const proposed = Number(dispute.proposedAmount);
     let refund = 0;
-    let refundFee = 0;
 
     if (decision.approve) {
       // Safety net (R-DEC-29): the room it held when raised is still there, so this only fails for
@@ -121,18 +118,10 @@ export async function reviewDispute(
       const waiting = totals.pending + totals.pendingIncrease;
       const error = disputeAmountError(proposed, current, totals.approved, Number(group.contribution), waiting);
       if (error) throw conflict(`${error} Deny this report instead.`, "BAD_AMOUNT");
-      const currentFee = Number(dispute.submission.effectiveFee ?? dispute.submission.fee);
-      const fee = feeOn(proposed, feeRateFor(dispute.slot.isOrganizer, group.organizerFeeRate));
-      await tx.submission.update({
-        where: { id: dispute.submissionId },
-        data: { effectiveAmount: BigInt(proposed), effectiveFee: BigInt(fee) },
-      });
+      await tx.submission.update({ where: { id: dispute.submissionId }, data: { effectiveAmount: BigInt(proposed) } });
       refund = refundFor(current, proposed);
-      refundFee = refund > 0 ? Math.max(0, currentFee - fee) : 0;
       if (refund > 0) {
-        await tx.refund.create({
-          data: { groupId, slotId: dispute.slotId, disputeId: dispute.id, amount: BigInt(refund), fee: BigInt(refundFee) },
-        });
+        await tx.refund.create({ data: { groupId, slotId: dispute.slotId, disputeId: dispute.id, amount: BigInt(refund) } });
       }
     }
     await tx.dispute.update({
@@ -161,7 +150,7 @@ export async function reviewDispute(
         action: "refund.recorded",
         targetSlotId: dispute.slotId,
         targetName: slotName(dispute.slot),
-        amounts: { refund, ...(refundFee > 0 ? { fee: refundFee } : {}) },
+        amounts: { refund },
         after: { round: dispute.submission.round?.number },
       });
     }
@@ -174,7 +163,7 @@ export async function reviewDispute(
           : `Your report about ${formatPeso(previous)} wasn't accepted`,
         body: decision.approve
           ? refund > 0
-            ? `The organizer owes you a ${formatPeso(refund + refundFee)} refund${refundFee > 0 ? `, including the ${formatPeso(refundFee)} fee` : ""}.`
+            ? `The organizer owes you a ${formatPeso(refund)} refund.`
             : "The correction is recorded."
           : `Reason: ${note}`,
       });
@@ -248,7 +237,5 @@ export async function visibleDisputes(db: Db, groupId: string, viewer: { userId:
     /** Raised by the viewer, who may withdraw it while pending. */
     mine: d.raisedById === viewer.userId,
     refund: d.refund ? Number(d.refund.amount) : null,
-    /** R-DEC-39: the organizing fee returned with the refund. */
-    refundFee: d.refund ? Number(d.refund.fee) : null,
   }));
 }

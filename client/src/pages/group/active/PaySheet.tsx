@@ -6,10 +6,10 @@ import type { GroupDetail, SlotView } from "../../../api/client";
 import { AmountField } from "../../../components/flow/AmountField";
 import { Sheet } from "../../../components/flow/Sheet";
 import { SheetDone } from "../../../components/flow/SheetDone";
-import { formatPeso, formatRate, parsePesoInput, pesoInputValue } from "../../../lib/money";
+import { formatPeso, parsePesoInput, pesoInputValue } from "../../../lib/money";
 import { proofFileError, uploadProof } from "../../../lib/proofUpload";
 import { ui } from "../../../lib/ui";
-import { debtReportable, feeRateOf, owedBy, paymentFee, payRooms, standingOf } from "./period";
+import { debtReportable, owedBy, payRooms, standingOf } from "./period";
 
 export type PayMode = "CONTRIBUTION" | "DEBT_PAYMENT";
 type PayInput = { slotId: string; type: PayMode; amount: number; proofPath?: string; note?: string };
@@ -20,7 +20,6 @@ type PayInput = { slotId: string; type: PayMode; amount: number; proofPath?: str
  * (R-SUB-02). The amount defaults to what's left and can't go over it (R-SUB-06). Proof is optional.
  * A contribution fills what's left of the open round, then later rounds in order once the debt is
  * covered (paying ahead, R-DEC-31); the server splits it, one part per round (R-DEC-33).
- * With an organizing fee, the sheet shows the fee and the total to send (R-DEC-39).
  */
 export function PaySheet({
   detail,
@@ -76,7 +75,7 @@ function PayForm({
   const [stage, setStage] = useState<"idle" | "uploading" | "sending">("idle");
   const [error, setError] = useState("");
   // Once sent: what was sent, shown instead of closing on the spot.
-  const [sent, setSent] = useState<{ amount: number; fee: number; rounds: number[] } | null>(null);
+  const [sent, setSent] = useState<{ amount: number; rounds: number[] } | null>(null);
   const fileId = useId();
   const noteId = useId();
 
@@ -94,12 +93,6 @@ function PayForm({
   // R-DEC-33: how the server will split it, shown once it reaches past this round.
   const parts = pay && !amountError ? splitContribution(amount, pay.rooms) : [];
   const reachesAhead = parts.some((p) => p.round !== openRound);
-  const feeRate = feeRateOf(detail, slot);
-  const fee = amountError
-    ? 0
-    : isDebt
-      ? paymentFee(detail, slot, { type: "DEBT_PAYMENT", amount })
-      : paymentFee(detail, slot, { type: "CONTRIBUTION", parts });
   const noteError = note.trim().length > NOTE_MAX_LENGTH ? `Up to ${NOTE_MAX_LENGTH} characters.` : null;
   const forSomeoneElse = !slot.isViewer;
 
@@ -114,7 +107,7 @@ function PayForm({
       }
       setStage("sending");
       if (await onSubmit({ slotId: slot.id, type: mode, amount, proofPath, note: note.trim() || undefined })) {
-        setSent({ amount, fee, rounds: parts.map((p) => p.round) });
+        setSent({ amount, rounds: parts.map((p) => p.round) });
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't send it. Try again.");
@@ -129,7 +122,6 @@ function PayForm({
     return (
       <SheetDone title={forSomeoneElse ? `Recorded for ${slot.name}` : "Sent for review"} onClose={onClose}>
         {formatPeso(sent.amount)}
-        {sent.fee > 0 && ` + ${formatPeso(sent.fee)} fee`}
         {isDebt ? " toward the debt" : ` for ${roundsLabel(sent.rounds)}`} counts once {reviewer}.
       </SheetDone>
     );
@@ -178,11 +170,7 @@ function PayForm({
         }}
       >
         {/* The one rule worth stating here: how a debt payment is applied (R-DBT). */}
-        {isDebt && (
-          <p className="text-sm text-ink-600">
-            Pays interest first, then the rest.{feeRate > 0 && " The fee is only on the rest."}
-          </p>
-        )}
+        {isDebt && <p className="text-sm text-ink-600">Pays interest first, then the rest.</p>}
         {/* R-DEC-31: what paying ahead means for the member. */}
         {pay && pay.ahead > 0 && (
           <p className="text-sm text-ink-600">
@@ -191,7 +179,7 @@ function PayForm({
           </p>
         )}
         <AmountField
-          label={feeRate > 0 ? "Amount, before the fee" : "Amount paid"}
+          label="Amount paid"
           value={amountText}
           onChange={setAmountText}
           error={amountError}
@@ -201,19 +189,6 @@ function PayForm({
               : undefined
           }
         />
-        {/* R-DEC-39: paid on top, in the same transfer. */}
-        {fee > 0 && (
-          <dl className="divide-y divide-ink-100 rounded-2xl bg-ink-50 px-4 text-sm" aria-live="polite">
-            <div className="flex justify-between gap-3 py-2">
-              <dt className="text-ink-700">Organizing fee ({formatRate(feeRate)})</dt>
-              <dd className="font-semibold text-ink-900 tabular-nums">{formatPeso(fee)}</dd>
-            </div>
-            <div className="flex justify-between gap-3 py-2">
-              <dt className="font-semibold text-ink-900">{forSomeoneElse ? "Total paid" : "Send in total"}</dt>
-              <dd className="font-bold text-ink-900 tabular-nums">{formatPeso(amount + fee)}</dd>
-            </div>
-          </dl>
-        )}
         {reachesAhead && (
           <ul aria-label="How it's split" className="divide-y divide-ink-100 rounded-2xl bg-ink-50 px-4 text-sm">
             {parts.map((p) => (
