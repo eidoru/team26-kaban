@@ -18,14 +18,14 @@ function readPendingLink(): PendingLink | null {
 }
 
 /**
- * Where a visitor who just signed in should land: back on the link they came from. An invite joins
- * on arrival (R-INV-02); a claim waits for them to confirm, after seeing the slot's record (R-CLM-05).
- * Both the login pages and GuestRoute use this, so neither can send them home by mistake.
+ * Where a visitor who just signed in should land: back on the link they came from, where they agree to
+ * the terms before joining or claiming (R-INV-08, R-CLM-07). Both the login pages and GuestRoute use
+ * this, so neither can send them home by mistake.
  */
 export function pendingDestination(): string | null {
   const link = readPendingLink();
   if (!link) return null;
-  return link.kind === "invite" ? `/invite/${link.token}?join=1` : `/claim/${link.token}`;
+  return link.kind === "invite" ? `/invite/${link.token}` : `/claim/${link.token}`;
 }
 
 /** The landing page calls this once it has loaded, so the link isn't followed again later. */
