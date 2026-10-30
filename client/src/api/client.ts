@@ -672,7 +672,7 @@ export const api = {
       slotId: string;
       type: "CONTRIBUTION" | "DEBT_PAYMENT";
       amount: number;
-      proofPath?: string;
+      proofPath: string;
       note?: string;
     },
   ) => send<GroupDetail>("POST", `/groups/${id}/submissions`, body),
