@@ -113,8 +113,8 @@ async function roomsFor(db: Db, slotId: string, rounds: { id: string; number: nu
  * period, then later ones once the slot's debt is covered (paying ahead, R-DEC-31); a payment that
  * reaches more than one round is stored as one submission per round, linked by a batch (R-DEC-33).
  * A DEBT_PAYMENT pays down what the slot owes (R-DBT-04), also after completion (R-DBT-11). Members
- * report their own; the organizer reports for themselves and for placeholders. All start PENDING,
- * each with a proof photo (R-DEC-37). Each part records the organizing fee paid on top (R-DEC-39).
+ * report their own; the organizer reports for themselves and for placeholders. All start PENDING.
+ * Each part records the organizing fee paid on top (R-DEC-39).
  */
 export async function submitPayment(
   groupId: string,
