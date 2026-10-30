@@ -30,7 +30,6 @@ const FIELD_LABELS: Record<string, string> = {
   frequency: "Frequency",
   startDate: "Start date",
   interestRate: "Shortfall interest",
-  organizerFeeRate: "Organizing fee",
 };
 
 type Json = Record<string, unknown>;
@@ -105,18 +104,12 @@ export function describe(entry: {
         `${actor} reported ${peso(a.amount)}${self ? "" : ` for ${target}`}${
           debt ? " toward debt" : f.ahead && !Array.isArray(f.rounds) ? ` ahead for round ${f.round}` : round
         }`,
-        a.fee != null ? `Plus ${peso(a.fee)} organizing fee.` : null,
       );
     }
     case "submission.approved":
       return T(
         `${actor} approved ${self ? "their own" : `${target}'s`} ${peso(a.amount)}${f.appliedAs === "DEBT_PAYMENT" ? " toward debt" : round}`,
-        [
-          a.fee != null && `Plus ${peso(a.fee)} organizing fee.`,
-          a.toInterest != null && `${peso(a.toInterest)} to interest, ${peso(a.toPrincipal)} to principal.`,
-        ]
-          .filter(Boolean)
-          .join(" ") || null,
+        a.toInterest != null ? `${peso(a.toInterest)} to interest, ${peso(a.toPrincipal)} to principal.` : null,
       );
     case "submission.denied":
       return T(`${actor} denied ${target}'s ${peso(a.amount)}`, typeof f.reason === "string" ? `Reason: ${f.reason}` : null);
@@ -127,14 +120,10 @@ export function describe(entry: {
     case "round.closed":
       return T(`Round ${f.round} closed`);
     case "payout.processed": {
-      const fee = Number(a.feeDeducted ?? 0);
-      const deducted =
-        Number(a.ownShortfall ?? 0) + Number(a.interestDeducted ?? 0) + Number(a.principalDeducted ?? 0) + fee;
+      const deducted = Number(a.ownShortfall ?? 0) + Number(a.interestDeducted ?? 0) + Number(a.principalDeducted ?? 0);
       return T(
         `Round ${f.round} paid out: ${target} gets ${peso(a.net)}`,
-        deducted > 0
-          ? `${peso(a.pot)} pot, less ${peso(deducted)} they owed${fee > 0 ? `, including ${peso(fee)} organizing fee` : ""}.`
-          : `The full ${peso(a.pot)} pot.`,
+        deducted > 0 ? `${peso(a.pot)} pot, less ${peso(deducted)} they owed.` : `The full ${peso(a.pot)} pot.`,
       );
     }
     case "payout.handed_over":
@@ -171,10 +160,7 @@ export function describe(entry: {
     case "dispute.expired":
       return T(`${target}'s problem report expired at the payout`, `${peso(b.amount)} stands.`);
     case "refund.recorded":
-      return T(
-        `The organizer owes ${target} a ${peso(Number(a.refund ?? 0) + Number(a.fee ?? 0))} refund`,
-        a.fee != null ? `Includes the ${peso(a.fee)} organizing fee.` : null,
-      );
+      return T(`The organizer owes ${target} a ${peso(a.refund)} refund`);
     case "swap.requested": {
       const rounds = Object.entries(b).map(([who, n]) => `${who}: round ${n}`).join(", ");
       return T(`${actor} asked ${target} to swap turns`, rounds || null);

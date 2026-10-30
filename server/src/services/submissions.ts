@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import type { SubmissionType } from "@prisma/client";
 import { NOTE_MAX_LENGTH } from "../domain/constants.js";
 import { outstanding } from "../domain/debt.js";
-import { debtPaymentFee, feeOn, feeRateFor } from "../domain/fees.js";
 import { can } from "../domain/lifecycle.js";
 import { formatPeso } from "../domain/money.js";
 import {
@@ -114,7 +113,6 @@ async function roomsFor(db: Db, slotId: string, rounds: { id: string; number: nu
  * reaches more than one round is stored as one submission per round, linked by a batch (R-DEC-33).
  * A DEBT_PAYMENT pays down what the slot owes (R-DBT-04), also after completion (R-DBT-11). Members
  * report their own; the organizer reports for themselves and for placeholders. All start PENDING.
- * Each part records the organizing fee paid on top (R-DEC-39).
  */
 export async function submitPayment(
   groupId: string,
@@ -143,13 +141,8 @@ export async function submitPayment(
       throw forbidden("You can report payments for your own slot only.");
     }
 
-    const debt = debtOf(slot);
-    const pendingToDebt = await pendingAgainstDebt(tx, slot.id);
-    const debtLeft = submissionCap(outstanding(debt), 0, pendingToDebt);
-    // R-DEC-39: the organizer pays no fee; a contribution's fee is on all of it, a debt payment's on
-    // its principal part, after the interest pending payments haven't covered.
-    const feeRate = feeRateFor(slot.isOrganizer, group.organizerFeeRate);
-    let parts: { roundId: string | null; round: number | null; amount: number; fee: number }[];
+    const debtLeft = submissionCap(outstanding(debtOf(slot)), 0, await pendingAgainstDebt(tx, slot.id));
+    let parts: { roundId: string | null; round: number | null; amount: number }[];
     if (open) {
       const rounds = await tx.round.findMany({
         where: { groupId, status: { in: ["OPEN", "UPCOMING"] } },
@@ -165,18 +158,12 @@ export async function submitPayment(
       const error = contributionAmountError(input.amount, cap, blockedByDebt);
       if (error) throw new AppError(400, error, "BAD_AMOUNT", { amount: error });
       const idOf = new Map(rounds.map((r) => [r.number, r.id]));
-      parts = splitContribution(input.amount, fillable).map((p) => ({
-        ...p,
-        roundId: idOf.get(p.round)!,
-        fee: feeOn(p.amount, feeRate),
-      }));
+      parts = splitContribution(input.amount, fillable).map((p) => ({ ...p, roundId: idOf.get(p.round)! }));
     } else {
       const error = submissionAmountError(input.amount, debtLeft);
       if (error) throw new AppError(400, error, "BAD_AMOUNT", { amount: error });
-      const debtFee = debtPaymentFee(input.amount, debt.interest - pendingToDebt, feeRate);
-      parts = [{ roundId: null, round: null, amount: input.amount, fee: debtFee }];
+      parts = [{ roundId: null, round: null, amount: input.amount }];
     }
-    const fee = parts.reduce((total, p) => total + p.fee, 0);
 
     const batchId = parts.length > 1 ? randomUUID() : null;
     for (const part of parts) {
@@ -187,7 +174,6 @@ export async function submitPayment(
           roundId: part.roundId,
           type: input.type,
           amount: BigInt(part.amount),
-          fee: BigInt(part.fee),
           proofPath: input.proofPath,
           note,
           submittedById: actorUserId,
@@ -203,7 +189,7 @@ export async function submitPayment(
       action: "submission.created",
       targetSlotId: slot.id,
       targetName: slotName(slot),
-      amounts: { amount: input.amount, ...(fee > 0 ? { fee } : {}) },
+      amounts: { amount: input.amount },
       after: {
         type: input.type,
         round: rounds[0] ?? null,
@@ -217,7 +203,7 @@ export async function submitPayment(
       await notifyUsers(tx, [group.organizerId], {
         groupId,
         kind: "submission.pending",
-        title: `${slotName(slot)} reported ${formatPeso(input.amount)}${fee > 0 ? ` + ${formatPeso(fee)} fee` : ""}${
+        title: `${slotName(slot)} reported ${formatPeso(input.amount)}${
           isDebt ? " toward their debt" : batchId ? ` for ${roundsLabel(rounds)}` : ahead ? " ahead" : ""
         }`,
         body: `${group.name}${rounds.length === 1 ? `, round ${rounds[0]}` : ""}. ${
@@ -274,7 +260,6 @@ export async function reviewSubmission(
     }
 
     const amount = parts.reduce((total, p) => total + Number(p.amount), 0);
-    const fee = parts.reduce((total, p) => total + Number(p.fee), 0);
     const rounds = parts.flatMap((p) => (p.round ? [p.round.number] : []));
     // Debt payments, and contributions for a period that already closed, pay down debt (R-DBT-06,
     // R-DEC-04): interest first, then principal (R-DBT-05).
@@ -321,7 +306,6 @@ export async function reviewSubmission(
               status: "APPROVED",
               appliedAs: toDebtOf(part) ? "DEBT_PAYMENT" : "CONTRIBUTION",
               effectiveAmount: part.amount,
-              effectiveFee: part.fee,
               reviewedById: reviewerUserId,
               reviewedAt: new Date(),
               selfApproved,
@@ -338,11 +322,9 @@ export async function reviewSubmission(
       action: decision.approve ? "submission.approved" : "submission.denied",
       targetSlotId: submission.slotId,
       targetName: name,
-      amounts: {
-        amount,
-        ...(fee > 0 ? { fee } : {}),
-        ...(repayment ? { toInterest: repayment.toInterest, toPrincipal: repayment.toPrincipal } : {}),
-      },
+      amounts: repayment
+        ? { amount, toInterest: repayment.toInterest, toPrincipal: repayment.toPrincipal }
+        : { amount },
       after: decision.approve
         ? {
             round: rounds[0] ?? null,
@@ -547,9 +529,6 @@ export async function visibleSubmissions(
     appliedAs: r.appliedAs,
     amount: Number(r.amount),
     effectiveAmount: r.effectiveAmount == null ? null : Number(r.effectiveAmount),
-    /** R-DEC-39: the organizing fee paid on top, and the one in effect after corrections. */
-    fee: Number(r.fee),
-    effectiveFee: r.effectiveFee == null ? null : Number(r.effectiveFee),
     status: r.status,
     note: r.note,
     proofAttached: !!r.proofPath,

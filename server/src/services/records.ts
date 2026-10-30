@@ -14,10 +14,8 @@ export interface MemberTotals {
   contributed: number;
   /** Net payouts handed to them. */
   received: number;
-  /** Refunds from approved dispute decreases (R-DSP-03), with the fee returned on them (R-DEC-39). */
+  /** Refunds from approved dispute decreases (R-DSP-03). */
   refunds: number;
-  /** R-DEC-39: organizing fees paid, on payments and out of their payout, after corrections. */
-  fees: number;
   /** Shortfalls the organizer covered for them. The organizer's own count here, but never become debt. */
   coveredByOrganizer: number;
   /** Debt principal created plus every interest charge. */
@@ -33,8 +31,6 @@ export interface GroupTotals {
   paidOut: number;
   coveredByOrganizer: number;
   refunds: number;
-  /** R-DEC-39: organizing fees, outside the pot. */
-  fees: number;
   debtOutstanding: number;
 }
 
@@ -66,11 +62,7 @@ export async function completionSummary(groupId: string) {
         (s) => s.effectiveAmount ?? s.amount,
       ),
       received: sumBy(payouts.filter((p) => p.round.recipientSlotId === slot.id && p.status !== "AWAITING_HANDOVER"), (p) => p.net),
-      refunds: sumBy(mine(refunds), (r) => r.amount) + sumBy(mine(refunds), (r) => r.fee),
-      // The effective fee already nets out what corrections returned.
-      fees:
-        sumBy(mine(submissions), (s) => s.effectiveFee ?? s.fee) +
-        sumBy(payouts.filter((p) => p.round.recipientSlotId === slot.id), (p) => p.feeDeducted),
+      refunds: sumBy(mine(refunds), (r) => r.amount),
       coveredByOrganizer: sumBy(mine(results), (r) => r.coveredByOrganizer),
       debtIncurred: sumBy(added, (e) => e.principalDelta) + sumBy(added, (e) => e.interestDelta),
       // `+ 0` turns −0 (negating an empty sum) into 0.
@@ -87,7 +79,6 @@ export async function completionSummary(groupId: string) {
     paidOut: members.reduce((t, m) => t + m.received, 0),
     coveredByOrganizer: members.reduce((t, m) => t + m.coveredByOrganizer, 0),
     refunds: members.reduce((t, m) => t + m.refunds, 0),
-    fees: members.reduce((t, m) => t + m.fees, 0),
     debtOutstanding: members.reduce((t, m) => t + m.debtOutstanding, 0),
   };
   return { members, totals };
@@ -174,7 +165,6 @@ export async function recordEvents(groupId: string, slotId?: string): Promise<Re
         interestDelta: null,
         status: SUBMISSION_STATUS[s.status] ?? s.status,
         notes: [
-          s.fee > 0n && `Plus ${formatPeso(Number(s.fee))} organizing fee`,
           s.proofPath ? "Proof attached" : "No proof attached",
           s.selfApproved && "Self-approved",
           late && "Counted toward debt (period had closed)",
@@ -200,8 +190,7 @@ export async function recordEvents(groupId: string, slotId?: string): Promise<Re
     })),
     ...payouts.map((p) => {
       const at = p.round.closedAt ?? p.round.payoutDate;
-      const fee = Number(p.feeDeducted);
-      const deductions = Number(p.ownShortfall) + Number(p.interestDeducted) + Number(p.principalDeducted) + fee;
+      const deductions = Number(p.ownShortfall) + Number(p.interestDeducted) + Number(p.principalDeducted);
       return {
         at,
         round: p.round.number,
@@ -213,7 +202,7 @@ export async function recordEvents(groupId: string, slotId?: string): Promise<Re
         status: { AWAITING_HANDOVER: "Not handed over yet", HANDED_OVER: "Handed over", CONFIRMED: "Received" }[p.status],
         notes:
           deductions > 0
-            ? `${formatPeso(Number(p.gross))} pot, less ${formatPeso(Number(p.ownShortfall))} own shortfall, ${formatPeso(Number(p.interestDeducted))} interest${fee > 0 ? `, ${formatPeso(Number(p.principalDeducted))} debt and ${formatPeso(fee)} organizing fee` : ` and ${formatPeso(Number(p.principalDeducted))} debt`}`
+            ? `${formatPeso(Number(p.gross))} pot, less ${formatPeso(Number(p.ownShortfall))} own shortfall, ${formatPeso(Number(p.interestDeducted))} interest and ${formatPeso(Number(p.principalDeducted))} debt`
             : `Full ${formatPeso(Number(p.gross))} pot`,
       };
     }),
@@ -222,13 +211,11 @@ export async function recordEvents(groupId: string, slotId?: string): Promise<Re
       round: r.dispute.submission.round?.number ?? null,
       ...base(r.slotId, r.createdAt),
       event: "Refund owed by the organizer",
-      amount: Number(r.amount) + Number(r.fee),
+      amount: Number(r.amount),
       principalDelta: null,
       interestDelta: null,
       status: null,
-      notes: `${formatPeso(Number(r.dispute.previousAmount))} corrected to ${formatPeso(Number(r.dispute.proposedAmount))}${
-        r.fee > 0n ? `. Includes the ${formatPeso(Number(r.fee))} organizing fee` : ""
-      }`,
+      notes: `${formatPeso(Number(r.dispute.previousAmount))} corrected to ${formatPeso(Number(r.dispute.proposedAmount))}`,
     })),
   ];
   return events.sort((a, b) => a.at.getTime() - b.at.getTime());

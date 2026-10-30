@@ -59,7 +59,6 @@ function settingsData(input: SetupInput) {
       intervalDays: settings.intervalDays,
       startDate: fromCalendarDate(settings.startDate),
       interestRate: settings.interestRate,
-      organizerFeeRate: settings.organizerFeeRate,
     },
   };
 }
@@ -161,8 +160,6 @@ function summary(group: Group) {
     frequencyLabel: frequencyLabel(group.frequency, group.intervalDays),
     startDate: settings.startDate,
     interestRate: group.interestRate,
-    /** R-SET-08: hundredths of a percent of each payment; shown before joining (R-INV-01, R-DEC-39). */
-    organizerFeeRate: group.organizerFeeRate,
     createdAt: group.createdAt.toISOString(),
     launchedAt: group.launchedAt?.toISOString() ?? null,
     activatedAt: group.activatedAt?.toISOString() ?? null,
@@ -331,7 +328,6 @@ async function payoutsView(groupId: string, viewerSlotId: string, isOrganizer: b
       ownShortfall: Number(p.ownShortfall),
       interestDeducted: Number(p.interestDeducted),
       principalDeducted: Number(p.principalDeducted),
-      feeDeducted: Number(p.feeDeducted),
       net: Number(p.net),
       status: p.status,
       handedOverAt: p.handedOverAt?.toISOString() ?? null,

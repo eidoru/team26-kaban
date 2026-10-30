@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { feeOn } from "@domain/fees";
 import type { PublicGroup } from "../../api/client";
 import { KabanLogo } from "../../components/KabanLogo";
 import { formatDueDate } from "../../lib/dates";
@@ -41,12 +40,7 @@ export function Ticket({ group, eyebrow, children }: { group: PublicGroup; eyebr
         <h1 className="font-heading mt-1 text-2xl font-bold text-balance">{group.name}</h1>
         <p className="mt-4 text-xs font-bold uppercase tracking-wide text-brand-100">You pay</p>
         <p className="font-heading text-4xl font-bold tabular-nums">{formatPeso(group.contribution)}</p>
-        <p className="text-sm text-brand-50">
-          {group.frequencyLabel.toLowerCase()}
-          {/* R-INV-01, R-DEC-39: the organizing fee is part of what joining commits you to. */}
-          {group.organizerFeeRate > 0 &&
-            `, plus ${formatPeso(feeOn(group.contribution, group.organizerFeeRate))} organizing fee (${formatRate(group.organizerFeeRate)})`}
-        </p>
+        <p className="text-sm text-brand-50">{group.frequencyLabel.toLowerCase()}</p>
       </div>
       <dl className="grid grid-cols-2 gap-x-4 gap-y-4 px-6 py-5">
         {facts.map((fact) => (
