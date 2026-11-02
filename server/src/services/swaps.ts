@@ -107,6 +107,11 @@ export async function requestSwap(
       },
     });
     if (busy) throw conflict("One of you already has a swap in progress. Settle that one first.", "SWAP_IN_PROGRESS");
+    // R-WDR-06: a slot that's changing hands keeps its turn as the replacement saw it.
+    const leaving = await tx.withdrawal.count({
+      where: { slotId: { in: [requester.id, target.id] }, status: { in: ["AWAITING_REPLACEMENT", "AWAITING_ORGANIZER"] } },
+    });
+    if (leaving > 0) throw conflict("One of you is handing their slot to someone else, so turns can't be swapped.", "LEAVING");
     await assertSwappable(tx, groupId, requester.id, target.id);
 
     const swap = await tx.swap.create({

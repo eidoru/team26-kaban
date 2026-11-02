@@ -11,6 +11,7 @@ import { todayInManila, toCalendarDate } from "../lib/today.js";
 import { slotName } from "./common.js";
 import { debtOf } from "./debts.js";
 import { completionSummary, recordEvents } from "./records.js";
+import { handoversOf } from "./withdrawals.js";
 import { openPeriodView, periodTotals } from "./submissions.js";
 
 /**
@@ -157,10 +158,13 @@ export async function slotHistory(groupId: string, viewerUserId: string, slotId?
   const slot = slots.find((s) => s.id === (slotId ?? viewer.id));
   if (!slot) throw notFound("Slot");
   if (slot.id !== viewer.id && !viewer.isOrganizer) throw forbidden("You can only see your own history.");
-  const events = await recordEvents(groupId, slot.id);
+  const [events, handovers] = await Promise.all([recordEvents(groupId, slot.id), handoversOf(prisma, groupId)]);
+  const tookOver = handovers.filter((h) => h.slotId === slot.id).at(-1);
   return {
     slotId: slot.id,
     claimedAt: slot.claimedAt?.toISOString() ?? null,
+    /** R-WDR-12: the latest hand-over to the current holder; earlier records are inherited. */
+    tookOver: tookOver ? { at: tookOver.until.toISOString(), from: tookOver.name } : null,
     events: events.reverse().map((e) => ({ ...e, at: e.at.toISOString() })),
   };
 }

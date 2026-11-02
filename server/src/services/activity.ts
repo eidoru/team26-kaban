@@ -14,7 +14,7 @@ const PREFIXES: Record<ActivityCategory, string[]> = {
   payouts: ["payout.", "round."],
   disputes: ["dispute.", "refund."],
   swaps: ["swap.", "order."],
-  members: ["member.", "placeholder.", "claim_link.", "invite_link."],
+  members: ["member.", "placeholder.", "claim_link.", "invite_link.", "withdrawal."],
   settings: ["group."],
 };
 
@@ -179,6 +179,28 @@ export function describe(entry: {
       return T(`${actor} withdrew a swap request`);
     case "swap.expired":
       return T("A turn swap expired", f.reason === "paid out" ? "One of the turns was paid out first." : "It wasn't settled in time.");
+    case "withdrawal.requested":
+      return T(
+        `${target} asked to leave and hand their slot to a replacement`,
+        Number(a.leftAhead) > 0 ? `${peso(a.leftAhead)} paid ahead goes with the slot.` : null,
+      );
+    case "withdrawal.accepted":
+      return T(
+        `${f.name ?? actor} agreed to take ${target}'s slot`,
+        Number(a.debt) > 0 ? `Including ${peso(a.debt)} debt.` : null,
+      );
+    case "withdrawal.declined":
+      return T(f.backedOut ? `${actor} backed out of taking ${target}'s slot` : `${actor} declined to take ${target}'s slot`);
+    case "withdrawal.reset":
+      return T(`${target}'s replacement has to accept again`, `The slot's debt grew from ${peso(a.before)} to ${peso(a.after)}.`);
+    case "withdrawal.approved":
+      return T(`${f.name ?? target} took ${b.name ?? "a member"}'s slot`, `${f.round != null ? `Round ${f.round}'s turn and` : "The"} history carry over.`);
+    case "withdrawal.rejected":
+      return T(`${actor} didn't approve ${target} leaving`);
+    case "withdrawal.cancelled":
+      return T(`${target} cancelled their request to leave`);
+    case "withdrawal.expired":
+      return T(`${target}'s request to leave expired`, f.reason === "paid out" ? "Their payout happened first." : "It wasn't settled in time.");
     case "reminder.sent":
       return T(`${actor} reminded ${target} to pay`, `${peso(a.unpaid)} still unpaid${round}.`);
     default:

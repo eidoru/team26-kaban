@@ -21,6 +21,8 @@ export const MIN_HALF_MONTH_DAYS = 15;
 export const SWAP_LOCK_DAYS = 3;
 /** R-SWP-04, R-DEC-35 */
 export const SWAP_REQUEST_EXPIRY_DAYS: number | null = 7;
+/** R-WDR-11, R-DEC-40: as swaps (R-SWP-04). */
+export const WITHDRAWAL_REQUEST_EXPIRY_DAYS: number | null = 7;
 /** §12 (assumption) */
 export const REMINDER_DAYS_BEFORE = 3;
 /** R-DEC-07, R-DEC-35 */

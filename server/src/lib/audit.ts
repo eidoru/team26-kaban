@@ -47,6 +47,14 @@ export type AuditAction =
   | "swap.denied"
   | "swap.cancelled"
   | "swap.expired"
+  | "withdrawal.requested"
+  | "withdrawal.accepted"
+  | "withdrawal.declined"
+  | "withdrawal.reset"
+  | "withdrawal.approved"
+  | "withdrawal.rejected"
+  | "withdrawal.cancelled"
+  | "withdrawal.expired"
   | "reminder.sent";
 
 /**

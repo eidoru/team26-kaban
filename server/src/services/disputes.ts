@@ -1,8 +1,9 @@
 import { DISPUTE_REASON_MAX_LENGTH, NOTE_MAX_LENGTH } from "../domain/constants.js";
 import { formatPeso } from "../domain/money.js";
-import { disputeAmountError, refundFor } from "../domain/submissions.js";
+import { disputeAmountError, proofError, refundFor } from "../domain/submissions.js";
 import { audit } from "../lib/audit.js";
 import { AppError, badRequest, conflict, forbidden, notFound } from "../lib/errors.js";
+import { isProofPathFor, proofExists, proofViewUrls } from "../lib/storage.js";
 import { notifyUsers } from "./notifications.js";
 import { periodTotals } from "./submissions.js";
 import { slotName, withGroupLock, type Db } from "./common.js";
@@ -18,13 +19,23 @@ function requiredText(text: string, max: number, missing: string, label: string)
  * R-DSP-01 / R-DSP-04: ask to change an approved contribution to `proposedAmount`, while its period
  * is still open. The slot holder disputes their own; the organizer can for themselves and for
  * placeholders (as with submissions, R-SUB-02). One open dispute per submission.
+ * `forLeaving` asks the payment back before leaving (R-WDR-03/04): to ₱0, with a proof photo.
  */
 export async function raiseDispute(
   groupId: string,
   actorUserId: string,
-  input: { submissionId: string; proposedAmount: number; reason: string },
+  input: { submissionId: string; proposedAmount: number; reason: string; forLeaving?: boolean; proofPath?: string },
 ) {
   const reason = requiredText(input.reason, DISPUTE_REASON_MAX_LENGTH, "Say what's wrong.", "The reason");
+  if (input.forLeaving) {
+    if (input.proposedAmount !== 0) throw badRequest("Ask for the whole payment back: ₱0.", "BAD_AMOUNT");
+    const missingProof = proofError(!!input.proofPath);
+    if (missingProof) throw badRequest(missingProof, "PROOF_REQUIRED");
+  }
+  if (input.proofPath) {
+    if (!isProofPathFor(groupId, input.proofPath)) throw badRequest("That proof doesn't belong to this paluwagan.");
+    if (!(await proofExists(input.proofPath))) throw badRequest("The proof didn't finish uploading. Attach it again.");
+  }
   return withGroupLock(groupId, async (tx, group) => {
     const submission = await tx.submission.findFirst({
       where: { id: input.submissionId, groupId },
@@ -44,6 +55,11 @@ export async function raiseDispute(
       throw conflict("Problem reports close when the period's payout happens.", "PERIOD_CLOSED");
     }
     if (submission.disputes.length > 0) throw conflict("This payment already has an open dispute.", "ALREADY_DISPUTED");
+    // R-WDR-06: once the request is sent, what's left to the replacement stays as they saw it.
+    const leaving = await tx.withdrawal.count({
+      where: { slotId: submission.slotId, status: { in: ["AWAITING_REPLACEMENT", "AWAITING_ORGANIZER"] } },
+    });
+    if (leaving > 0) throw conflict("You've asked to leave, so payments can't be reported now. Cancel the request first.", "LEAVING");
 
     const current = Number(submission.effectiveAmount ?? submission.amount);
     // R-DEC-29: what's waiting for review (payments, other corrections' increases) holds its room.
@@ -61,6 +77,8 @@ export async function raiseDispute(
         previousAmount: BigInt(current),
         proposedAmount: BigInt(input.proposedAmount),
         reason,
+        forLeaving: !!input.forLeaving,
+        proofPath: input.proofPath,
       },
     });
     await audit(tx, {
@@ -70,7 +88,8 @@ export async function raiseDispute(
       targetSlotId: submission.slotId,
       targetName: slotName(submission.slot),
       before: { amount: current },
-      after: { amount: input.proposedAmount, reason, round: submission.round.number },
+      after: { amount: input.proposedAmount, reason, round: submission.round.number, ...(input.forLeaving ? { forLeaving: true } : {}) },
+      proofAttached: input.proofPath ? true : undefined,
     });
     if (!actor.isOrganizer) {
       await notifyUsers(tx, [group.organizerId], {
@@ -222,6 +241,10 @@ export async function visibleDisputes(db: Db, groupId: string, viewer: { userId:
     include: { refund: true, submission: { include: { round: { select: { number: true } } } } },
     orderBy: { createdAt: "asc" },
   });
+  // R-DEC-17: the slot's own reports and the organizer's view only, as the query above already limits.
+  const urls = await proofViewUrls(rows.filter((d) => d.proofPath).map((d) => d.proofPath!)).catch(
+    () => new Map<string, string>(),
+  );
   return rows.map((d) => ({
     id: d.id,
     submissionId: d.submissionId,
@@ -237,5 +260,8 @@ export async function visibleDisputes(db: Db, groupId: string, viewer: { userId:
     /** Raised by the viewer, who may withdraw it while pending. */
     mine: d.raisedById === viewer.userId,
     refund: d.refund ? Number(d.refund.amount) : null,
+    /** Asking the payment back before leaving (R-WDR-04). */
+    forLeaving: d.forLeaving,
+    proofUrl: d.proofPath ? (urls.get(d.proofPath) ?? null) : null,
   }));
 }

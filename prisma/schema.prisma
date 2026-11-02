@@ -84,6 +84,16 @@ enum SwapStatus {
   CANCELLED
 }
 
+/// §9.1 (R-WDR-06…11)
+enum WithdrawalStatus {
+  AWAITING_REPLACEMENT
+  AWAITING_ORGANIZER
+  APPROVED
+  REJECTED
+  CANCELLED
+  EXPIRED
+}
+
 model User {
   id           String   @id @default(uuid())
   email        String   @unique
@@ -98,6 +108,8 @@ model User {
   organizedGroups Group[]        @relation("Organizer")
   slots           Slot[]
   auditEntries    AuditEntry[]
+  withdrawals     Withdrawal[]   @relation("Leaver")
+  replacements    Withdrawal[]   @relation("Replacement")
 
   @@map("users")
 }
@@ -150,6 +162,7 @@ model Group {
   refunds       Refund[]
   debtEntries   DebtEntry[]
   swaps         Swap[]
+  withdrawals   Withdrawal[]
   auditEntries  AuditEntry[]
   notifications Notification[]
 
@@ -189,6 +202,7 @@ model Slot {
   debtEntries     DebtEntry[]
   swapsRequested  Swap[]            @relation("SwapRequester")
   swapsTargeted   Swap[]            @relation("SwapTarget")
+  withdrawals     Withdrawal[]
   reminders       ReminderSent[]
 
   /// R-INV-07: one slot per user per paluwagan.
@@ -348,6 +362,9 @@ model Dispute {
   reviewedById   String?      @map("reviewed_by_id")
   reviewedAt     DateTime?    @map("reviewed_at")
   reviewNote     String?      @map("review_note")
+  /// R-WDR-04: asking a payment back before leaving needs proof; other reports don't (R-DEC-37).
+  forLeaving     Boolean      @default(false) @map("for_leaving")
+  proofPath      String?      @map("proof_path")
 
   group      Group      @relation(fields: [groupId], references: [id], onDelete: Cascade)
   submission Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
@@ -413,6 +430,41 @@ model Swap {
 
   @@index([groupId, status])
   @@map("swaps")
+}
+
+/// §9.1: a member hands their slot to a replacement (R-WDR-01). Approved ones are the slot's
+/// hand-over history: who held it until when (R-WDR-12).
+model Withdrawal {
+  id                String           @id @default(uuid())
+  groupId           String           @map("group_id")
+  slotId            String           @map("slot_id")
+  leaverUserId      String           @map("leaver_user_id")
+  reason            String
+  /// R-WDR-06: seen only by the leaver and the organizer.
+  proofPath         String           @map("proof_path")
+  /// The replacement link. Replaced when someone declines or backs out (R-WDR-08).
+  token             String           @unique @default(uuid())
+  status            WithdrawalStatus @default(AWAITING_REPLACEMENT)
+  /// R-WDR-03: approved payments for the open and later rounds the leaver left to the replacement.
+  leftAhead         BigInt           @map("left_ahead")
+  /// Set once someone accepts; cleared when they back out or the acceptance is reset (R-WDR-08, R-WDR-10).
+  replacementUserId String?          @map("replacement_user_id")
+  acceptedAt        DateTime?        @map("accepted_at")
+  /// The slot's debt when they accepted, so a later increase resets the acceptance (R-WDR-10).
+  acceptedDebt      BigInt?          @map("accepted_debt")
+  createdAt         DateTime         @default(now()) @map("created_at")
+  expiresAt         DateTime?        @map("expires_at")
+  reviewedAt        DateTime?        @map("reviewed_at")
+  reviewNote        String?          @map("review_note")
+
+  group       Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  slot        Slot  @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  leaver      User  @relation("Leaver", fields: [leaverUserId], references: [id])
+  replacement User? @relation("Replacement", fields: [replacementUserId], references: [id])
+
+  @@index([groupId, status])
+  @@index([slotId, status])
+  @@map("withdrawals")
 }
 
 /// §13. Immutable: a database trigger rejects UPDATE and DELETE (R-AUD-02). Public to members (R-AUD-03).

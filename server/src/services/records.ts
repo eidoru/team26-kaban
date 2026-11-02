@@ -3,6 +3,7 @@ import { formatPeso } from "../domain/money.js";
 import { roundsLabel } from "../domain/submissions.js";
 import { prisma } from "../lib/prisma.js";
 import { slotName } from "./common.js";
+import { handoversOf } from "./withdrawals.js";
 
 /** R-CMP-02: one member's totals, in centavos. Available any time; final once the paluwagan completes. */
 export interface MemberTotals {
@@ -96,7 +97,7 @@ export interface RecordEvent {
   interestDelta: number | null;
   status: string | null;
   notes: string;
-  /** Before the current holder claimed this placeholder (R-CLM-06). */
+  /** Before the current holder claimed this placeholder (R-CLM-06) or took the slot over (R-WDR-12). */
   inherited: boolean;
 }
 
@@ -120,7 +121,7 @@ const SUBMISSION_STATUS: Record<string, string> = {
  */
 export async function recordEvents(groupId: string, slotId?: string): Promise<RecordEvent[]> {
   const bySlot = slotId ? { slotId } : {};
-  const [slots, submissions, debtEntries, payouts, refunds] = await Promise.all([
+  const [slots, submissions, debtEntries, payouts, refunds, handovers] = await Promise.all([
     prisma.slot.findMany({ where: { groupId }, include: { user: true } }),
     prisma.submission.findMany({ where: { groupId, ...bySlot }, include: { round: true } }),
     prisma.debtEntry.findMany({ where: { groupId, ...bySlot }, include: { round: true } }),
@@ -129,14 +130,18 @@ export async function recordEvents(groupId: string, slotId?: string): Promise<Re
       include: { round: true },
     }),
     prisma.refund.findMany({ where: { groupId, ...bySlot }, include: { dispute: { include: { submission: { include: { round: true } } } } } }),
+    handoversOf(prisma, groupId),
   ]);
   const slotById = new Map(slots.map((s) => [s.id, s]));
   const base = (id: string, at: Date) => {
     const slot = slotById.get(id);
+    const beforeClaim = !!slot?.claimedAt && at < slot.claimedAt;
+    // R-WDR-12: the first hand-over after this moment names who held the slot then (oldest first).
+    const heldBy = beforeClaim ? undefined : handovers.find((h) => h.slotId === id && at < h.until);
     return {
       slotId: id,
-      name: slot ? slotName(slot) : "Former member",
-      inherited: !!slot?.claimedAt && at < slot.claimedAt,
+      name: heldBy?.name ?? (slot ? slotName(slot) : "Former member"),
+      inherited: beforeClaim || !!heldBy,
     };
   };
 
