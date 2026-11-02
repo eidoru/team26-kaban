@@ -110,6 +110,8 @@ model User {
   auditEntries    AuditEntry[]
   withdrawals     Withdrawal[]   @relation("Leaver")
   replacements    Withdrawal[]   @relation("Replacement")
+  ratingsGiven    Rating[]       @relation("RatingReviewer")
+  ratingsReceived Rating[]       @relation("RatingRecipient")
 
   @@map("users")
 }
@@ -163,6 +165,7 @@ model Group {
   debtEntries   DebtEntry[]
   swaps         Swap[]
   withdrawals   Withdrawal[]
+  ratings       Rating[]
   auditEntries  AuditEntry[]
   notifications Notification[]
 
@@ -465,6 +468,37 @@ model Withdrawal {
   @@index([groupId, status])
   @@index([slotId, status])
   @@map("withdrawals")
+}
+
+/// R-DEC-43
+enum RatingRole {
+  /// The organizer rates a member.
+  MEMBER
+  /// A member rates the organizer.
+  ORGANIZER
+}
+
+/// R-DEC-43: one person's stars for another in one paluwagan. Changing it updates the row; the audit
+/// log keeps every value.
+model Rating {
+  id          String     @id @default(uuid())
+  groupId     String     @map("group_id")
+  reviewerId  String     @map("reviewer_id")
+  recipientId String     @map("recipient_id")
+  role        RatingRole
+  /// 1 to MAX_STARS, checked by the service and a database constraint.
+  stars       Int
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+
+  group     Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  reviewer  User  @relation("RatingReviewer", fields: [reviewerId], references: [id])
+  recipient User  @relation("RatingRecipient", fields: [recipientId], references: [id])
+
+  /// One rating per person, role and paluwagan; a new one replaces it.
+  @@unique([groupId, reviewerId, recipientId, role])
+  @@index([recipientId, role])
+  @@map("ratings")
 }
 
 /// §13. Immutable: a database trigger rejects UPDATE and DELETE (R-AUD-02). Public to members (R-AUD-03).

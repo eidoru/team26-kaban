@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { ChevronRight, Link2, Plus } from "lucide-react";
 import type { GroupDetail, SlotView } from "../../api/client";
 import { Avatar } from "../../components/Avatar";
@@ -6,8 +7,8 @@ import { ui } from "../../lib/ui";
 import { slotHasActions, slotTag } from "./slots";
 
 /**
- * Every slot, filled or open. Organizers tap a row for its actions; members see a read-only list.
- * `onOpenSlot` is for open slots (invite or add a placeholder).
+ * Every slot, filled or open. Organizers tap a row for its actions; otherwise a member's row opens
+ * their profile (R-DEC-43). `onOpenSlot` is for open slots (invite or add a placeholder).
  */
 export function SlotsList({
   detail,
@@ -50,6 +51,11 @@ export function SlotsList({
                   {body}
                   <ChevronRight className="h-4 w-4 shrink-0 text-ink-400" aria-hidden />
                 </button>
+              ) : slot.userId ? (
+                <Link to={`/users/${slot.userId}`} className={`${rowBase} transition-colors hover:bg-ink-50`}>
+                  {body}
+                  <ChevronRight className="h-4 w-4 shrink-0 text-ink-400" aria-hidden />
+                </Link>
               ) : (
                 <div className={rowBase}>{body}</div>
               )}
@@ -81,8 +87,8 @@ export function SlotsList({
 
 /**
  * The Members view of a running paluwagan: everyone once, by name. Debts are in the Debts view.
- * For the organizer, "Invite" on a placeholder: its claim link is how someone joins after launch
- * (R-CLM-03), since the invite link closes at launch (R-INV-06).
+ * A member's row opens their profile (R-DEC-43). For the organizer, "Invite" on a placeholder: its
+ * claim link is how someone joins after launch (R-CLM-03), since the invite link closes at launch (R-INV-06).
  */
 export function MembersList({ detail, onInvite }: { detail: GroupDetail; onInvite: (slot: SlotView) => void }) {
   const { viewer, group } = detail;
@@ -94,6 +100,20 @@ export function MembersList({ detail, onInvite }: { detail: GroupDetail; onInvit
         {slots.map((slot) => {
           const canInvite = viewer.isOrganizer && slot.kind === "PLACEHOLDER" && can.claimPlaceholder(group.state);
           // 72px with the divider inside, like the Schedule rows, so the two views read alike.
+          if (slot.userId) {
+            return (
+              <li key={slot.id} className={`h-18 ${slot.isViewer ? "bg-brand-50" : ""}`}>
+                <Link
+                  to={`/users/${slot.userId}`}
+                  className="flex h-full items-center gap-3 px-5 transition-colors hover:bg-ink-50"
+                >
+                  <Avatar name={slot.name} size="md" />
+                  <span className="min-w-0 flex-1 truncate text-base font-bold text-ink-900">{slot.name}</span>
+                  <ChevronRight className="h-4 w-4 shrink-0 text-ink-400" aria-hidden />
+                </Link>
+              </li>
+            );
+          }
           return (
             <li key={slot.id} className={`flex h-18 items-center gap-3 px-5 ${slot.isViewer ? "bg-brand-50" : ""}`}>
               <Avatar name={slot.name} size="md" placeholder={slot.kind === "PLACEHOLDER"} />

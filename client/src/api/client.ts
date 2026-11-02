@@ -70,6 +70,8 @@ export interface GroupSummary {
 export interface SlotView {
   id: string;
   kind: "MEMBER" | "PLACEHOLDER";
+  /** For the member's profile link (R-DEC-43); null for a placeholder. */
+  userId: string | null;
   name: string;
   isOrganizer: boolean;
   isViewer: boolean;
@@ -396,13 +398,40 @@ export interface GroupDetail {
   withdrawals: WithdrawalView[];
   /** The viewer's own leaving check; null for the organizer and outside LAUNCHED/ACTIVE. */
   leaving: LeavingCheck | null;
+  /** R-DEC-43: the viewer's ratings here; null before completion. */
+  ratings: RatingsView | null;
   /** Processed payouts, newest first. */
   payouts: PayoutView[];
   /** LOBBY only. */
   launch: { blockers: string[]; earliestStartDate: string } | null;
 }
 
-export type PublicGroup = GroupSummary & { organizerName: string; occupied: number };
+export type PublicGroup = GroupSummary & { organizerName: string; organizerId: string; occupied: number };
+
+/**
+ * R-DEC-43, once completed. The organizer rates every member holding a slot (`done` once they all
+ * have stars); members who left by hand-over (`left`) are optional. A member rates the organizer.
+ */
+export type RatingsView =
+  | { kind: "members"; members: { userId: string; name: string; left: boolean; stars: number | null }[]; done: boolean }
+  | { kind: "organizer"; stars: number | null };
+
+/** An average to one decimal place, or null when nobody has rated yet (R-DEC-43). */
+export interface RatingSummary {
+  average: number | null;
+  count: number;
+}
+
+/** R-DEC-43: what any signed-in user sees of another. Nothing private: no email, contact or money. */
+export interface UserProfile {
+  id: string;
+  displayName: string;
+  memberSince: string;
+  /** From organizers, as a member. */
+  memberRating: RatingSummary;
+  /** From members, as the organizer. */
+  organizerRating: RatingSummary;
+}
 
 export interface InviteLanding {
   status: "OPEN" | "FULL" | "CLOSED" | "ALREADY_MEMBER" | "IN_DEBT";
@@ -777,10 +806,16 @@ export const api = {
     send<GroupDetail>("POST", `/groups/${id}/withdrawals`, body),
   cancelWithdrawal: (id: string, withdrawalId: string) =>
     send<GroupDetail>("POST", `/groups/${id}/withdrawals/${withdrawalId}/cancel`),
-  approveWithdrawal: (id: string, withdrawalId: string) =>
-    send<GroupDetail>("POST", `/groups/${id}/withdrawals/${withdrawalId}/approve`),
+  /** `stars`: the organizer's optional rating of the member leaving (R-DEC-43). */
+  approveWithdrawal: (id: string, withdrawalId: string, stars?: number) =>
+    send<GroupDetail>("POST", `/groups/${id}/withdrawals/${withdrawalId}/approve`, { stars }),
   rejectWithdrawal: (id: string, withdrawalId: string, note: string) =>
     send<GroupDetail>("POST", `/groups/${id}/withdrawals/${withdrawalId}/reject`, { note }),
+  // --- Ratings (R-DEC-43), once completed.
+  rateMembers: (id: string, ratings: { userId: string; stars: number }[]) =>
+    send<GroupDetail>("PUT", `/groups/${id}/ratings/members`, { ratings }),
+  rateOrganizer: (id: string, stars: number) => send<GroupDetail>("PUT", `/groups/${id}/ratings/organizer`, { stars }),
+  userProfile: (userId: string) => request<UserProfile>(`/users/${userId}`),
   markHandedOver: (id: string, round: number, proofPath?: string) =>
     send<GroupDetail>("POST", `/groups/${id}/rounds/${round}/handover`, { proofPath }),
   confirmReceipt: (id: string, round: number) => send<GroupDetail>("POST", `/groups/${id}/rounds/${round}/confirm-receipt`),

@@ -1,6 +1,8 @@
+import { useState } from "react";
 import type { GroupDetail, WithdrawalView } from "../../../api/client";
 import { Avatar } from "../../../components/Avatar";
 import { Sheet } from "../../../components/flow/Sheet";
+import { StarInput } from "../../../components/StarRating";
 import { formatDueDate } from "../../../lib/dates";
 import { formatPeso } from "../../../lib/money";
 import { ui } from "../../../lib/ui";
@@ -10,9 +12,24 @@ type Row = { label: string; value: string; danger?: boolean };
 /**
  * R-WDR-09: the organizer's look at a request both sides agreed to: why, the proof, the leaver's
  * standing and who takes over. Approval re-checks everything on the server; `blockers` says what
- * stops it now.
+ * stops it now. The organizer may rate the leaver as they approve (R-DEC-43); it's their only chance
+ * before the paluwagan completes.
  */
-export function WithdrawalReviewSheet({
+export function WithdrawalReviewSheet(props: {
+  detail: GroupDetail;
+  request: WithdrawalView | null;
+  pending: string | null;
+  error: string | null;
+  onClose: () => void;
+  onApprove: (request: WithdrawalView, stars: number | null) => void;
+  onReject: (request: WithdrawalView) => void;
+}) {
+  if (!props.request) return null;
+  // Keyed by request, so the stars start empty for each one.
+  return <ReviewBody key={props.request.id} {...props} request={props.request} />;
+}
+
+function ReviewBody({
   detail,
   request,
   pending,
@@ -22,14 +39,14 @@ export function WithdrawalReviewSheet({
   onReject,
 }: {
   detail: GroupDetail;
-  request: WithdrawalView | null;
+  request: WithdrawalView;
   pending: string | null;
   error: string | null;
   onClose: () => void;
-  onApprove: (request: WithdrawalView) => void;
+  onApprove: (request: WithdrawalView, stars: number | null) => void;
   onReject: (request: WithdrawalView) => void;
 }) {
-  if (!request) return null;
+  const [stars, setStars] = useState<number | null>(null);
   const slot = detail.slots.find((s) => s.id === request.slotId);
   const turn = detail.schedule.find((r) => r.recipientSlotId === request.slotId);
   const debt = slot ? slot.debt.principal + slot.debt.interest : 0;
@@ -53,7 +70,7 @@ export function WithdrawalReviewSheet({
           <button type="button" onClick={() => onReject(request)} disabled={busy} className={`${ui.btnSecondary} min-h-11 flex-1`}>
             Reject
           </button>
-          <button type="button" onClick={() => onApprove(request)} disabled={busy || blocked} className={`${ui.btnPrimary} min-h-11 flex-1`}>
+          <button type="button" onClick={() => onApprove(request, stars)} disabled={busy || blocked} className={`${ui.btnPrimary} min-h-11 flex-1`}>
             {busy ? "Saving…" : "Approve"}
           </button>
         </div>
@@ -92,6 +109,12 @@ export function WithdrawalReviewSheet({
             {b}
           </p>
         ))}
+        {!blocked && (
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-2xl border border-ink-200 px-4 py-2">
+            <span className="text-sm text-ink-600">Rate {request.leaverName} (optional)</span>
+            <StarInput value={stars} onChange={setStars} label={`Rate ${request.leaverName} as a member`} disabled={busy} />
+          </div>
+        )}
         <p className="text-xs text-ink-500">
           Approving hands the slot over at once: {request.leaverName} leaves, and their turn, history and debt stay with the slot.
         </p>

@@ -33,3 +33,5 @@ export const NOTE_MAX_LENGTH = 500;
 export const MAX_PROOF_BYTES = 5 * 1024 * 1024;
 /** Dispute reasons (the pre-rewrite dispute limit; the spec sets none). */
 export const DISPUTE_REASON_MAX_LENGTH = 1000;
+/** R-DEC-43: a rating is a whole number of stars, 1 to this. */
+export const MAX_STARS = 5;

@@ -40,6 +40,7 @@ export type NotificationKind =
   | "withdrawal.rejected"
   | "withdrawal.cancelled"
   | "withdrawal.expired"
+  | "rating.due"
   | "reminder.due"
   | "reminder.payout_day"
   | "reminder.manual";

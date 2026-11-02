@@ -26,11 +26,24 @@ suite("activity sentences (R-AUD-03)", () => {
     ).toBe("Slots: 5 → 6");
   });
 
+  it("names the stars in ratings, which the log shows to every member (R-DEC-43)", () => {
+    expect(
+      describe({ action: "rating.given", actor: "Olive", target: "Mia", amounts: {}, before: {}, after: { stars: 4, role: "MEMBER" } }).title,
+    ).toBe("Olive rated Mia 4 stars as a member");
+    expect(
+      describe({ action: "rating.given", actor: "Mia", target: "Olive", amounts: {}, before: {}, after: { stars: 1, role: "ORGANIZER" } }).title,
+    ).toBe("Mia rated Olive 1 star as the organizer");
+    expect(
+      describe({ action: "rating.changed", actor: "Olive", target: "Mia", amounts: {}, before: { stars: 3 }, after: { stars: 5, role: "MEMBER" } }).title,
+    ).toBe("Olive changed Mia's rating from 3 stars to 5 stars");
+  });
+
   it("files actions under their filter", () => {
     expect(categoryOf("submission.approved")).toBe("payments");
     expect(categoryOf("debt.interest_charged")).toBe("debts");
     expect(categoryOf("swap.approved")).toBe("swaps");
     expect(categoryOf("placeholder.claimed")).toBe("members");
     expect(categoryOf("withdrawal.approved")).toBe("members");
+    expect(categoryOf("rating.given")).toBe("members");
   });
 });
