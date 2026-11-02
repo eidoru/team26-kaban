@@ -76,6 +76,8 @@ export interface SlotView {
   position: number | null;
   /** When a user claimed this placeholder; earlier records are inherited. */
   claimedAt: string | null;
+  /** The latest hand-over to the current holder (R-WDR-09), and who held the slot before. */
+  tookOver: { at: string; from: string } | null;
   /** Placeholder contact, organizer only. */
   contact: string | null;
   /** Live claim link, organizer only. */
@@ -202,6 +204,50 @@ export interface DisputeView {
   mine: boolean;
   /** The refund an approved decrease created (R-DSP-03), owed by the organizer. */
   refund: number | null;
+  /** Asking the payment back before leaving (R-WDR-04), which carries a proof photo. */
+  forLeaving: boolean;
+  proofUrl: string | null;
+}
+
+export type WithdrawalStatus = "AWAITING_REPLACEMENT" | "AWAITING_ORGANIZER" | "APPROVED" | "REJECTED" | "CANCELLED" | "EXPIRED";
+
+/** A request to leave by handing the slot to a replacement (§9.1). Amounts in centavos. */
+export interface WithdrawalView {
+  id: string;
+  slotId: string;
+  leaverName: string;
+  /** The viewer is the one leaving. */
+  mine: boolean;
+  status: WithdrawalStatus;
+  /** Reason and proof: the leaver and the organizer only (R-WDR-06). */
+  reason: string;
+  proofUrl: string | null;
+  /** Payments for the open and later rounds left to the replacement (R-WDR-03). */
+  leftAhead: number;
+  /** Approved contributions so far; null once settled. */
+  contributed: number | null;
+  /** What blocks approval now (R-WDR-09); empty when it can go through. */
+  blockers: string[];
+  /** `email` for the organizer only. Set from acceptance; stays set while they're asked to accept again (R-WDR-10). */
+  replacement: { name: string; email: string | null } | null;
+  acceptedAt: string | null;
+  acceptedDebt: number | null;
+  createdAt: string;
+  expiresAt: string | null;
+  reviewNote: string | null;
+  /** The replacement link, for the leaver while it looks for someone (R-WDR-06). */
+  link: string | null;
+}
+
+/** R-WDR-02/03: whether the viewer can leave now, and what's left to settle first. */
+export interface LeavingCheck {
+  blocker: string | null;
+  /** Payments or problem reports waiting, a swap in progress: each must settle first. */
+  todos: string[];
+  /** Approved payments for the open and later rounds: leave each to the replacement, or ask it back. */
+  aheadPayments: { submissionId: string; round: number; amount: number }[];
+  leftAhead: number;
+  contributed: number;
 }
 
 /** A request to trade payout turns (§9). */
@@ -346,6 +392,10 @@ export interface GroupDetail {
   disputes: DisputeView[];
   /** Turn swaps the viewer may see, newest first. */
   swaps: SwapView[];
+  /** Leaving requests the viewer may see (§9.1), newest first: all for the organizer, their own otherwise. */
+  withdrawals: WithdrawalView[];
+  /** The viewer's own leaving check; null for the organizer and outside LAUNCHED/ACTIVE. */
+  leaving: LeavingCheck | null;
   /** Processed payouts, newest first. */
   payouts: PayoutView[];
   /** LOBBY only. */
@@ -361,6 +411,28 @@ export interface InviteLanding {
   terms: string | null;
   /** R-DEC-39: where the signed-in visitor still owes; empty for guests and members. */
   debts: DebtOwed[];
+}
+
+/** R-WDR-07: the replacement link's landing page. */
+export interface ReplacementLanding {
+  status: "OPEN" | "ACCEPTED" | "TAKEN" | "CLOSED" | "ALREADY_MEMBER" | "REPLACING_ANOTHER" | "IN_DEBT";
+  /** Asked to accept again because the slot's debt grew (R-WDR-10). */
+  reaccept: boolean;
+  group: PublicGroup;
+  leaverName: string;
+  /** What they'd take on, in centavos. Null for guests. */
+  record: {
+    turn: { round: number; payoutDate: string } | null;
+    contributed: number;
+    rounds: { round: number; due: number; paid: number; shortfall: number }[];
+    openRound: { round: number; payoutDate: string; unpaid: number } | null;
+    leftAhead: number;
+    debt: { principal: number; interest: number };
+  } | null;
+  /** Null for guests (R-WDR-07, R-DEC-38). */
+  terms: string | null;
+  debts: DebtOwed[];
+  expiresAt: string | null;
 }
 
 export interface ClaimLanding {
@@ -685,7 +757,10 @@ export const api = {
       note?: string;
     },
   ) => send<GroupDetail>("POST", `/groups/${id}/submissions`, body),
-  raiseDispute: (id: string, body: { submissionId: string; proposedAmount: number; reason: string }) =>
+  raiseDispute: (
+    id: string,
+    body: { submissionId: string; proposedAmount: number; reason: string; forLeaving?: boolean; proofPath?: string },
+  ) =>
     send<GroupDetail>("POST", `/groups/${id}/disputes`, body),
   approveDispute: (id: string, disputeId: string) => send<GroupDetail>("POST", `/groups/${id}/disputes/${disputeId}/approve`),
   denyDispute: (id: string, disputeId: string, note: string) =>
@@ -698,6 +773,14 @@ export const api = {
   approveSwap: (id: string, swapId: string) => send<GroupDetail>("POST", `/groups/${id}/swaps/${swapId}/approve`),
   denySwap: (id: string, swapId: string, note: string) => send<GroupDetail>("POST", `/groups/${id}/swaps/${swapId}/deny`, { note }),
   cancelSwap: (id: string, swapId: string) => send<GroupDetail>("POST", `/groups/${id}/swaps/${swapId}/cancel`),
+  requestWithdrawal: (id: string, body: { reason: string; proofPath: string; leftAhead: number }) =>
+    send<GroupDetail>("POST", `/groups/${id}/withdrawals`, body),
+  cancelWithdrawal: (id: string, withdrawalId: string) =>
+    send<GroupDetail>("POST", `/groups/${id}/withdrawals/${withdrawalId}/cancel`),
+  approveWithdrawal: (id: string, withdrawalId: string) =>
+    send<GroupDetail>("POST", `/groups/${id}/withdrawals/${withdrawalId}/approve`),
+  rejectWithdrawal: (id: string, withdrawalId: string, note: string) =>
+    send<GroupDetail>("POST", `/groups/${id}/withdrawals/${withdrawalId}/reject`, { note }),
   markHandedOver: (id: string, round: number, proofPath?: string) =>
     send<GroupDetail>("POST", `/groups/${id}/rounds/${round}/handover`, { proofPath }),
   confirmReceipt: (id: string, round: number) => send<GroupDetail>("POST", `/groups/${id}/rounds/${round}/confirm-receipt`),
@@ -721,7 +804,7 @@ export const api = {
   home: () => request<HomeDashboard>("/groups/home"),
   stats: (id: string) => request<GroupStats>(`/groups/${id}/stats`),
   history: (id: string, slotId?: string) =>
-    request<{ slotId: string; claimedAt: string | null; events: HistoryEvent[] }>(
+    request<{ slotId: string; claimedAt: string | null; tookOver: { at: string; from: string } | null; events: HistoryEvent[] }>(
       `/groups/${id}/history${slotId ? `?slot=${encodeURIComponent(slotId)}` : ""}`,
     ),
 
@@ -750,6 +833,10 @@ export const api = {
   getClaim: (token: string) => publicRequest<ClaimLanding>(`/claims/${token}`, { withAuth: true }),
   claimPlaceholder: (token: string) =>
     send<{ groupId: string }>("POST", `/claims/${token}/claim`, { acceptTerms: true }),
+  getReplacement: (token: string) => publicRequest<ReplacementLanding>(`/replacements/${token}`, { withAuth: true }),
+  acceptReplacement: (token: string) =>
+    send<{ groupId: string }>("POST", `/replacements/${token}/accept`, { acceptTerms: true }),
+  declineReplacement: (token: string) => send<{ groupId: string }>("POST", `/replacements/${token}/decline`),
 };
 
 /** An authenticated download: the file and the name the server gave it. Refreshes the token once on 401. */

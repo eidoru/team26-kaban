@@ -28,6 +28,8 @@ const ActivityPage = lazy(() => import("./pages/group/ActivityPage").then((m) =>
 const HistoryPage = lazy(() => import("./pages/group/HistoryPage").then((m) => ({ default: m.HistoryPage })));
 const InvitePage = lazy(() => import("./pages/join/InvitePage").then((m) => ({ default: m.InvitePage })));
 const ClaimPage = lazy(() => import("./pages/join/ClaimPage").then((m) => ({ default: m.ClaimPage })));
+const ReplacePage = lazy(() => import("./pages/join/ReplacePage").then((m) => ({ default: m.ReplacePage })));
+const LeavePage = lazy(() => import("./pages/group/leave/LeavePage").then((m) => ({ default: m.LeavePage })));
 
 export function App() {
   return (
@@ -41,6 +43,7 @@ export function App() {
           </Route>
           <Route path="/invite/:token" element={<InvitePage />} />
           <Route path="/claim/:token" element={<ClaimPage />} />
+          <Route path="/replace/:token" element={<ReplacePage />} />
 
           <Route element={<ProtectedRoute />}>
             <Route element={<AppLayout />}>
@@ -60,6 +63,7 @@ export function App() {
                 <Route path="money" element={<MoneyRecordsPage />} />
                 <Route path="activity" element={<ActivityPage />} />
                 <Route path="history" element={<HistoryPage />} />
+                <Route path="leave" element={<LeavePage />} />
               </Route>
               <Route path="/groups/:id/edit" element={<EditGroupPage />} />
               {/* The review step is gone (R-DEC-28); launching happens on the group page. */}

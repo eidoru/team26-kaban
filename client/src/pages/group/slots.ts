@@ -5,10 +5,11 @@ export function currentOrder(detail: GroupDetail): string[] | null {
   return detail.schedule.every((r) => r.recipientSlotId) ? detail.schedule.map((r) => r.recipientSlotId!) : null;
 }
 
-/** How a slot came to be: organizer, placeholder (with or without a claim link) or joined member. */
+/** How a slot came to be: organizer, placeholder (with or without a claim link), taken over (R-WDR-09) or joined. */
 export function slotTag(slot: SlotView): string {
   if (slot.isOrganizer) return "Organizer";
   if (slot.kind === "PLACEHOLDER") return slot.claimLink ? "Placeholder · claim link sent" : "Placeholder";
+  if (slot.tookOver) return `Took over from ${slot.tookOver.from}`;
   return slot.claimedAt ? "Claimed a placeholder" : "Joined";
 }
 

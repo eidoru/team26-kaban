@@ -9,12 +9,14 @@ import {
   CalendarClock,
   CircleCheck,
   ClipboardCheck,
+  DoorOpen,
   HandCoins,
   Hourglass,
   NotebookPen,
   Rocket,
   Shuffle,
   TriangleAlert,
+  UserRoundCog,
   Users,
 } from "lucide-react";
 import {
@@ -25,6 +27,7 @@ import {
   type SlotView,
   type SubmissionView,
   type SwapView,
+  type WithdrawalView,
 } from "../../api/client";
 import { ActionBar } from "../../components/flow/ActionBar";
 import { NowPanel } from "../../components/flow/NowPanel";
@@ -54,6 +57,7 @@ import { Recap } from "./records/RecordsSections";
 import { MyStanding, YourTurn } from "./dashboard/StatsSections";
 import { swapToActOn } from "./swaps/swaps";
 import { ReviewSheet } from "./active/ReviewSheet";
+import { WithdrawalReviewSheet } from "./leave/WithdrawalReviewSheet";
 import { MembersList, SlotsList } from "./SlotsList";
 import { STATE_LABELS, useGroupShell } from "./groupShell";
 
@@ -102,6 +106,7 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
   const [swapWithSlotId, setSwapWithSlotId] = useState<string | null>(null);
   // Open on the whole queue (true), or on one item from the Debts view (its review key).
   const [reviewOpen, setReviewOpen] = useState<boolean | string>(false);
+  const [reviewWithdrawalId, setReviewWithdrawalId] = useState<string | null>(null);
   // The Dashboard's "Record payments" with more than one placeholder to record: who paid first.
   const [pickingRecord, setPickingRecord] = useState(false);
   const [demoTools] = useDemoToolsSetting();
@@ -281,8 +286,59 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
     if (note?.trim()) await run(`swap-${swap.id}`, () => api.denySwap(group.id, swap.id, note.trim()));
   }
 
+  /** R-WDR-09: the organizer rejects with a reason, as with swaps. */
+  async function rejectWithdrawal(request: WithdrawalView) {
+    const note = await dialog.prompt({
+      title: `Reject ${request.leaverName}'s request?`,
+      label: "Why not?",
+      required: true,
+      multiline: true,
+      submitLabel: "Reject",
+    });
+    if (note?.trim() && (await run(`withdrawal-${request.id}`, () => api.rejectWithdrawal(group.id, request.id, note.trim())))) {
+      setReviewWithdrawalId(null);
+    }
+  }
+
   // The swap the Now panel shows with its actions; the swaps list leaves it out.
   let nowSwapId: string | undefined;
+
+  // §9.1: requests to leave the organizer must decide, and the viewer's own while it's open.
+  const myLeave = detail.withdrawals.find((w) => w.mine && (w.status === "AWAITING_REPLACEMENT" || w.status === "AWAITING_ORGANIZER"));
+  const leaveTodos: Todo[] = [
+    ...(isOrganizer ? detail.withdrawals.filter((w) => w.status === "AWAITING_ORGANIZER") : []).map(
+      (w): Todo => ({
+        id: `withdrawal-${w.id}`,
+        icon: UserRoundCog,
+        tone: "brand",
+        title: `Review ${w.leaverName}'s request to leave`,
+        detail: `${w.replacement?.name} agreed to take over their slot.`,
+        action: { label: "Review", onClick: () => setReviewWithdrawalId(w.id) },
+      }),
+    ),
+    ...(myLeave
+      ? [
+          {
+            id: "leaving",
+            icon: DoorOpen,
+            tone: "calm" as const,
+            title:
+              myLeave.status === "AWAITING_ORGANIZER"
+                ? `Your request to leave is with ${group.organizerName}`
+                : myLeave.replacement
+                  ? `Waiting for ${myLeave.replacement.name} to accept again`
+                  : "Share your replacement link",
+            detail:
+              myLeave.status === "AWAITING_ORGANIZER"
+                ? `${myLeave.replacement?.name} agreed to take your slot. Keep paying until it's approved.`
+                : "Someone takes over your slot once they accept and it's approved.",
+            action: { label: "Open", onClick: () => navigate(`/groups/${group.id}/leave`) },
+            // Only sharing the link is the viewer's move; the others are waiting.
+            inBar: myLeave.status === "AWAITING_REPLACEMENT" && !myLeave.replacement,
+          },
+        ]
+      : []),
+  ];
 
   // --- The viewer's next step (design rule: it comes first), and the one main action.
   let now: ReactNode;
@@ -367,7 +423,7 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
       />
     );
   } else if (group.state === "LAUNCHED") {
-    now = (
+    const startsPanel = (
       <NowPanel
         tone="sun"
         icon={CalendarClock}
@@ -391,6 +447,17 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
         )}
       </NowPanel>
     );
+    // Leaving works from launch (R-WDR-01), so its to-dos can come before the start date.
+    now =
+      leaveTodos.length > 0 ? (
+        <div className="space-y-4">
+          <TodoPanel todos={leaveTodos} />
+          {startsPanel}
+        </div>
+      ) : (
+        startsPanel
+      );
+    if (leaveTodos.some((t) => t.inBar !== false)) primary = <TodoBarButton todos={leaveTodos} />;
   } else if (group.state === "ACTIVE" || group.state === "COMPLETED" || group.state === "COMPLETED_WITH_OUTSTANDING_DEBT") {
     const period = detail.period;
     const mine = period ? standingOf(detail, viewer.slotId) : null;
@@ -432,6 +499,7 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
         action: { label: "Review", onClick: () => setReviewOpen(true) },
       });
     }
+    todos.push(...leaveTodos.filter((t) => t.id !== "leaving"));
     for (const payout of payoutsToActOn) {
       const recipient = detail.slots.find((s) => s.id === payout.recipientSlotId);
       const confirming = payout.status === "HANDED_OVER";
@@ -552,6 +620,7 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
         inBar: false,
       });
     }
+    todos.push(...leaveTodos.filter((t) => t.id === "leaving"));
     if (debtLeft > 0) {
       todos.push({
         id: "debt",
@@ -648,7 +717,10 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
               <h1 className={ui.pageTitle}>{group.name}</h1>
             </div>
             {isOrganizer && inLobby && (
-              <GroupMenu onCancel={() => void cancelGroup()} disabled={pending !== null} />
+              <GroupMenu
+                items={[{ label: "Cancel this paluwagan", icon: Ban, onSelect: () => void cancelGroup() }]}
+                disabled={pending !== null}
+              />
             )}
           </header>
           {now}
@@ -878,6 +950,22 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
           onDeny={denyItem}
           error={error?.message ?? null}
           onClearError={clearError}
+        />
+      )}
+      {isOrganizer && (
+        <WithdrawalReviewSheet
+          detail={detail}
+          request={detail.withdrawals.find((w) => w.id === reviewWithdrawalId) ?? null}
+          pending={pending}
+          error={error?.message ?? null}
+          onClose={() => {
+            setReviewWithdrawalId(null);
+            clearError();
+          }}
+          onApprove={(w) =>
+            void run(`withdrawal-${w.id}`, () => api.approveWithdrawal(group.id, w.id)).then((done) => done && setReviewWithdrawalId(null))
+          }
+          onReject={(w) => void rejectWithdrawal(w)}
         />
       )}
       <SlotSheet

@@ -519,9 +519,17 @@ function DisputeBody({ detail, dispute, name }: { detail: GroupDetail; dispute: 
         <span>{formatPeso(dispute.proposedAmount)}</span>
       </p>
       <p className="rounded-2xl bg-ink-50 px-4 py-3 text-sm text-ink-700">
-        <span className="block text-xs font-bold uppercase tracking-wide text-ink-500">Reason</span>
+        <span className="block text-xs font-bold uppercase tracking-wide text-ink-500">
+          {dispute.forLeaving ? "Asked back before leaving" : "Reason"}
+        </span>
         {dispute.reason}
       </p>
+      {/* R-WDR-04: asking a payment back before leaving comes with proof. */}
+      {dispute.proofUrl && (
+        <a href={dispute.proofUrl} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-2xl border-2 border-ink-200 bg-ink-50">
+          <img src={dispute.proofUrl} alt="Proof attached to this report" className="max-h-64 w-full object-contain" />
+        </a>
+      )}
       <p className="text-sm text-ink-600">
         After approval:{" "}
         <b>
