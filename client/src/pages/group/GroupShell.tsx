@@ -1,11 +1,12 @@
-import { Link, NavLink, Outlet, useLocation, useParams } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { Activity, CalendarDays, CloudOff, HandCoins, LayoutDashboard, Users, Wallet, type LucideIcon } from "lucide-react";
+import { Activity, CalendarDays, CloudOff, DoorOpen, HandCoins, LayoutDashboard, Users, Wallet, type LucideIcon } from "lucide-react";
 import { ApiError, type GroupDetail } from "../../api/client";
 import { CompleteSeal } from "../../components/CompleteSeal";
 import { groupKey, useGroup } from "../../lib/groupQueries";
 import { ui } from "../../lib/ui";
 import { useGroupRealtime } from "../../lib/useGroupRealtime";
+import { GroupMenu } from "./GroupMenu";
 import { hasViews, type GroupShellContext } from "./groupShell";
 
 /**
@@ -16,6 +17,7 @@ import { hasViews, type GroupShellContext } from "./groupShell";
 export function GroupShell() {
   const { id = "" } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const { realtimeActive } = useGroupRealtime({
     groupId: id,
     enabled: !!id,
@@ -64,15 +66,21 @@ export function GroupShell() {
   const complete = group.state === "COMPLETED" || group.state === "COMPLETED_WITH_OUTSTANDING_DEBT";
   return (
     <div className="min-w-0 space-y-6">
-      <header>
-        <h1 className={`${ui.pageTitle} flex items-start gap-3`}>
-          {complete && <CompleteSeal size="lg" />}
-          <span className="min-w-0">{group.name}</span>
-        </h1>
-        {detail.period && (
-          <p className="mt-1 text-sm text-ink-500">
-            Round {detail.period.number} of {group.slotCount}
-          </p>
+      <header className="flex items-start gap-2">
+        <div className="min-w-0 flex-1">
+          <h1 className={`${ui.pageTitle} flex items-start gap-3`}>
+            {complete && <CompleteSeal size="lg" />}
+            <span className="min-w-0">{group.name}</span>
+          </h1>
+          {detail.period && (
+            <p className="mt-1 text-sm text-ink-500">
+              Round {detail.period.number} of {group.slotCount}
+            </p>
+          )}
+        </div>
+        {/* §9.1: a member leaves only by handing their slot over; rare, so it's tucked in the menu. */}
+        {detail.leaving && (
+          <GroupMenu items={[{ label: "Leave…", icon: DoorOpen, onSelect: () => navigate(`/groups/${group.id}/leave`) }]} />
         )}
       </header>
       <div className="lg:grid lg:grid-cols-[11rem_minmax(0,1fr)] lg:items-start lg:gap-8 xl:grid-cols-[13rem_minmax(0,1fr)] xl:gap-10">

@@ -1,11 +1,17 @@
 import { useEffect, useRef, useState } from "react";
-import { Ban, MoreHorizontal } from "lucide-react";
+import { MoreHorizontal, type LucideIcon } from "lucide-react";
+
+export interface GroupMenuItem {
+  label: string;
+  icon: LucideIcon;
+  onSelect: () => void;
+}
 
 /**
- * The lobby header's ⋯ menu for the organizer: rare, final actions kept out of the page's way.
- * Holds "Cancel this paluwagan" (R-LOB-06; lobby only, R-DEC-03).
+ * The group header's ⋯ menu: rare, final actions kept out of the page's way. The organizer's
+ * "Cancel this paluwagan" in the lobby (R-LOB-06, R-DEC-03); a member's "Leave…" after launch (§9.1).
  */
-export function GroupMenu({ onCancel, disabled }: { onCancel: () => void; disabled?: boolean }) {
+export function GroupMenu({ items, disabled }: { items: GroupMenuItem[]; disabled?: boolean }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -42,19 +48,22 @@ export function GroupMenu({ onCancel, disabled }: { onCancel: () => void; disabl
           role="menu"
           className="animate-pop absolute right-0 top-12 z-50 w-60 origin-top-right rounded-2xl border border-ink-200 bg-white p-1.5 shadow-lift"
         >
-          <button
-            type="button"
-            role="menuitem"
-            disabled={disabled}
-            onClick={() => {
-              setOpen(false);
-              onCancel();
-            }}
-            className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm font-semibold text-danger-700 hover:bg-danger-50 disabled:opacity-50"
-          >
-            <Ban className="h-4 w-4" aria-hidden />
-            Cancel this paluwagan
-          </button>
+          {items.map((item) => (
+            <button
+              key={item.label}
+              type="button"
+              role="menuitem"
+              disabled={disabled}
+              onClick={() => {
+                setOpen(false);
+                item.onSelect();
+              }}
+              className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm font-semibold text-danger-700 hover:bg-danger-50 disabled:opacity-50"
+            >
+              <item.icon className="h-4 w-4" aria-hidden />
+              {item.label}
+            </button>
+          ))}
         </div>
       )}
     </div>

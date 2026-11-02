@@ -12,6 +12,7 @@ import { cancelSubmission, reviewSubmission, submitPayment } from "../services/s
 import { confirmReceipt, markHandedOver } from "../services/payouts.js";
 import { cancelDispute, raiseDispute, reviewDispute } from "../services/disputes.js";
 import { cancelSwap, requestSwap, respondToSwap, reviewSwap } from "../services/swaps.js";
+import { cancelWithdrawal, requestWithdrawal, reviewWithdrawal } from "../services/withdrawals.js";
 import { buildExport } from "../services/exports.js";
 import { completionSummary } from "../services/records.js";
 import { activityLog, type ActivityCategory } from "../services/activity.js";
@@ -47,9 +48,16 @@ const submissionSchema = z.object({
 });
 const denySchema = z.object({ reason: z.string() });
 const handoverSchema = z.object({ proofPath: z.string().optional() });
-const disputeSchema = z.object({ submissionId: z.string(), proposedAmount: z.number().int(), reason: z.string() });
+const disputeSchema = z.object({
+  submissionId: z.string(),
+  proposedAmount: z.number().int(),
+  reason: z.string(),
+  forLeaving: z.boolean().optional(),
+  proofPath: z.string().optional(),
+});
 const denyDisputeSchema = z.object({ note: z.string() });
 const swapSchema = z.object({ targetSlotId: z.string(), requesterSlotId: z.string().optional() });
+const withdrawalSchema = z.object({ reason: z.string(), proofPath: z.string().optional(), leftAhead: z.number().int() });
 
 const detail = (req: Request, groupId: string) => groupDetail(groupId, req.user!.id, resolveAppOrigin(req));
 
@@ -126,10 +134,11 @@ router.post("/:id/order/shuffle", ...organizerAction((_req, id, user) => shuffle
 router.post("/:id/launch", ...organizerAction((_req, id, user) => launchGroup(id, user)));
 
 // --- Payments (§6.1). The browser uploads a proof photo first, then submits with its path.
+// A leaving request needs one too, from launch on (R-WDR-06).
 router.post("/:id/proofs", loadGroup, validateBody(proofSchema), async (req, res, next) => {
   try {
     const state = req.group!.state;
-    if (!can.submitContribution(state) && !can.submitDebtPayment(state)) {
+    if (!can.submitContribution(state) && !can.submitDebtPayment(state) && !can.leave(state)) {
       throw conflict("Payments open once the paluwagan starts.", "WRONG_STATE");
     }
     res.json(await createProofUpload(req.group!.id, req.body.contentType));
@@ -198,6 +207,24 @@ router.post(
   ),
 );
 router.post("/:id/swaps/:swapId/cancel", ...memberAction((req, id, user) => cancelSwap(id, user, String(req.params.swapId))));
+
+// --- Leaving with a replacement (§9.1). The replacement answers through /replacements/:token (invites routes).
+router.post("/:id/withdrawals", validateBody(withdrawalSchema), ...memberAction((req, id, user) => requestWithdrawal(id, user, req.body)));
+router.post(
+  "/:id/withdrawals/:withdrawalId/cancel",
+  ...memberAction((req, id, user) => cancelWithdrawal(id, user, String(req.params.withdrawalId))),
+);
+router.post(
+  "/:id/withdrawals/:withdrawalId/approve",
+  ...organizerAction((req, id, user) => reviewWithdrawal(id, user, String(req.params.withdrawalId), { approve: true })),
+);
+router.post(
+  "/:id/withdrawals/:withdrawalId/reject",
+  validateBody(denyDisputeSchema),
+  ...organizerAction((req, id, user) =>
+    reviewWithdrawal(id, user, String(req.params.withdrawalId), { approve: false, note: req.body.note }),
+  ),
+);
 
 // --- Payouts (§7, R-PAY-05). Rounds are addressed by number.
 router.post(

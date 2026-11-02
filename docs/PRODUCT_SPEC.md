@@ -266,6 +266,23 @@ Test cases worth covering: the first recipient (all debt is post-payout), the la
 | R-SWP-04 | Pending swap requests expire after `SWAP_REQUEST_EXPIRY_DAYS` (7, R-DEC-35). |
 | R-SWP-05 | Every step is logged and both members are notified. |
 
+### 9.1 Leaving with a replacement (R-DEC-40)
+
+| ID | Rule |
+|---|---|
+| R-WDR-01 | After launch (LAUNCHED or ACTIVE), a member can leave only by handing their slot to a replacement who takes it over at once. A slot is never left empty or turned into a placeholder. The organizer can't leave (§11: no role transfer). Placeholders change hands only through claim links (R-CLM-01). |
+| R-WDR-02 | A member whose payout has happened can't leave. Neither can the open round's recipient within `SWAP_LOCK_DAYS` (3) of its payout date (as R-SWP-03). |
+| R-WDR-03 | Leaving starts from an overview of the member's standing: payout turn and date, contributed so far, this round, payments made ahead, debt. Then a to-do list that must be finished before the request can be sent: no payments waiting for review, no problem report waiting, no turn swap in progress, and a decision on every approved payment for the open round or a later round: **leave it to the replacement**, or **ask for it back** with a problem report to ₱0 (R-WDR-04) that the organizer decides first. Closed rounds' money is already in their pots and can't be asked back. |
+| R-WDR-04 | A problem report filed to get a payment back before leaving needs a proof photo (unlike other problem reports, R-DEC-37). An approved one records the refund as usual (R-DSP-03). |
+| R-WDR-05 | **Debt doesn't block leaving.** The replacement inherits it, and the invitation shows the exact amount (principal and interest) before they accept. |
+| R-WDR-06 | The request has a reason and a proof photo, both required, seen only by the leaver and the organizer (R-DEC-17). Sending it creates a single-use replacement link. One open request per slot. While it's open, the slot can't be in a swap and can't raise problem reports; the leaver still pays as usual, and what they pay stays with the slot. |
+| R-WDR-07 | The replacement opens the link and may log in or register through it (R-INV-02). They see the slot's turn and payout date, its payment history, this round's unpaid part, payments left to them, the debt they'd inherit, and the terms. They must not hold a slot in this paluwagan, must not be in debt anywhere (R-DEC-39), and must not be the replacement in another open request in it. They agree to the terms and accept, or decline. |
+| R-WDR-08 | Declining, or backing out after accepting but before approval, puts the request back to waiting for a replacement with a new link; the old link stops working. |
+| R-WDR-09 | After acceptance, the organizer approves or rejects (with a reason). Approval re-checks every rule above. The hand-over is one transaction: the replacement takes the slot with everything tied to it (turn, payout date, history, payments ahead, debt), as in a claim (R-CLM-06), and the leaver loses access. |
+| R-WDR-10 | If the slot's debt grows after the replacement accepted (a round closed short), their acceptance is reset and they must accept again. Payments the leaver makes in the meantime only help the replacement, so they don't reset it. |
+| R-WDR-11 | The leaver can cancel any time before approval. A request expires `WITHDRAWAL_REQUEST_EXPIRY_DAYS` (7, as R-SWP-04) after it was sent, or when the slot's payout happens. |
+| R-WDR-12 | History stays traceable: records from before the hand-over are labeled inherited and name the member who held the slot then, and every step is in the audit log. The leaver can download their member statement until the request is approved. |
+
 ---
 
 ## 10. Completion
@@ -281,7 +298,7 @@ Test cases worth covering: the first recipient (all debt is post-payout), the la
 ## 11. Constraints (Not Supported in This Version)
 
 - Multiple slots per user.
-- Members leaving after launch. Kicking members after launch *(assumption, consistent with no leaving)*.
+- Members leaving after launch without a replacement (§9.1). Kicking members after launch *(assumption, consistent with no leaving)*.
 - Transferring the organizer role (possible future update).
 - Editing settings after launch.
 - Processing actual payments.
@@ -302,6 +319,8 @@ Test cases worth covering: the first recipient (all debt is post-payout), the la
 | Payout processed; confirm receipt | Recipient |
 | Debt created or interest charged | Debtor |
 | Swap requested / accepted / approved / expired | Involved members, organizer |
+| Leaving request: accepted, declined, reset (R-WDR-10), rejected, cancelled, expired | Leaver, replacement, organizer (whoever didn't act) |
+| Leaving request approved | Leaver, replacement, all members |
 | Paluwagan completed | All members |
 
 ---
@@ -310,7 +329,7 @@ Test cases worth covering: the first recipient (all debt is post-payout), the la
 
 | ID | Rule |
 |---|---|
-| R-AUD-01 | Every action and transaction is recorded: setup, edits, joins, kicks, claims, submissions, reviews, disputes, refunds, payouts, debts, interest charges, swaps, state changes. |
+| R-AUD-01 | Every action and transaction is recorded: setup, edits, joins, kicks, claims, submissions, reviews, disputes, refunds, payouts, debts, interest charges, swaps, leaving requests and hand-overs, state changes. |
 | R-AUD-02 | Entries are **immutable**: never edited or deleted. Corrections appear as new entries. |
 | R-AUD-03 | The audit log is **public to all members** of the paluwagan. |
 | R-AUD-04 | Each entry includes: timestamp, actor, action, target member/placeholder, amounts, before/after values where applicable, proof-attached flag, self-approved flag. |
@@ -409,3 +428,4 @@ All questions below are decided; see §16.1. New open questions get the next `R-
 | R-DEC-37 | (R-SUB-01, R-SUB-08, R-DBT-04, R-PAY-05, 2026-10-29) **Proof is required.** Every payment needs a proof photo: contributions, debt payments and the payments the organizer records for placeholders (R-SUB-02). So does a payout handover, except the organizer's own payout (they already hold the pot). Problem reports stay without proof. Checked in the form and on the server. Payments and handovers recorded before this keep their "No proof attached" badge. |
 | R-DEC-38 | (R-SET-07, R-INV-02, R-INV-08, R-CLM-07, R-AUD-01, 2026-10-29) **Terms and conditions.** Before joining or claiming a slot, a member agrees to the paluwagan's terms, to cover the legal side. The terms are text only: nothing in the app enforces them or penalizes breaking them. For now every paluwagan uses one standard text (`STANDARD_TERMS`), which the organizer can't edit; each group keeps its own copy, so changing the standard text never changes terms someone already agreed to. Existing paluwagans got the standard terms in the migration. The server refuses a join or claim without agreement, and the audit entry for the join or claim records the agreement and the text agreed to. Members already in a group (including the organizer) aren't asked again. Members can read the terms in the group's Details. When organizer editing comes, the terms lock once the first member joins. Lost in a merge and restored on 2026-10-30, with a new migration that gives every paluwagan the standard terms again. |
 | R-DEC-39 | (R-INV-03, R-CLM-04, R-DBT-04, R-DBT-11, R-CLM-06, 2026-11-02) **No new paluwagan while in debt.** A user whose slot owes the organizer in any paluwagan (§8 debt: principal + accrued interest, inherited debt included, active or completed) can't start a paluwagan, join through an invite or claim a placeholder. An unpaid share of a round that's still open isn't debt and doesn't block. Only approved repayments count: a debt payment waiting for review doesn't lift the block. Debt that will come off the user's own payout (R-PAY-03) still blocks until that payout. The block lifts by itself once every balance is ₱0. The invite, claim and create pages say how much is owed in which paluwagan, with a Pay link; the server refuses with `IN_DEBT`. Paluwagans the user is already in are unaffected. Known limit, left as is: the check doesn't lock the other paluwagans, so a join at the very moment a round closes elsewhere can slip through. |
+| R-DEC-40 | (§11, R-CLM-06, R-DSP-01, R-DEC-37, R-DEC-39, R-SWP-03, R-SWP-04, 2026-11-02) **Leaving with a replacement** (§9.1, R-WDR-01…12). A member may leave a launched or running paluwagan if a registered user takes over their slot at once, with the replacement's consent and the organizer's approval. Decided: debt doesn't block leaving (the replacement is shown it and inherits it); payments for the open and later rounds are either left to the replacement or asked back with problem reports to ₱0, which need proof and are decided before the request is sent; the leaver loses access but can download their statement first; the replacement sees the slot's proof photos like any holder (R-DEC-17); the swap lock window and expiry apply; the organizer can't leave. |

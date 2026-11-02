@@ -4,6 +4,7 @@ import { optionalAuth, requireAuth } from "../middleware/auth.js";
 import { validateBody } from "../middleware/validate.js";
 import { notifyGroupChangeSafe } from "../lib/realtimeNotify.js";
 import { claimPlaceholder, getClaim, getInvite, joinViaInvite } from "../services/roster.js";
+import { acceptReplacement, declineReplacement, getReplacement } from "../services/withdrawals.js";
 
 /**
  * Link landing pages. Viewing is public (R-INV-01); joining and claiming need an account, and the
@@ -11,7 +12,7 @@ import { claimPlaceholder, getClaim, getInvite, joinViaInvite } from "../service
  */
 const router = Router();
 
-/** R-INV-08, R-CLM-07: the services refuse unless this is true. */
+/** R-INV-08, R-CLM-07, R-WDR-07: the services refuse unless this is true. */
 const agreementSchema = z.object({ acceptTerms: z.boolean().default(false) });
 
 router.get("/invites/:token", optionalAuth, async (req, res, next) => {
@@ -43,6 +44,35 @@ router.get("/claims/:token", optionalAuth, async (req, res, next) => {
 router.post("/claims/:token/claim", requireAuth, validateBody(agreementSchema), async (req, res, next) => {
   try {
     const result = await claimPlaceholder(String(req.params.token), req.user!.id, req.body.acceptTerms);
+    notifyGroupChangeSafe(result.groupId);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** R-WDR-07/08: the replacement link. Signed-in visitors see the slot's record and the terms. */
+router.get("/replacements/:token", optionalAuth, async (req, res, next) => {
+  try {
+    res.json(await getReplacement(String(req.params.token), req.user?.id));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/replacements/:token/accept", requireAuth, validateBody(agreementSchema), async (req, res, next) => {
+  try {
+    const result = await acceptReplacement(String(req.params.token), req.user!.id, req.body.acceptTerms);
+    notifyGroupChangeSafe(result.groupId);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/replacements/:token/decline", requireAuth, async (req, res, next) => {
+  try {
+    const result = await declineReplacement(String(req.params.token), req.user!.id);
     notifyGroupChangeSafe(result.groupId);
     res.json(result);
   } catch (err) {

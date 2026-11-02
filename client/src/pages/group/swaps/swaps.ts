@@ -24,6 +24,12 @@ export function swapRequestBlocker(detail: GroupDetail, slotId: string): string 
   if (!mine || !theirs) return "Turns aren't set yet.";
   const rule = swapBlocker(mine, theirs, todayInManila());
   if (rule) return rule;
+  // R-WDR-06. The server also refuses when the other slot is changing hands, which only the organizer sees here.
+  const changingHands = detail.withdrawals.some(
+    (w) =>
+      [mine.slotId, slotId].includes(w.slotId) && (w.status === "AWAITING_REPLACEMENT" || w.status === "AWAITING_ORGANIZER"),
+  );
+  if (changingHands) return "One of you is handing their slot to someone else, so turns can't be swapped.";
   const busy = detail.swaps.some(
     (s) => OPEN_SWAP.includes(s.status) && [s.requesterSlotId, s.targetSlotId].some((id) => id === slotId || id === mine.slotId),
   );

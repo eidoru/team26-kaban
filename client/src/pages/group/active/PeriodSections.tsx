@@ -359,6 +359,10 @@ export function MyPayments({
       <ul className="divide-y divide-ink-100 overflow-hidden rounded-3xl border border-ink-200 bg-white">
         {mine.map((s) => {
           const label = SUBMISSION_LABELS[s.status];
+          // R-WDR-06: once a request to leave is sent, its slot's payments can't be reported.
+          const leaving = detail.withdrawals.some(
+            (w) => w.slotId === s.slotId && (w.status === "AWAITING_REPLACEMENT" || w.status === "AWAITING_ORGANIZER"),
+          );
           const slot = nameOf(s.slotId);
           const dispute = latestDispute(detail, s.id);
           const changed = s.effectiveAmount != null && s.effectiveAmount !== s.amount;
@@ -366,7 +370,8 @@ export function MyPayments({
             s.status === "APPROVED" &&
             s.appliedAs === "CONTRIBUTION" &&
             (s.round === detail.period?.number || isAhead(detail, s)) &&
-            dispute?.status !== "PENDING";
+            dispute?.status !== "PENDING" &&
+            !leaving;
           return (
             <li key={s.id} className="px-4 py-3">
               <div className="flex items-start gap-3">

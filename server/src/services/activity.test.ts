@@ -31,5 +31,6 @@ suite("activity sentences (R-AUD-03)", () => {
     expect(categoryOf("debt.interest_charged")).toBe("debts");
     expect(categoryOf("swap.approved")).toBe("swaps");
     expect(categoryOf("placeholder.claimed")).toBe("members");
+    expect(categoryOf("withdrawal.approved")).toBe("members");
   });
 });
