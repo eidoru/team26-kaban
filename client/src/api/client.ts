@@ -444,7 +444,7 @@ export interface InviteLanding {
 
 /** R-WDR-07: the replacement link's landing page. */
 export interface ReplacementLanding {
-  status: "OPEN" | "ACCEPTED" | "TAKEN" | "CLOSED" | "ALREADY_MEMBER" | "REPLACING_ANOTHER" | "IN_DEBT";
+  status: "APPROVED" | "OPEN" | "ACCEPTED" | "TAKEN" | "CLOSED" | "ALREADY_MEMBER" | "REPLACING_ANOTHER" | "IN_DEBT";
   /** Asked to accept again because the slot's debt grew (R-WDR-10). */
   reaccept: boolean;
   group: PublicGroup;

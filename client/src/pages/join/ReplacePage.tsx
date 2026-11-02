@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, api, type ReplacementLanding } from "../../api/client";
 import { Avatar } from "../../components/Avatar";
@@ -12,6 +12,7 @@ import { formatDueDate } from "../../lib/dates";
 import { invalidateHomeLists } from "../../lib/homeQueries";
 import { formatPeso, formatRate } from "../../lib/money";
 import { clearPendingLink, stashPendingLink } from "../../lib/pendingInvite";
+import { useNotificationsRealtime } from "../../lib/useGroupRealtime";
 import { ui } from "../../lib/ui";
 import { JoinShell, LinkProblem, Ticket } from "./Ticket";
 
@@ -30,10 +31,23 @@ export function ReplacePage() {
   const [busy, setBusy] = useState<"accept" | "decline" | null>(null);
   const [agreed, setAgreed] = useState(false);
   const queryKey = ["replacement", token, user?.id ?? null];
-  const { data, error, isPending } = useQuery({ queryKey, queryFn: () => api.getReplacement(token), retry: false });
+  // R-WDR-09: while the organizer decides, their answer arrives as a notification; refresh on it, or poll
+  // when realtime is down, so an approval leads straight into the group.
+  const { realtimeActive } = useNotificationsRealtime({
+    userId: user?.id,
+    enabled: !!user,
+    onUpdate: () => void queryClient.invalidateQueries({ queryKey: ["replacement", token] }),
+  });
+  const { data, error, isPending } = useQuery({
+    queryKey,
+    queryFn: () => api.getReplacement(token),
+    retry: false,
+    refetchInterval: (query) => (query.state.data?.status === "ACCEPTED" && !realtimeActive ? 15_000 : false),
+  });
   useEffect(() => {
     if (data) clearPendingLink();
-  }, [data]);
+    if (data?.status === "APPROVED") invalidateHomeLists(queryClient);
+  }, [data, queryClient]);
 
   if (isPending) {
     return (
@@ -58,6 +72,8 @@ export function ReplacePage() {
       </JoinShell>
     );
   }
+
+  if (data.status === "APPROVED") return <Navigate to={`/groups/${data.group.id}`} replace />;
 
   const { group, leaverName } = data;
 

@@ -209,6 +209,7 @@ async function liveRequest(token: string) {
 }
 
 export type ReplacementStatus =
+  | "APPROVED"
   | "OPEN"
   | "ACCEPTED"
   | "TAKEN"
@@ -240,19 +241,23 @@ export async function getReplacement(token: string, userId: string | undefined) 
       ])
     : [0, 0, []];
   const reservedForOther = !!w.replacementUserId && w.replacementUserId !== userId;
-  const status: ReplacementStatus = !isOpen(w)
-    ? "CLOSED"
-    : w.status === "AWAITING_ORGANIZER" && w.replacementUserId === userId
-      ? "ACCEPTED"
-      : reservedForOther
-        ? "TAKEN"
-        : isMember > 0
-          ? "ALREADY_MEMBER"
-          : replacingAnother > 0
-            ? "REPLACING_ANOTHER"
-            : debts.length > 0
-              ? "IN_DEBT"
-              : "OPEN";
+  // R-WDR-09: once approved the slot is the replacement's, so their link leads into the group.
+  const status: ReplacementStatus =
+    w.status === "APPROVED" && !!userId && slot.userId === userId
+      ? "APPROVED"
+      : !isOpen(w)
+        ? "CLOSED"
+        : w.status === "AWAITING_ORGANIZER" && w.replacementUserId === userId
+          ? "ACCEPTED"
+          : reservedForOther
+            ? "TAKEN"
+            : isMember > 0
+              ? "ALREADY_MEMBER"
+              : replacingAnother > 0
+                ? "REPLACING_ANOTHER"
+                : debts.length > 0
+                  ? "IN_DEBT"
+                  : "OPEN";
 
   return {
     status,
@@ -260,7 +265,7 @@ export async function getReplacement(token: string, userId: string | undefined) 
     reaccept: status === "OPEN" && w.replacementUserId === userId && !!userId,
     group: publicSummary(group, group.slots.length),
     leaverName: slotName(slot),
-    record: userId ? await slotRecord(prisma, group, slot) : null,
+    record: userId && status !== "APPROVED" ? await slotRecord(prisma, group, slot) : null,
     terms: userId ? group.terms : null,
     debts: status === "IN_DEBT" ? debts : [],
     expiresAt: w.expiresAt?.toISOString() ?? null,
