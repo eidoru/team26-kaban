@@ -81,7 +81,7 @@ export function ActivityPage() {
           <h1 className={ui.pageTitle}>Activity</h1>
           <p className={`${ui.pageSubtitle} flex items-start gap-2`}>
             <Lock className="mt-1 h-4 w-4 shrink-0" aria-hidden />
-            Everything that happens here, visible to every member. Entries can&apos;t be changed or deleted.
+            Visible to every member. Entries can&apos;t be changed.
           </p>
         </div>
       )}

@@ -1,14 +1,6 @@
 import { useOutletContext } from "react-router-dom";
 import type { GroupDetail } from "../../api/client";
 
-/**
- * Only the cancelled lobby page gets a text label; a completed paluwagan shows a check seal by its
- * name in GroupShell, and while it's being set up or runs, the page itself shows the state.
- */
-export const STATE_LABELS: Partial<Record<GroupDetail["group"]["state"], string>> = {
-  CANCELLED: "Cancelled",
-};
-
 export interface GroupShellContext {
   detail: GroupDetail;
   /** The paluwagan has launched: its pages share the header and the view navigation. */

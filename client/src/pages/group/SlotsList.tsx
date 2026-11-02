@@ -36,10 +36,12 @@ export function SlotsList({
                 <span className="block truncate text-base font-bold text-ink-900">
                   {slot.name}
                 </span>
-                <span className="flex items-center gap-1 text-sm text-ink-500">
-                  {slot.claimLink && <Link2 className="h-3.5 w-3.5" aria-hidden />}
-                  {slotTag(slot)}
-                </span>
+                {slotTag(slot) && (
+                  <span className="flex items-center gap-1 text-sm text-ink-500">
+                    {slot.claimLink && <Link2 className="h-3.5 w-3.5" aria-hidden />}
+                    {slotTag(slot)}
+                  </span>
+                )}
               </span>
             </>
           );

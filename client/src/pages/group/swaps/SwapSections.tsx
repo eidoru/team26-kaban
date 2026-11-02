@@ -112,15 +112,8 @@ function SwapForm({
     >
       <div className="space-y-4">
         <TurnPair detail={detail} left={detail.viewer.slotId} right={slot.id} />
-        {blocker ? (
-          <p className={ui.warning}>{blocker}</p>
-        ) : (
-          <p className="text-sm text-ink-600">
-            {answerer} gets to say yes or no first.
-            {organizerDecides ? ` Then ${detail.group.organizerName} approves it. ` : " "}
-            Each round keeps its date, so your payout dates trade too.
-          </p>
-        )}
+        {/* The turns above show the trade; who answers it is on the button, and the rest on the done screen. */}
+        {blocker && <p className={ui.warning}>{blocker}</p>}
         {onManageSlot && detail.viewer.isOrganizer && slot.kind === "PLACEHOLDER" && (
           <button type="button" onClick={() => onManageSlot(slot)} className={`${ui.link} block`}>
             Claim link for {slot.name}

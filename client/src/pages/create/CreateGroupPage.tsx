@@ -20,10 +20,10 @@ import { draftErrors, emptyDraft, previewAmounts, STEP_FIELDS, toInput, type Set
 
 const STEPS = [
   { label: "Basics", title: "Name your paluwagan", subtitle: "You can change these until it launches." },
-  { label: "Money", title: "How much goes in?", subtitle: "Set what each member pays, or the total pot." },
-  { label: "Schedule", title: "When are payouts?", subtitle: "One member gets the whole pot on each payout date." },
-  { label: "Shortfalls", title: "If someone pays short", subtitle: "Optional. Decide this now so everyone knows upfront." },
-  { label: "Review", title: "Check everything", subtitle: "Next, you'll invite members from the lobby." },
+  { label: "Money", title: "How much goes in?" },
+  { label: "Schedule", title: "When are payouts?" },
+  { label: "Shortfalls", title: "If someone pays short", subtitle: "Optional." },
+  { label: "Review", title: "Check everything", subtitle: "Next, you'll invite members." },
 ];
 
 /** §4: a five-step wizard. Rules come from the shared domain code, so it says what the server says. */
@@ -103,7 +103,7 @@ export function CreateGroupPage() {
       </div>
       <Stepper steps={STEPS.map((s) => s.label)} current={step} />
       <h1 className={`${ui.pageTitle} mt-5`}>{STEPS[step].title}</h1>
-      <p className={ui.pageSubtitle}>{STEPS[step].subtitle}</p>
+      {STEPS[step].subtitle && <p className={ui.pageSubtitle}>{STEPS[step].subtitle}</p>}
 
       <form
         id="create-group-form"
@@ -176,7 +176,6 @@ function Review({ draft, onEdit }: { draft: SetupDraft; onEdit: (step: number) =
       <Sheet
         open={termsOpen}
         title="Member terms"
-        subtitle="Members agree to these before joining."
         onClose={() => setTermsOpen(false)}
       >
         <TermsText terms={STANDARD_TERMS} />

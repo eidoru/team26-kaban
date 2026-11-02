@@ -215,11 +215,6 @@ function PayoutForm({
                 />
               </label>
             )}
-            <p className={ui.helperText}>
-              {recipient?.kind === "PLACEHOLDER"
-                ? `${recipient.name} has no account, so this also counts as received.`
-                : `${recipient?.name} is asked to confirm they got it.`}
-            </p>
           </div>
         )}
         {payout.status === "HANDED_OVER" && !confirming && (
