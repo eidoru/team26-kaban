@@ -48,7 +48,15 @@ import { currentOrder } from "./slots";
 import { PaySheet, type PayMode } from "./active/PaySheet";
 import { PayoutSheet } from "./active/PayoutSheet";
 import { WhoPaidSheet } from "./active/WhoPaidSheet";
-import { debtReportable, owedBy, payoutsToActOnFor, reviewItems, standingOf, type ReviewItem } from "./active/period";
+import {
+  debtReportable,
+  owedBy,
+  paymentIdOf,
+  payoutsToActOnFor,
+  reviewItems,
+  standingOf,
+  type ReviewItem,
+} from "./active/period";
 import { MyPayments, PayoutStageCard, PeriodCard, PeriodStatusList } from "./active/PeriodSections";
 import { DebtsView } from "./debts/DebtSections";
 import { DisputeSheet } from "./active/DisputeSheet";
@@ -804,7 +812,7 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
           <DebtsView
             detail={detail}
             onPay={(slot) => pay(slot.id, "DEBT_PAYMENT")}
-            onReview={(submission) => setReviewOpen(`payment-${submission.id}`)}
+            onReview={(submission) => setReviewOpen(`payment-${paymentIdOf(detail, submission)}`)}
           />
         </>
       ) : (

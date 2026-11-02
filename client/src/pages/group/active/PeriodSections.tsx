@@ -1,6 +1,6 @@
 import { Check, ChevronRight, Clock, ImageOff, Paperclip } from "lucide-react";
 import type { DisputeView, GroupDetail, GroupStats, PayoutView, PeriodSlot, SlotView, SubmissionView } from "../../../api/client";
-import { roundsLabel } from "@domain/submissions";
+import { paymentLabel, roundsLabel } from "@domain/submissions";
 import { Avatar } from "../../../components/Avatar";
 import { daysUntil, formatMonthDay } from "../../../lib/dates";
 import { formatPeso } from "../../../lib/money";
@@ -386,7 +386,7 @@ export function MyPayments({
                     {(s.parts.length > 1 || isAhead(detail, s)) && (
                       <span className="font-semibold text-ink-600">
                         {s.parts.length > 1
-                          ? ` for ${roundsLabel(s.parts.map((p) => p.round ?? 0))}`
+                          ? ` for ${paymentLabel(s.parts)}`
                           : ` ahead for round ${s.round}`}
                       </span>
                     )}

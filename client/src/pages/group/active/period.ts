@@ -10,11 +10,15 @@ function pendingPayments(detail: GroupDetail) {
 
 /**
  * A payment as the viewer sees it: a split payment's parts (R-DEC-33) taken together, under its
- * earliest round, with `amount` their total. `parts` is just the payment itself otherwise.
+ * earliest round (a debt part has none, R-DEC-42), with `amount` their total. `parts` is just the
+ * payment itself otherwise.
  */
 export type Payment = SubmissionView & { parts: SubmissionView[] };
 
-/** The parts of `payment`'s split payment, in round order; just `payment` when it isn't split (R-DEC-33). */
+/**
+ * The parts of `payment`'s split payment, in round order, a debt part first (R-DEC-42); just
+ * `payment` when it isn't split (R-DEC-33).
+ */
 export function partsOf(detail: GroupDetail, payment: SubmissionView) {
   if (!payment.batchId) return [payment];
   return detail.submissions
@@ -30,8 +34,18 @@ export function asPayments(detail: GroupDetail, rows: SubmissionView[]): Payment
     if (seen.has(s.batchId)) return [];
     seen.add(s.batchId);
     const parts = partsOf(detail, s).filter((p) => p.status === s.status);
-    return [{ ...parts[0], amount: parts.reduce((total, p) => total + p.amount, 0), parts }];
+    return [{ ...headOf(parts), amount: parts.reduce((total, p) => total + p.amount, 0), parts }];
   });
+}
+
+/** The part a split payment is listed under: its earliest round, not its debt part (R-DEC-42). */
+function headOf(parts: SubmissionView[]) {
+  return parts.find((p) => p.round != null) ?? parts[0];
+}
+
+/** The id a payment is reviewed under, for any of its parts (R-DEC-33, R-DEC-42). */
+export function paymentIdOf(detail: GroupDetail, submission: SubmissionView) {
+  return headOf(partsOf(detail, submission).filter((p) => p.status === submission.status)).id;
 }
 
 /**
@@ -44,12 +58,14 @@ export function reviewQueue(detail: GroupDetail) {
 
 /**
  * R-SUB-05: a slot's pending payments for the same round and type as `payment`, oldest first. The
- * server reviews each such stack in order, so only its first can be decided.
+ * server reviews each such stack in order, so only its first can be decided. A split payment is in
+ * the stack of every part (R-DEC-33), so one that also pays debt waits for earlier debt payments too
+ * (R-DEC-42).
  */
 export function stackOf(detail: GroupDetail, payment: SubmissionView): Payment[] {
-  return reviewQueue(detail).filter(
-    (s) => s.slotId === payment.slotId && s.round === payment.round && s.type === payment.type,
-  );
+  const key = (p: SubmissionView) => `${p.round}:${p.type}`;
+  const keys = new Set(partsOf(detail, payment).map(key));
+  return reviewQueue(detail).filter((s) => s.slotId === payment.slotId && s.parts.some((p) => keys.has(key(p))));
 }
 
 /** The status of round `number` in the schedule, or null when there's no such round. */
@@ -116,14 +132,14 @@ export function debtReportable(detail: GroupDetail, slotId: string) {
 }
 
 /**
- * R-DEC-31 / R-DEC-33: the rounds a contribution for `slotId` would fill now, in order, as the
- * server works it out: what's left of the open round, then later rounds once the debt is covered.
- * `cap` is the most it can be; `ahead` the part of that beyond the open round; `blockedByDebt` says
- * paying ahead would be possible but for the debt.
+ * R-DEC-31 / R-DEC-33 / R-DEC-42: what a contribution for `slotId` would fill now, in order, as the
+ * server works it out: the debt, then what's left of the open round; without debt, the open round,
+ * then later rounds. `cap` is the most it can be; `debtRoom` the part of that for the debt; `ahead`
+ * the part beyond the open round; `blockedByDebt` says paying ahead would be possible but for the debt.
  */
 export function payRooms(detail: GroupDetail, slotId: string) {
   const open = detail.period;
-  const none = { rooms: [], openRoom: 0, cap: 0, ahead: 0, blockedByDebt: false };
+  const none = { rooms: [], openRoom: 0, debtRoom: 0, cap: 0, ahead: 0, blockedByDebt: false };
   if (!open || detail.group.state !== "ACTIVE") return none;
   const openRoom = standingOf(detail, slotId)?.reportable ?? 0;
   const upcoming = detail.schedule
@@ -133,7 +149,7 @@ export function payRooms(detail: GroupDetail, slotId: string) {
   const rooms = contributionRooms({ open: { round: open.number, room: openRoom }, upcoming, debtLeft });
   const cap = rooms.reduce((total, r) => total + r.room, 0);
   const blockedByDebt = debtLeft > 0 && upcoming.some((r) => r.room > 0);
-  return { rooms, openRoom, cap, ahead: cap - openRoom, blockedByDebt };
+  return { rooms, openRoom, debtRoom: debtLeft, cap, ahead: cap - openRoom - debtLeft, blockedByDebt };
 }
 
 /** Payouts this viewer has to act on, oldest first: hand over (organizer), or confirm receipt (recipient). */

@@ -16,28 +16,33 @@ export function submissionCap(due: Centavos, approved: Centavos, pending: Centav
 
 /** The room a round still has for a slot's contributions (R-DEC-29). */
 export type RoundRoom = { round: number; room: Centavos };
+/** Room a contribution may fill: a round, or the slot's debt when `round` is null (R-DEC-42). */
+export type PayRoom = { round: number | null; room: Centavos };
 
 /**
- * R-DEC-31 / R-DEC-33: the rounds a contribution may fill, in the order it fills them: what's left
- * of the open round, then every later round (paying ahead, no limit: R-DEC-36) once the slot's
- * debt is covered.
+ * R-DEC-31 / R-DEC-33 / R-DEC-42: what a contribution may fill, in the order it fills it. With debt
+ * left, the debt first, then what's left of the open round, and nothing later. Without debt, the
+ * open round, then every later round (paying ahead, no limit: R-DEC-36).
  */
 export function contributionRooms(input: {
   open: RoundRoom;
   upcoming: RoundRoom[];
   debtLeft: Centavos;
-}): RoundRoom[] {
-  const rooms = input.open.room > 0 ? [input.open] : [];
-  if (input.debtLeft > 0) return rooms;
+}): PayRoom[] {
+  const rooms: PayRoom[] = input.open.room > 0 ? [input.open] : [];
+  if (input.debtLeft > 0) return [{ round: null, room: input.debtLeft }, ...rooms];
   const ahead = [...input.upcoming]
     .sort((a, b) => a.round - b.round)
     .filter((r) => r.room > 0 && r.round > input.open.round);
   return [...rooms, ...ahead];
 }
 
-/** R-DEC-33: one payment split over `rooms` in order, each round taking what it has room for. */
-export function splitContribution(amount: Centavos, rooms: RoundRoom[]): { round: number; amount: Centavos }[] {
-  const parts: { round: number; amount: Centavos }[] = [];
+/**
+ * R-DEC-33 / R-DEC-42: one payment split over `rooms` in order, each taking what it has room for.
+ * A part with a null round goes to the debt.
+ */
+export function splitContribution(amount: Centavos, rooms: PayRoom[]): { round: number | null; amount: Centavos }[] {
+  const parts: { round: number | null; amount: Centavos }[] = [];
   let left = amount;
   for (const { round, room } of rooms) {
     if (left <= 0) break;
@@ -56,8 +61,19 @@ export function roundsLabel(rounds: number[]): string {
 }
 
 /**
+ * What a payment's parts went to: "round 3", "the debt" or "the debt and round 3" (R-DEC-42). A
+ * part with a null round is the debt part.
+ */
+export function paymentLabel(parts: { round: number | null }[]): string {
+  const rounds = parts.flatMap((p) => (p.round == null ? [] : [p.round]));
+  const debt = parts.some((p) => p.round == null) ? "the debt" : "";
+  return [debt, roundsLabel(rounds)].filter(Boolean).join(" and ");
+}
+
+/**
  * R-SUB-06 / R-DEC-31: why a contribution of `amount` can't be sent, or null. `cap` is the room in
- * every round it may fill; `blockedByDebt` says paying ahead would be possible but for the debt.
+ * everything it may fill, the debt included (R-DEC-42); `blockedByDebt` says paying ahead would be
+ * possible but for the debt.
  */
 export function contributionAmountError(amount: Centavos, cap: Centavos, blockedByDebt: boolean): string | null {
   const error = submissionAmountError(amount, cap);

@@ -1,6 +1,6 @@
 import type { DebtEntryKind } from "@prisma/client";
 import { formatPeso } from "../domain/money.js";
-import { roundsLabel } from "../domain/submissions.js";
+import { paymentLabel } from "../domain/submissions.js";
 import { prisma } from "../lib/prisma.js";
 import { slotName } from "./common.js";
 import { handoversOf } from "./withdrawals.js";
@@ -145,13 +145,14 @@ export async function recordEvents(groupId: string, slotId?: string): Promise<Re
     };
   };
 
-  // R-DEC-33: the parts of one payment split across rounds, so each part can say what it belongs to.
-  const batches = new Map<string, { amount: number; rounds: number[] }>();
+  // R-DEC-33: the parts of one payment split across rounds, so each part can say what it belongs to;
+  // a debt part has no round (R-DEC-42).
+  const batches = new Map<string, { amount: number; parts: { round: number | null }[] }>();
   for (const s of submissions) {
     if (!s.batchId) continue;
-    const batch = batches.get(s.batchId) ?? { amount: 0, rounds: [] };
+    const batch = batches.get(s.batchId) ?? { amount: 0, parts: [] };
     batch.amount += Number(s.amount);
-    if (s.round) batch.rounds.push(s.round.number);
+    batch.parts.push({ round: s.round?.number ?? null });
     batches.set(s.batchId, batch);
   }
 
@@ -173,7 +174,7 @@ export async function recordEvents(groupId: string, slotId?: string): Promise<Re
           s.proofPath ? "Proof attached" : "No proof attached",
           s.selfApproved && "Self-approved",
           late && "Counted toward debt (period had closed)",
-          batch && `Part of one ${formatPeso(batch.amount)} payment for ${roundsLabel(batch.rounds)}`,
+          batch && `Part of one ${formatPeso(batch.amount)} payment for ${paymentLabel(batch.parts)}`,
           effective !== null && `Corrected to ${formatPeso(effective)}`,
           s.status === "DENIED" && s.denialReason && `Reason: ${s.denialReason}`,
           s.note && `Note: ${s.note}`,
