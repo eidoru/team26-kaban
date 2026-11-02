@@ -45,7 +45,7 @@ export function RateMembersSheet({
   if (saved) {
     return (
       <SheetDone title="Ratings saved" onClose={onClose}>
-        Each member&apos;s profile shows their average. You can change your ratings any time.
+        You can change them any time.
       </SheetDone>
     );
   }
@@ -70,7 +70,6 @@ export function RateMembersSheet({
       open
       onClose={onClose}
       title="Rate your members"
-      subtitle="1 to 5 stars each, for how they did as members."
       footer={
         <div className="space-y-2">
           {problem && <p className="text-center text-xs text-ink-500">{problem}</p>}
@@ -126,7 +125,7 @@ export function RateOrganizerSheet({
   if (saved) {
     return (
       <SheetDone title="Rating saved" onClose={onClose}>
-        {organizerName}&apos;s profile shows the average. You can change it any time.
+        You can change it any time.
       </SheetDone>
     );
   }
@@ -135,7 +134,6 @@ export function RateOrganizerSheet({
       open
       onClose={onClose}
       title={`Rate ${organizerName}`}
-      subtitle="1 to 5 stars, for how they ran this paluwagan."
       footer={
         <button
           type="button"

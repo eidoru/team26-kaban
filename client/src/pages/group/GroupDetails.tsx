@@ -21,17 +21,14 @@ import { formatDueDate } from "../../lib/dates";
 import { formatPeso, formatRate } from "../../lib/money";
 import { ui } from "../../lib/ui";
 
-export function PageLink({ to, icon: Icon, title, note }: { to: string; icon: LucideIcon; title: string; note: string }) {
+export function PageLink({ to, icon: Icon, title }: { to: string; icon: LucideIcon; title: string }) {
   return (
     <Link
       to={to}
       className="mt-3 flex min-h-14 items-center gap-3 rounded-3xl border border-ink-200 bg-white px-5 py-3 transition-colors hover:border-brand-300"
     >
       <Icon className="h-5 w-5 shrink-0 text-ink-500" aria-hidden />
-      <span className="min-w-0 flex-1">
-        <span className="block text-sm font-bold text-ink-900">{title}</span>
-        <span className="block text-xs text-ink-500">{note}</span>
-      </span>
+      <span className="min-w-0 flex-1 text-sm font-bold text-ink-900">{title}</span>
       <ChevronRight className="h-4 w-4 shrink-0 text-ink-400" aria-hidden />
     </Link>
   );
@@ -120,22 +117,12 @@ export function GroupDetails({
           </dd>
         </div>
       </dl>
-      <Sheet
-        open={termsOpen}
-        title="Terms"
-        subtitle="Members agree to these before joining."
-        onClose={() => setTermsOpen(false)}
-      >
+      <Sheet open={termsOpen} title="Terms" onClose={() => setTermsOpen(false)}>
         <TermsText terms={group.terms} />
       </Sheet>
       {/* Before launch there's no view navigation, so Activity is linked from here. */}
       {links && (
-        <PageLink
-          to={`/groups/${group.id}/activity`}
-          icon={History}
-          title="Activity"
-          note="Everything that happens here, visible to every member"
-        />
+        <PageLink to={`/groups/${group.id}/activity`} icon={History} title="Activity" />
       )}
     </section>
   );

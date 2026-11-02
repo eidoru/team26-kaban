@@ -103,11 +103,6 @@ export function ClaimPage() {
               </p>
             </div>
           </div>
-          <p className="mt-3 text-xs text-ink-600">
-            {group.state === "LOBBY" || group.state === "LAUNCHED"
-              ? "No payments have been recorded for this slot yet."
-              : "Payments recorded for this slot will show here."}
-          </p>
         </section>
 
         {data.status === "CLAIMED" ? (

@@ -47,7 +47,8 @@ export interface Todo {
 export function TodoPanel({ todos }: { todos: Todo[] }) {
   return (
     <section aria-labelledby="todo-heading" className="animate-rise rounded-3xl border-2 border-brand-200 bg-brand-50 p-2 sm:p-3">
-      <h2 id="todo-heading" className="px-3 pb-2 pt-2 text-xs font-bold uppercase tracking-wide text-brand-700">
+      {/* The panel and its buttons say what it is; the heading is for screen readers. */}
+      <h2 id="todo-heading" className="sr-only">
         To do
       </h2>
       <ol className="space-y-2">

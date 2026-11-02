@@ -21,7 +21,7 @@ export function WhoPaidSheet({
   onPick: (slot: SlotView) => void;
 }) {
   return (
-    <Sheet open={open} onClose={onClose} title="Who paid you?" subtitle="Placeholders pay you outside the app.">
+    <Sheet open={open} onClose={onClose} title="Who paid you?">
       <ul className="divide-y divide-ink-100 overflow-hidden rounded-3xl border border-ink-200 bg-white">
         {rows.map(({ slot, owes }) => (
           <li key={slot.id}>

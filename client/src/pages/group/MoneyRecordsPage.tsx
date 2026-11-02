@@ -41,7 +41,7 @@ export function MoneyRecordsPage() {
         </>
       )}
       <RecordsSection detail={detail} />
-      <PageLink to={`/groups/${id}/history`} icon={ReceiptText} title="Your history" note="Every payment, debt change and payout for your slot" />
+      <PageLink to={`/groups/${id}/history`} icon={ReceiptText} title="Your history" />
     </div>
   );
 }

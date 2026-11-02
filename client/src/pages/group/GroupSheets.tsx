@@ -79,7 +79,7 @@ export function PlaceholderSheet({
         onClose={close}
         another={full ? undefined : { label: "Add another", onClick: () => setAdded(null) }}
       >
-        {added} is in the list. You record their payments, and you can send them a claim link anytime.
+        You record their payments until they claim the slot.
       </SheetDone>
     );
   }
@@ -92,13 +92,11 @@ export function PlaceholderSheet({
           void add();
         }}
       >
-        <p className="text-sm text-ink-500">
-          For someone without an account. You record their payments, and they can claim the slot later.
-        </p>
+        <p className="text-sm text-ink-500">For someone without an account.</p>
         <Field label="Name" error={nameError} hasValue={name !== ""}>
           {(props) => <input {...props} value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" />}
         </Field>
-        <Field label="Contact (optional)" error={contactError} hasValue={contact !== ""} helper="Phone or Messenger, for your reference.">
+        <Field label="Contact (optional)" error={contactError} hasValue={contact !== ""} helper="Phone or Messenger.">
           {(props) => <input {...props} value={contact} onChange={(e) => setContact(e.target.value)} autoComplete="off" />}
         </Field>
         <button type="submit" disabled={!!nameError || !!contactError || pending === "placeholder"} className={ui.btnPrimaryFull}>
@@ -137,7 +135,7 @@ export function SlotSheet({
       open
       onClose={onClose}
       title={slot.name}
-      subtitle={isPlaceholder ? (slot.contact ?? "Placeholder") : "Member"}
+      subtitle={isPlaceholder ? (slot.contact ?? "Placeholder") : undefined}
     >
       <div className="space-y-6">
         {slot.userId && (
@@ -174,12 +172,6 @@ export function SlotSheet({
             >
               {isPlaceholder ? "Remove placeholder" : `Remove ${slot.name}`}
             </button>
-            <p className="mt-2 text-center text-xs text-ink-500">
-              {isPlaceholder
-                ? "The slot opens up again."
-                : "Their slot opens up again. They can rejoin with the invite link."}
-              {slot.position != null && " The payout order resets."}
-            </p>
           </section>
         )}
       </div>

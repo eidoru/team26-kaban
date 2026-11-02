@@ -141,7 +141,8 @@ export function HomePage() {
 
   return (
     <div className="space-y-8">
-      <h1 className={ui.pageTitle}>Home</h1>
+      {/* The main nav names the page. */}
+      <h1 className="sr-only">Home</h1>
 
       {waiting.length > 0 && (
         <section aria-labelledby="waiting-heading" className="rounded-3xl border-2 border-sun-200 bg-sun-50 p-5">

@@ -39,13 +39,11 @@ export function HistoryPage() {
         </Link>
         {data?.tookOver ? (
           <p className="mt-4 rounded-2xl bg-sky-50 px-4 py-3 text-sm text-sky-900">
-            You took this slot over from {data.tookOver.from} on {new Date(data.tookOver.at).toLocaleDateString()}. Earlier
-            records came with it and are marked inherited.
+            You took this slot over from {data.tookOver.from} on {new Date(data.tookOver.at).toLocaleDateString()}.
           </p>
         ) : data?.claimedAt && (
           <p className="mt-4 rounded-2xl bg-sky-50 px-4 py-3 text-sm text-sky-900">
-            You claimed this slot on {new Date(data.claimedAt).toLocaleDateString()}. Earlier records came with it and are marked
-            inherited.
+            You claimed this slot on {new Date(data.claimedAt).toLocaleDateString()}.
           </p>
         )}
       </div>
