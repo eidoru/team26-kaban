@@ -1,4 +1,4 @@
-import { Check, ChevronRight, Clock, ImageOff, Paperclip } from "lucide-react";
+import { Check, ChevronRight, Clock, ImageOff } from "lucide-react";
 import type { DisputeView, GroupDetail, GroupStats, PayoutView, PeriodSlot, SlotView, SubmissionView } from "../../../api/client";
 import { paymentLabel, roundsLabel } from "@domain/submissions";
 import { Avatar } from "../../../components/Avatar";
@@ -395,11 +395,13 @@ export function MyPayments({
                     {s.status === "PENDING" && <Clock className="h-3 w-3" aria-hidden />}
                     {label.text}
                   </span>
-                  <span className="mt-0.5 flex items-center gap-1 text-xs text-ink-500">
-                    {s.proofAttached ? <Paperclip className="h-3 w-3" aria-hidden /> : <ImageOff className="h-3 w-3" aria-hidden />}
-                    {s.proofAttached ? "Proof attached" : "No proof"}
-                    {s.note && ` · ${s.note}`}
-                  </span>
+                  {/* Proof is the norm (R-DEC-37), so only its absence is worth a line. */}
+                  {(!s.proofAttached || s.note) && (
+                    <span className="mt-0.5 flex items-center gap-1 text-xs text-ink-500">
+                      {!s.proofAttached && <ImageOff className="h-3 w-3" aria-hidden />}
+                      {[!s.proofAttached && "No proof", s.note].filter(Boolean).join(" · ")}
+                    </span>
+                  )}
                 </span>
                 {s.status === "PENDING" && (
                   <button

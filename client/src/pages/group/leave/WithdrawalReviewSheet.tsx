@@ -56,7 +56,7 @@ function ReviewBody({
     turn && { label: "Payout turn", value: `Round ${turn.number} · ${formatDueDate(turn.payoutDate)}` },
     request.contributed != null && { label: "Contributed so far", value: formatPeso(request.contributed) },
     request.leftAhead > 0 && { label: "Paid ahead, left to the replacement", value: formatPeso(request.leftAhead) },
-    { label: "Debt that goes with the slot", value: formatPeso(debt), danger: debt > 0 },
+    debt > 0 && { label: "Debt that goes with the slot", value: formatPeso(debt), danger: true },
   ];
 
   return (
@@ -64,7 +64,6 @@ function ReviewBody({
       open
       onClose={onClose}
       title={`${request.leaverName} wants to leave`}
-      subtitle={request.replacement ? `${request.replacement.name} takes over` : undefined}
       footer={
         <div className="flex gap-2">
           <button type="button" onClick={() => onReject(request)} disabled={busy} className={`${ui.btnSecondary} min-h-11 flex-1`}>
@@ -100,7 +99,7 @@ function ReviewBody({
             <div className="min-w-0">
               <p className="truncate text-sm font-bold text-ink-900">{request.replacement.name}</p>
               {request.replacement.email && <p className="truncate text-xs text-ink-600">{request.replacement.email}</p>}
-              <p className="text-xs text-ink-600">Agreed to the terms and to everything above.</p>
+              <p className="text-xs text-ink-600">Takes over · agreed to the terms and everything above</p>
             </div>
           </div>
         )}
@@ -115,9 +114,6 @@ function ReviewBody({
             <StarInput value={stars} onChange={setStars} label={`Rate ${request.leaverName} as a member`} disabled={busy} />
           </div>
         )}
-        <p className="text-xs text-ink-500">
-          Approving hands the slot over at once: {request.leaverName} leaves, and their turn, history and debt stay with the slot.
-        </p>
         {error && (
           <p className={ui.error} role="alert">
             {error}

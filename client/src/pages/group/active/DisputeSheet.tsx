@@ -140,14 +140,11 @@ function DisputeForm({
           void submit();
         }}
       >
-        <p className="text-sm text-ink-600">
-          {detail.group.organizerName} decides {payout}. If not, {formatPeso(current)} stands.
-        </p>
         {!forLeaving && <AmountField label="Correct amount" value={amountText} onChange={setAmountText} error={amountError} />}
         {refund > 0 && !amountError && (
           <p className="rounded-2xl bg-sun-50 px-4 py-3 text-sm text-sun-900">
             If approved, {detail.group.organizerName} owes you a <b>{formatPeso(refund)}</b> refund, and you&apos;ll be{" "}
-            {formatPeso(refund)} short for {forRound} unless you pay it again.
+            {formatPeso(refund)} short for {forRound}.
           </p>
         )}
         <div>

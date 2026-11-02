@@ -86,12 +86,9 @@ export function RecordsSection({ detail }: { detail: GroupDetail }) {
     }
   }
 
-  const row = (title: string, detailText: string, kind: ExportKind, slotId?: string) => (
-    <li className="flex flex-wrap items-center gap-3 px-4 py-3">
-      <span className="min-w-0 flex-1">
-        <span className="block text-sm font-bold text-ink-900">{title}</span>
-        <span className="block text-xs text-ink-500">{detailText}</span>
-      </span>
+  const row = (title: string, kind: ExportKind, slotId?: string) => (
+    <li className="flex min-h-16 flex-wrap items-center gap-3 px-4 py-3">
+      <span className="min-w-0 flex-1 text-sm font-bold text-ink-900">{title}</span>
       <span className="flex gap-2">
         {(["pdf", "csv"] as const).map((format) => (
           <button
@@ -140,12 +137,11 @@ export function RecordsSection({ detail }: { detail: GroupDetail }) {
         ) : null}
         {row(
           statementFor === viewer.slotId ? "Your statement" : `${detail.slots.find((s) => s.id === statementFor)?.name}'s statement`,
-          "Payments, debts and payouts for one slot",
           "statement",
           statementFor === viewer.slotId ? undefined : statementFor,
         )}
-        {viewer.isOrganizer && row("Full ledger", "Every member and every round", "ledger")}
-        {row(complete ? "Completion summary" : "Summary so far", "Each member's totals", "summary")}
+        {viewer.isOrganizer && row("Full ledger", "ledger")}
+        {row(complete ? "Completion summary" : "Summary so far", "summary")}
       </ul>
       {error && (
         <p className={`${ui.error} mt-2`} role="alert">

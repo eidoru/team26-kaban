@@ -58,7 +58,6 @@ export function DebtsView({
       <div className={`${ui.emptyState} flex flex-col items-center`}>
         <CircleCheck className="h-8 w-8 text-brand-600" aria-hidden />
         <p className="font-heading mt-3 text-lg font-bold text-ink-900">Nobody owes anything</p>
-        <p className={`mt-1 text-sm ${ui.muted}`}>Shortfalls the organizer covers at a payout show up here.</p>
       </div>
     );
   }
@@ -93,8 +92,7 @@ export function DebtsView({
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-bold text-ink-900">You owe {slot?.name} a refund</span>
                   <span className="block text-xs text-ink-500">
-                    Round {d.round}: {formatPeso(d.previousAmount)} corrected to {formatPeso(d.proposedAmount)}. Hand it back
-                    outside the app.
+                    Round {d.round}: {formatPeso(d.previousAmount)} corrected to {formatPeso(d.proposedAmount)}
                   </span>
                 </span>
                 <span className="shrink-0 text-sm font-bold tabular-nums text-ink-900">{formatPeso(d.refund!)}</span>

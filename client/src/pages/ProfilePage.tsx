@@ -223,7 +223,8 @@ export function ProfilePage() {
 
   return (
     <div className={`${ui.page} space-y-8`}>
-      <h1 className={ui.pageTitle}>Profile</h1>
+      {/* The main nav names the page; the card below starts with the viewer's name. */}
+      <h1 className="sr-only">Profile</h1>
 
       <div className="overflow-hidden rounded-3xl border border-ink-200 bg-white shadow-card">
         <div className="relative overflow-hidden bg-brand-700 p-6 text-white sm:p-8">
@@ -232,8 +233,6 @@ export function ProfilePage() {
             <Avatar name={user?.displayName} size="lg" className="ring-4 ring-white/30" />
             <div className="min-w-0">
               <p className="font-heading truncate text-2xl font-bold">{user?.displayName}</p>
-              <p className="truncate text-sm text-brand-50">{user?.email}</p>
-              <p className="mt-0.5 truncate text-sm text-brand-100">{user?.contact || "No contact added"}</p>
             </div>
           </div>
         </div>

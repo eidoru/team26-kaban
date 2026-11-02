@@ -69,7 +69,7 @@ import { ReviewSheet } from "./active/ReviewSheet";
 import { WithdrawalReviewSheet } from "./leave/WithdrawalReviewSheet";
 import { RateMembersSheet, RateOrganizerSheet, YourRatingsCard } from "./ratings/RatingSheets";
 import { MembersList, SlotsList } from "./SlotsList";
-import { STATE_LABELS, useGroupShell } from "./groupShell";
+import { useGroupShell } from "./groupShell";
 
 /** The views of a launched paluwagan, one per GroupShell tab that GroupPage renders. */
 export type GroupViewName = "dashboard" | "schedule" | "members" | "debts";
@@ -140,10 +140,11 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
   async function removeSlot(slot: SlotView) {
     const confirmed = await dialog.confirm({
       title: slot.kind === "PLACEHOLDER" ? `Remove ${slot.name}?` : `Remove ${slot.name} from ${group.name}?`,
-      description:
+      description: `${
         slot.kind === "PLACEHOLDER"
           ? "Their slot opens up again, and any claim link stops working."
-          : "They lose access, and their slot opens up again. They can rejoin with the invite link.",
+          : "They lose access, and their slot opens up again. They can rejoin with the invite link."
+      }${slot.position != null ? " The payout order resets." : ""}`,
       confirmLabel: "Remove",
       variant: "danger",
     });
@@ -348,8 +349,8 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
                   : "Share your replacement link",
             detail:
               myLeave.status === "AWAITING_ORGANIZER"
-                ? `${myLeave.replacement?.name} agreed to take your slot. Keep paying until it's approved.`
-                : "Someone takes over your slot once they accept and it's approved.",
+                ? "Keep paying until it's approved."
+                : undefined,
             action: { label: "Open", onClick: () => navigate(`/groups/${group.id}/leave`) },
             // Only sharing the link is the viewer's move; the others are waiting.
             inBar: myLeave.status === "AWAITING_REPLACEMENT" && !myLeave.replacement,
@@ -370,9 +371,7 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
         <NowPanel
           tone="brand"
           icon={Users}
-          eyebrow="Next step"
           title={`Fill ${detail.openSlots} open slot${detail.openSlots === 1 ? "" : "s"}`}
-          body="Share the invite link, or add a placeholder for someone without an account."
         >
           <InviteLinkPanel
             detail={detail}
@@ -387,15 +386,8 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
         </button>
       );
     } else if (!ordered) {
-      now = (
-        <NowPanel
-          tone="brand"
-          icon={Shuffle}
-          eyebrow="Next step"
-          title="Set the payout order"
-          body="Everyone's in. Shuffle for a random order, or arrange it yourself."
-        />
-      );
+      // The schedule below has Shuffle and Arrange; the panel only names the step.
+      now = <NowPanel tone="brand" icon={Shuffle} title="Set the payout order" />;
       primary = (
         <button type="button" onClick={() => void run("shuffle", () => api.shuffleOrder(group.id))} disabled={pending === "shuffle"} className={ui.btnPrimary}>
           <Shuffle className="h-4 w-4" aria-hidden />
@@ -403,7 +395,7 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
         </button>
       );
     } else if (blockers.length > 0) {
-      now = <NowPanel tone="danger" icon={CalendarClock} eyebrow="Before you launch" title="Move the start date" body={blockers.join(" ")} />;
+      now = <NowPanel tone="danger" icon={CalendarClock} title="Move the start date" body={blockers.join(" ")} />;
       primary = (
         <Link to={`/groups/${group.id}/edit`} className={ui.btnPrimary}>
           Edit details
@@ -414,9 +406,8 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
         <NowPanel
           tone="brand"
           icon={Rocket}
-          eyebrow="Next step"
           title="Ready to launch"
-          body="Check who gets paid when. You can shuffle or arrange it until you launch; launching makes the order and settings final."
+          body="Check the order below. Launching makes it and the settings final."
         />
       );
       primary = (
@@ -427,18 +418,9 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
       );
     }
   } else if (group.state === "LOBBY") {
+    // The member list below shows how many slots are still open.
     now = (
-      <NowPanel
-        tone="calm"
-        icon={Hourglass}
-        eyebrow="Waiting"
-        title={full ? "Waiting for the organizer to launch" : "Waiting for everyone to join"}
-        body={
-          full
-            ? "Every slot is filled. You'll get a notification when it launches."
-            : `${detail.slots.length} of ${group.slotCount} slots are filled. You'll get a notification when it launches.`
-        }
-      />
+      <NowPanel tone="calm" icon={Hourglass} title={full ? "Waiting for the organizer to launch" : "Waiting for everyone to join"} />
     );
   } else if (group.state === "LAUNCHED") {
     const startsPanel = (
@@ -510,10 +492,7 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
         icon: ClipboardCheck,
         tone: "brand",
         title: `Review ${parts.join(" and ")}`,
-        detail:
-          disputes > 0
-            ? "Problem reports first: they expire at the payout if you don't decide."
-            : "Oldest first. They count once you approve them.",
+        detail: disputes > 0 ? "Problem reports expire at the payout." : undefined,
         action: { label: "Review", onClick: () => setReviewOpen(true) },
       });
     }
@@ -532,15 +511,11 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
           : ownPayout
             ? `Take your ${formatPeso(payout.net)} payout`
             : `Hand ${formatPeso(payout.net)} to ${recipient?.name}`,
-        detail: `From round ${payout.round}. ${
-          confirming
-            ? "Confirm once it's in your hands, so everyone sees it was paid."
-            : ownPayout
-              ? "You're holding the collected pot; mark it received."
-              : payout.net < payout.gross
-                ? `The ${formatPeso(payout.gross)} pot, less what ${recipient?.name} owed.`
-                : `The full ${formatPeso(payout.gross)} pot.`
-        }`,
+        // Only a reduced payout needs explaining; the sheet has the breakdown.
+        detail:
+          !confirming && !ownPayout && payout.net < payout.gross
+            ? `From round ${payout.round}: the ${formatPeso(payout.gross)} pot, less what ${recipient?.name} owed.`
+            : `From round ${payout.round}.`,
         action: {
           label: confirming ? "Confirm" : ownPayout ? "Mark received" : "Hand over",
           onClick: () => setPayoutRound(payout.round),
@@ -580,7 +555,6 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
             toRecord.length === 1
               ? `Record ${first.slot.name}'s ${formatPeso(first.owes)}`
               : `Record payments for ${listed}`,
-          detail: `${toRecord.length === 1 ? "A placeholder" : "Placeholders"}: record once they've paid you.`,
           action: {
             label: "Record",
             onClick: () => (toRecord.length === 1 ? pay(first.slot.id, "CONTRIBUTION") : setPickingRecord(true)),
@@ -601,7 +575,7 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
           icon: BellRing,
           tone: "calm",
           title: `Remind ${remindable.length === 1 ? names : `${remindable.length} members`} to pay`,
-          detail: `${due} Not paid yet: ${names}.`,
+          detail: [due.replace(/\.$/, ""), remindable.length > 1 && names].filter(Boolean).join(" · "),
           action: { label: "Remind", onClick: () => void remindAll(remindable.map((s) => s.slotId)), disabled: pending?.startsWith("remind-") },
         });
       }
@@ -623,7 +597,7 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
         detail:
           as === "target"
             ? `${turnLine(swap.targetSlotId)} for ${turnLine(swap.requesterSlotId)}.`
-            : "They both agreed. Approving changes the payout order.",
+            : "They both agreed.",
         secondary: {
           label: as === "target" ? "Decline" : "Deny",
           onClick: () => (as === "target" ? swapAction(swap, () => api.declineSwap(group.id, swap.id)) : void denySwap(swap)),
@@ -645,10 +619,7 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
         icon: TriangleAlert,
         tone: "danger",
         title: `Pay toward your ${formatPeso(owed)} debt`,
-        detail:
-          group.interestRate > 0 && group.state === "ACTIVE"
-            ? `Owed to ${group.organizerName}. Interest grows at each payout until it's paid.`
-            : `Shortfalls ${group.organizerName} covered for you.`,
+        detail: group.interestRate > 0 && group.state === "ACTIVE" ? "Interest grows at each payout." : undefined,
         action: { label: "Pay", onClick: () => pay(viewer.slotId, "DEBT_PAYMENT") },
       });
     }
@@ -660,7 +631,6 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
         icon: Star,
         tone: "brand",
         title: "Rate your members",
-        detail: "1 to 5 stars each. Their profiles show the average.",
         action: { label: "Rate", onClick: () => setRatingOpen(true) },
       });
     } else if (ratings?.kind === "organizer" && ratings.stars == null) {
@@ -669,7 +639,7 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
         icon: Star,
         tone: "calm",
         title: `Rate ${group.organizerName}`,
-        detail: "If you like: 1 to 5 stars for how they ran it.",
+        detail: "Optional.",
         action: { label: "Rate", onClick: () => setRatingOpen(true) },
       });
     }
@@ -682,9 +652,8 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
         <NowPanel
           tone="calm"
           icon={Hourglass}
-          eyebrow="This round"
           title="Waiting for review"
-          body={`Your ${formatPeso(mine.pending)} is with ${group.organizerName}. It counts once approved.`}
+          body={`Your ${formatPeso(mine.pending)} is with ${group.organizerName}.`}
         />
       );
     } else if (group.state === "ACTIVE" && period) {
@@ -693,7 +662,6 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
         <NowPanel
           tone="calm"
           icon={CircleCheck}
-          eyebrow="This round"
           title="You're paid up for this round"
           body={
             recipientIsMe
@@ -711,18 +679,14 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
           icon={CircleCheck}
           eyebrow="Every payout is done"
           title={isOrganizer ? `${owingSlots.length} still owe you` : "You're all settled"}
-          body={
-            isOrganizer
-              ? "Debt payments still come in for review. It's fully complete once they're paid."
-              : "Some members still owe the organizer, so the paluwagan stays open for their payments."
-          }
+          body={isOrganizer ? "It completes once they're paid." : undefined}
         />
       );
     } else {
-      now = <NowPanel tone="calm" icon={CircleCheck} eyebrow="Complete" title="Every payout is done, and nobody owes anything" />;
+      now = <NowPanel tone="calm" icon={CircleCheck} title="Every payout is done, and nobody owes anything" />;
     }
   } else if (group.state === "CANCELLED") {
-    now = <NowPanel tone="calm" icon={Ban} eyebrow="Cancelled" title="This paluwagan was cancelled" body="The organizer cancelled it before it launched." />;
+    now = <NowPanel tone="calm" icon={Ban} title="This paluwagan was cancelled" />;
   }
 
   const schedule = (
@@ -749,12 +713,8 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
         // Before launch (and once cancelled): one page, top to bottom.
         <>
           <header className="flex items-start gap-2">
-            <div className="min-w-0 flex-1">
-              {STATE_LABELS[group.state] && (
-                <p className="mb-1 text-xs font-bold uppercase tracking-wide text-ink-500">{STATE_LABELS[group.state]}</p>
-              )}
-              <h1 className={ui.pageTitle}>{group.name}</h1>
-            </div>
+            {/* A cancelled group says so in its Now panel, not in a label over the name. */}
+            <h1 className={`${ui.pageTitle} min-w-0 flex-1`}>{group.name}</h1>
             {isOrganizer && inLobby && (
               <GroupMenu
                 items={[{ label: "Cancel this paluwagan", icon: Ban, onSelect: () => void cancelGroup() }]}
@@ -901,7 +861,6 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
                 <h2 id="demo-heading" className="text-xs font-bold uppercase tracking-wide text-ink-500">
                   Demo tools
                 </h2>
-                <p className="mt-1 text-sm text-ink-600">Skip ahead without waiting for the calendar. Only you see this.</p>
                 <button
                   type="button"
                   onClick={() => void closeRoundNow()}

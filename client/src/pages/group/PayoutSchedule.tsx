@@ -152,7 +152,7 @@ export function PayoutSchedule({
                   // No turn yet: who's in, not who's paid when.
                   <>
                     <span className="block truncate text-base font-bold text-ink-500">{slot.name}</span>
-                    <span className="block truncate text-sm text-ink-500">{slotTag(slot)}</span>
+                    {slotTag(slot) && <span className="block truncate text-sm text-ink-500">{slotTag(slot)}</span>}
                   </>
                 ) : slot ? (
                   <>

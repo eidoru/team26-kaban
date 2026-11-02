@@ -49,9 +49,9 @@ export function NotificationsPage() {
 
   return (
     <div>
-      <div className="flex flex-wrap items-end justify-between gap-4">
+      <div className="flex flex-wrap items-end justify-end gap-4">
         {/* No count under the title: the nav badge has it, and unread alerts are bold in the list. */}
-        <h1 className={ui.pageTitle}>Alerts</h1>
+        <h1 className="sr-only">Alerts</h1>
         {(data?.unreadCount ?? 0) > 0 && (
           <button
             type="button"
@@ -79,9 +79,6 @@ export function NotificationsPage() {
             <BellOff className="h-7 w-7" />
           </span>
           <p className="font-heading mt-4 text-xl font-bold text-ink-900">Nothing new yet</p>
-          <p className={`mt-1 max-w-sm text-sm ${ui.muted}`}>
-            Payment confirmations, turn reminders and disputes from your groups will show up here.
-          </p>
         </div>
       )}
 

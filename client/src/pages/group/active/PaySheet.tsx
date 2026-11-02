@@ -15,7 +15,7 @@ import { SheetDone } from "../../../components/flow/SheetDone";
 import { formatPeso, parsePesoInput, pesoInputValue } from "../../../lib/money";
 import { proofFileError, uploadProof } from "../../../lib/proofUpload";
 import { ui } from "../../../lib/ui";
-import { debtReportable, owedBy, payRooms, standingOf } from "./period";
+import { debtReportable, owedBy, payRooms } from "./period";
 
 export type PayMode = "CONTRIBUTION" | "DEBT_PAYMENT";
 type PayInput = { slotId: string; type: PayMode; amount: number; proofPath: string; note?: string };
@@ -67,7 +67,6 @@ function PayForm({
   onSubmit: (input: PayInput) => Promise<boolean>;
 }) {
   const isDebt = mode === "DEBT_PAYMENT";
-  const open = isDebt ? null : standingOf(detail, slot.id)!;
   const openRound = detail.period?.number ?? null;
   const pay = isDebt ? null : payRooms(detail, slot.id);
   const cap = isDebt ? debtReportable(detail, slot.id) : pay!.cap;
@@ -180,32 +179,10 @@ function PayForm({
           void submit();
         }}
       >
-        {/* The one rule worth stating here: how a debt payment is applied (R-DBT). */}
+        {/* The one rule worth stating here: how a debt payment is applied (R-DBT). Paying ahead and paying the
+            debt first (R-DEC-31, R-DEC-42) show in the split under the amount. */}
         {isDebt && <p className="text-sm text-ink-600">Pays interest first, then the rest.</p>}
-        {/* R-DEC-42: a contribution while the slot owes pays the debt first. */}
-        {pay && pay.debtRoom > 0 && (
-          <p className="text-sm text-ink-600">
-            Pays the debt first, interest then the rest{pay.openRoom > 0 ? ", then this round" : ""}.
-          </p>
-        )}
-        {/* R-DEC-31: what paying ahead means for the member. */}
-        {pay && pay.ahead > 0 && (
-          <p className="text-sm text-ink-600">
-            {aheadOnly ? "It" : "Anything over this round"} goes to the next rounds in order, and counts toward each
-            when it opens.
-          </p>
-        )}
-        <AmountField
-          label="Amount paid"
-          value={amountText}
-          onChange={setAmountText}
-          error={amountError}
-          helper={
-            !aheadOnly && open && open.approved > 0
-              ? `${formatPeso(open.approved)} already approved this round.`
-              : undefined
-          }
-        />
+        <AmountField label="Amount paid" value={amountText} onChange={setAmountText} error={amountError} />
         {showSplit && (
           <ul aria-label="How it's split" className="divide-y divide-ink-100 rounded-2xl bg-ink-50 px-4 text-sm">
             {parts.map((p) => (

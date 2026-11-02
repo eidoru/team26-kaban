@@ -371,9 +371,11 @@ export function ReviewSheet({
                   placeholder={isDispute ? "e.g. The ₱2,000 matches my GCash." : "e.g. I didn't receive this in GCash."}
                   className={ui.input}
                 />
-                <p className={reasonError ? "mt-1.5 text-xs font-semibold text-danger-700" : ui.helperText}>
-                  {reasonError ?? `${slot?.isViewer ? "This" : `${slot?.name} sees this`} so they know why.`}
-                </p>
+                {(reasonError || !slot?.isViewer) && (
+                  <p className={reasonError ? "mt-1.5 text-xs font-semibold text-danger-700" : ui.helperText}>
+                    {reasonError ?? `${slot?.name} sees this.`}
+                  </p>
+                )}
               </div>
             )}
           </div>
