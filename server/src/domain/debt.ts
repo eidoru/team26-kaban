@@ -1,4 +1,4 @@
-import { interestOn, type Centavos, type RateBasisPoints } from "./money.js";
+import { formatPeso, interestOn, type Centavos, type RateBasisPoints } from "./money.js";
 
 /**
  * What one member owes the organizer (§8). Interest is simple: charges are only ever computed on
@@ -89,4 +89,23 @@ export function debtBreakdown(changes: DebtChange[]): DebtBreakdown {
     }
   }
   return { rounds: [...byRound.values()].sort((a, b) => a.round - b.round), repaid, deducted };
+}
+
+/** R-DEC-39: one paluwagan where a user's slot still owes the organizer. */
+export interface DebtOwed {
+  groupId: string;
+  groupName: string;
+  owed: Centavos;
+}
+
+/**
+ * R-DEC-39: why a user who still owes can't start, join or claim a slot in another paluwagan. Only
+ * approved repayments count; the block lifts by itself once every debt is ₱0.
+ */
+export function inDebtMessage(debts: DebtOwed[], action: "create" | "join"): string {
+  const total = debts.reduce((sum, d) => sum + d.owed, 0);
+  const where = debts.length === 1 ? `in ${debts[0].groupName}` : `across ${debts.length} paluwagans`;
+  const next = action === "create" ? "start a new paluwagan" : "join another paluwagan";
+  const them = debts.length === 1 ? "it" : "them";
+  return `You still owe ${formatPeso(total)} ${where}. Settle ${them} before you ${next}.`;
 }

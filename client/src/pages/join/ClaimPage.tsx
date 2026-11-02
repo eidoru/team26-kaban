@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, api } from "../../api/client";
 import { Avatar } from "../../components/Avatar";
+import { DebtBlock } from "../../components/DebtBlock";
 import { Spinner } from "../../components/Splash";
 import { TermsAgreement } from "../../components/Terms";
 import { useAuth } from "../../context/useAuth";
@@ -124,6 +125,8 @@ export function ClaimPage() {
               Open it
             </Link>
           </p>
+        ) : data.status === "IN_DEBT" ? (
+          <DebtBlock debts={data.debts} action="join" />
         ) : !user ? (
           <div className="space-y-2">
             <button type="button" onClick={() => goAuth("/login")} className={`${ui.btnPrimaryFull} min-h-11`}>

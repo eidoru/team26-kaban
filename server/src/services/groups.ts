@@ -22,6 +22,7 @@ import { aheadView, openPeriodView, visibleSubmissions } from "./submissions.js"
 import { visibleDisputes } from "./disputes.js";
 import { visibleSwaps } from "./swaps.js";
 import { proofViewUrls } from "../lib/storage.js";
+import { assertNoDebts } from "./debts.js";
 import { assertState, memberUserIds, resetOrder, settingsOf, slotName, withGroupLock, type Db } from "./common.js";
 
 /** A 400 that carries per-field messages, shown under each form field. */
@@ -71,6 +72,7 @@ export async function createGroup(userId: string, input: SetupInput) {
   const { data } = settingsData(input);
 
   return prisma.$transaction(async (tx) => {
+    await assertNoDebts(tx, userId, "create");
     await assertNameAvailable(tx, userId, input.name);
     const group = await tx.group.create({
       // R-DEC-38: the standard terms for now; the group keeps this copy.

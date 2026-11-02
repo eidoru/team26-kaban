@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { computeAmounts } from "./amounts.js";
-import { addDebt, applyRepayment, debtBreakdown, NO_DEBT, outstanding, type DebtState } from "./debt.js";
+import {
+  addDebt,
+  applyRepayment,
+  debtBreakdown,
+  inDebtMessage,
+  NO_DEBT,
+  outstanding,
+  type DebtState,
+} from "./debt.js";
 import { canTransition, can } from "./lifecycle.js";
 import { formatPeso, interestOn, pesos, rateFromPercent } from "./money.js";
 import { processPayout, type PayoutResult } from "./payout.js";
@@ -331,5 +339,24 @@ describe("payout processing (§7, worked example §8.1)", () => {
     });
     expect(result.others[0]).toMatchObject({ coveredByOrganizer: pesos(1_000), debt: NO_DEBT });
     expect(result.recipient.netPayout).toBe(pesos(2_000));
+  });
+});
+
+describe("R-DEC-39: in-debt message", () => {
+  it("names the one paluwagan and what's left after partial repayment", () => {
+    const partly = applyRepayment(addDebt(NO_DEBT, pesos(1_000), 125).debt, pesos(500)).debt;
+    expect(inDebtMessage([{ groupId: "g1", groupName: "Office", owed: outstanding(partly) }], "join")).toBe(
+      "You still owe ₱512.50 in Office. Settle it before you join another paluwagan.",
+    );
+  });
+
+  it("totals debts across paluwagans", () => {
+    const debts = [
+      { groupId: "g1", groupName: "Office", owed: pesos(1_000) },
+      { groupId: "g2", groupName: "Barkada", owed: pesos(250.5) },
+    ];
+    expect(inDebtMessage(debts, "create")).toBe(
+      "You still owe ₱1,250.50 across 2 paluwagans. Settle them before you start a new paluwagan.",
+    );
   });
 });

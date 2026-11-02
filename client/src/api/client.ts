@@ -1,4 +1,5 @@
 import type { AmountMode } from "@domain/amounts";
+import type { DebtOwed } from "@domain/debt";
 import type { Frequency } from "@domain/schedule";
 import type { SetupErrors, SetupInput } from "@domain/setup";
 
@@ -354,18 +355,22 @@ export interface GroupDetail {
 export type PublicGroup = GroupSummary & { organizerName: string; occupied: number };
 
 export interface InviteLanding {
-  status: "OPEN" | "FULL" | "CLOSED" | "ALREADY_MEMBER";
+  status: "OPEN" | "FULL" | "CLOSED" | "ALREADY_MEMBER" | "IN_DEBT";
   group: PublicGroup;
   /** Null for guests: the terms show only once signed in (R-INV-08). */
   terms: string | null;
+  /** R-DEC-39: where the signed-in visitor still owes; empty for guests and members. */
+  debts: DebtOwed[];
 }
 
 export interface ClaimLanding {
-  status: "OPEN" | "CLAIMED" | "CLOSED" | "ALREADY_MEMBER";
+  status: "OPEN" | "CLAIMED" | "CLOSED" | "ALREADY_MEMBER" | "IN_DEBT";
   group: PublicGroup;
   placeholder: { slotId: string; name: string | null; position: number | null };
   /** Null for guests (R-CLM-07). */
   terms: string | null;
+  /** R-DEC-39, as for invites. */
+  debts: DebtOwed[];
 }
 
 export interface NotificationItem {
