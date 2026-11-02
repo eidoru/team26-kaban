@@ -14,7 +14,7 @@ const PREFIXES: Record<ActivityCategory, string[]> = {
   payouts: ["payout.", "round."],
   disputes: ["dispute.", "refund."],
   swaps: ["swap.", "order."],
-  members: ["member.", "placeholder.", "claim_link.", "invite_link.", "withdrawal."],
+  members: ["member.", "placeholder.", "claim_link.", "invite_link.", "withdrawal.", "rating."],
   settings: ["group."],
 };
 
@@ -34,6 +34,7 @@ const FIELD_LABELS: Record<string, string> = {
 
 type Json = Record<string, unknown>;
 const peso = (value: unknown) => formatPeso(Number(value ?? 0));
+const starCount = (value: unknown) => `${Number(value ?? 0)} star${Number(value) === 1 ? "" : "s"}`;
 
 /**
  * One audit entry as a sentence anyone in the group can read (R-AUD-03), plus an optional detail
@@ -201,6 +202,11 @@ export function describe(entry: {
       return T(`${target} cancelled their request to leave`);
     case "withdrawal.expired":
       return T(`${target}'s request to leave expired`, f.reason === "paid out" ? "Their payout happened first." : "It wasn't settled in time.");
+    // R-DEC-43: the log is public to members, stars included.
+    case "rating.given":
+      return T(`${actor} rated ${target} ${starCount(f.stars)} as ${f.role === "ORGANIZER" ? "the organizer" : "a member"}`);
+    case "rating.changed":
+      return T(`${actor} changed ${target}'s rating from ${starCount(b.stars)} to ${starCount(f.stars)}`);
     case "reminder.sent":
       return T(`${actor} reminded ${target} to pay`, `${peso(a.unpaid)} still unpaid${round}.`);
     default:

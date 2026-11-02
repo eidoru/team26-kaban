@@ -10,6 +10,7 @@ const HomePage = lazy(() => import("./pages/HomePage").then((m) => ({ default: m
 const LoginPage = lazy(() => import("./pages/LoginPage").then((m) => ({ default: m.LoginPage })));
 const RegisterPage = lazy(() => import("./pages/RegisterPage").then((m) => ({ default: m.RegisterPage })));
 const ProfilePage = lazy(() => import("./pages/ProfilePage").then((m) => ({ default: m.ProfilePage })));
+const UserProfilePage = lazy(() => import("./pages/UserProfilePage").then((m) => ({ default: m.UserProfilePage })));
 const NotificationsPage = lazy(() =>
   import("./pages/NotificationsPage").then((m) => ({ default: m.NotificationsPage })),
 );
@@ -49,6 +50,7 @@ export function App() {
             <Route element={<AppLayout />}>
               <Route path="/home" element={<HomePage />} />
               <Route path="/profile" element={<ProfilePage />} />
+              <Route path="/users/:id" element={<UserProfilePage />} />
               <Route path="/notifications" element={<NotificationsPage />} />
               <Route path="/money" element={<Navigate to="/home" replace />} />
               {/* Old "Owed to you" address, kept for bookmarks and older notifications. */}

@@ -55,6 +55,8 @@ export type AuditAction =
   | "withdrawal.rejected"
   | "withdrawal.cancelled"
   | "withdrawal.expired"
+  | "rating.given"
+  | "rating.changed"
   | "reminder.sent";
 
 /**

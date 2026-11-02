@@ -90,7 +90,7 @@ export function ClaimPage() {
 
   return (
     <JoinShell>
-      <Ticket group={group} eyebrow={<>{group.organizerName} saved a slot for {name}</>}>
+      <Ticket group={group} signedIn={!!user} eyebrow={<>{group.organizerName} saved a slot for {name}</>}>
         <section aria-label="This slot's record" className="mb-5 rounded-2xl bg-ink-50 p-4">
           <div className="flex items-center gap-3">
             <Avatar name={name} size="md" placeholder />

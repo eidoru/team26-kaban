@@ -13,6 +13,7 @@ import { confirmReceipt, markHandedOver } from "../services/payouts.js";
 import { cancelDispute, raiseDispute, reviewDispute } from "../services/disputes.js";
 import { cancelSwap, requestSwap, respondToSwap, reviewSwap } from "../services/swaps.js";
 import { cancelWithdrawal, requestWithdrawal, reviewWithdrawal } from "../services/withdrawals.js";
+import { rateMembers, rateOrganizer } from "../services/ratings.js";
 import { buildExport } from "../services/exports.js";
 import { completionSummary } from "../services/records.js";
 import { activityLog, type ActivityCategory } from "../services/activity.js";
@@ -58,6 +59,10 @@ const disputeSchema = z.object({
 const denyDisputeSchema = z.object({ note: z.string() });
 const swapSchema = z.object({ targetSlotId: z.string(), requesterSlotId: z.string().optional() });
 const withdrawalSchema = z.object({ reason: z.string(), proofPath: z.string().optional(), leftAhead: z.number().int() });
+// R-DEC-43: stars are checked by the rules (domain/ratings.ts) so the messages match the form.
+const approveWithdrawalSchema = z.object({ stars: z.number().optional() });
+const rateMembersSchema = z.object({ ratings: z.array(z.object({ userId: z.string(), stars: z.number() })) });
+const rateOrganizerSchema = z.object({ stars: z.number() });
 
 const detail = (req: Request, groupId: string) => groupDetail(groupId, req.user!.id, resolveAppOrigin(req));
 
@@ -216,7 +221,10 @@ router.post(
 );
 router.post(
   "/:id/withdrawals/:withdrawalId/approve",
-  ...organizerAction((req, id, user) => reviewWithdrawal(id, user, String(req.params.withdrawalId), { approve: true })),
+  validateBody(approveWithdrawalSchema),
+  ...organizerAction((req, id, user) =>
+    reviewWithdrawal(id, user, String(req.params.withdrawalId), { approve: true, stars: req.body.stars }),
+  ),
 );
 router.post(
   "/:id/withdrawals/:withdrawalId/reject",
@@ -224,6 +232,18 @@ router.post(
   ...organizerAction((req, id, user) =>
     reviewWithdrawal(id, user, String(req.params.withdrawalId), { approve: false, note: req.body.note }),
   ),
+);
+
+// --- Ratings (R-DEC-43), once completed: the organizer rates every member; members rate the organizer.
+router.put(
+  "/:id/ratings/members",
+  validateBody(rateMembersSchema),
+  ...organizerAction((req, id, user) => rateMembers(id, user, req.body.ratings)),
+);
+router.put(
+  "/:id/ratings/organizer",
+  validateBody(rateOrganizerSchema),
+  ...memberAction((req, id, user) => rateOrganizer(id, user, req.body.stars)),
 );
 
 // --- Payouts (§7, R-PAY-05). Rounds are addressed by number.

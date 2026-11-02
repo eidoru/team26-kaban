@@ -13,6 +13,7 @@ import {
   Wallet,
   type LucideIcon,
 } from "lucide-react";
+import type { ReactNode } from "react";
 import type { GroupDetail } from "../../api/client";
 import { Sheet } from "../../components/flow/Sheet";
 import { TermsText } from "../../components/Terms";
@@ -55,7 +56,8 @@ export function GroupDetails({
   const editable = viewer.isOrganizer && group.state === "LOBBY";
   const [termsOpen, setTermsOpen] = useState(false);
   // Short labels with icons: the terms at a glance, one line each.
-  const rows: { icon: LucideIcon; label: string; value: string; note?: string }[] = [
+  const organizerId = detail.slots.find((s) => s.isOrganizer)?.userId;
+  const rows: { icon: LucideIcon; label: string; value: ReactNode; note?: string }[] = [
     { icon: HandCoins, label: "Each pays", value: formatPeso(group.contribution) },
     {
       icon: Wallet,
@@ -70,7 +72,18 @@ export function GroupDetails({
       label: "Interest",
       value: group.interestRate > 0 ? `${formatRate(group.interestRate)} per period` : "None",
     },
-    { icon: UserRound, label: "Organizer", value: group.organizerName },
+    {
+      icon: UserRound,
+      label: "Organizer",
+      // Their profile, with their organizer rating (R-DEC-43).
+      value: organizerId ? (
+        <Link to={`/users/${organizerId}`} className={ui.link}>
+          {group.organizerName}
+        </Link>
+      ) : (
+        group.organizerName
+      ),
+    },
   ];
   return (
     <section aria-labelledby="details-heading">

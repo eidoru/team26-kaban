@@ -233,6 +233,22 @@ export async function closeOpenRound(groupId: string, actorUserId: string | null
       title: `${group.name} is complete`,
       body: owing ? "Every payout is done. Some debts are still open." : "Every payout is done, and nobody owes anything.",
     });
+    // R-DEC-43: the organizer rates every member; members may rate the organizer.
+    const raters = (await memberUserIds(tx, groupId)).filter((id) => id !== group.organizerId);
+    if (raters.length > 0) {
+      await notifyUsers(tx, [group.organizerId], {
+        groupId,
+        kind: "rating.due",
+        title: `Rate the members of ${group.name}`,
+        body: "Give each member 1 to 5 stars. Their profiles show the average.",
+      });
+    }
+    await notifyUsers(tx, raters, {
+      groupId,
+      kind: "rating.due",
+      title: `Rate the organizer of ${group.name}`,
+      body: "Give them 1 to 5 stars if you like. Their profile shows the average.",
+    });
     return { closed: round.number, completed: true };
   });
 }

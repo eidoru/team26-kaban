@@ -103,7 +103,7 @@ export function ReplacePage() {
 
   return (
     <JoinShell>
-      <Ticket group={group} eyebrow={<>{leaverName} asks you to take over their slot</>}>
+      <Ticket group={group} signedIn={!!user} eyebrow={<>{leaverName} asks you to take over their slot</>}>
         {data.record && <SlotRecord data={data} />}
 
         {data.status === "CLOSED" ? (

@@ -15,6 +15,7 @@ import {
   NotebookPen,
   Rocket,
   Shuffle,
+  Star,
   TriangleAlert,
   UserRoundCog,
   Users,
@@ -66,6 +67,7 @@ import { MyStanding, YourTurn } from "./dashboard/StatsSections";
 import { swapToActOn } from "./swaps/swaps";
 import { ReviewSheet } from "./active/ReviewSheet";
 import { WithdrawalReviewSheet } from "./leave/WithdrawalReviewSheet";
+import { RateMembersSheet, RateOrganizerSheet, YourRatingsCard } from "./ratings/RatingSheets";
 import { MembersList, SlotsList } from "./SlotsList";
 import { STATE_LABELS, useGroupShell } from "./groupShell";
 
@@ -115,6 +117,7 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
   // Open on the whole queue (true), or on one item from the Debts view (its review key).
   const [reviewOpen, setReviewOpen] = useState<boolean | string>(false);
   const [reviewWithdrawalId, setReviewWithdrawalId] = useState<string | null>(null);
+  const [ratingOpen, setRatingOpen] = useState(false);
   // The Dashboard's "Record payments" with more than one placeholder to record: who paid first.
   const [pickingRecord, setPickingRecord] = useState(false);
   const [demoTools] = useDemoToolsSetting();
@@ -306,6 +309,13 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
     if (note?.trim() && (await run(`withdrawal-${request.id}`, () => api.rejectWithdrawal(group.id, request.id, note.trim())))) {
       setReviewWithdrawalId(null);
     }
+  }
+
+  /** R-DEC-43: save ratings, then refresh any profile on screen (their averages changed). */
+  async function rate(call: () => Promise<GroupDetail>) {
+    const saved = await run("rate", call);
+    if (saved) void queryClient.invalidateQueries({ queryKey: ["user"] });
+    return !!saved;
   }
 
   // The swap the Now panel shows with its actions; the swaps list leaves it out.
@@ -642,6 +652,27 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
         action: { label: "Pay", onClick: () => pay(viewer.slotId, "DEBT_PAYMENT") },
       });
     }
+    // R-DEC-43: once completed, the organizer must rate every member; a member may rate the organizer.
+    const ratings = detail.ratings;
+    if (ratings?.kind === "members" && !ratings.done) {
+      todos.push({
+        id: "rate",
+        icon: Star,
+        tone: "brand",
+        title: "Rate your members",
+        detail: "1 to 5 stars each. Their profiles show the average.",
+        action: { label: "Rate", onClick: () => setRatingOpen(true) },
+      });
+    } else if (ratings?.kind === "organizer" && ratings.stars == null) {
+      todos.push({
+        id: "rate",
+        icon: Star,
+        tone: "calm",
+        title: `Rate ${group.organizerName}`,
+        detail: "If you like: 1 to 5 stars for how they ran it.",
+        action: { label: "Rate", onClick: () => setRatingOpen(true) },
+      });
+    }
 
     if (todos.length > 0) {
       now = <TodoPanel todos={todos} />;
@@ -857,6 +888,7 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
               onDispute={(s) => setDisputeForId(s.id)}
               onWithdrawDispute={(d) => void withdrawDispute(d)}
             />
+            <YourRatingsCard detail={detail} onChange={() => setRatingOpen(true)} />
             {(group.state === "COMPLETED" || group.state === "COMPLETED_WITH_OUTSTANDING_DEBT") && <Recap detail={detail} />}
           </div>
           <div className="mt-8 min-w-0 space-y-8 lg:mt-0">
@@ -970,10 +1002,39 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
             setReviewWithdrawalId(null);
             clearError();
           }}
-          onApprove={(w) =>
-            void run(`withdrawal-${w.id}`, () => api.approveWithdrawal(group.id, w.id)).then((done) => done && setReviewWithdrawalId(null))
+          onApprove={(w, stars) =>
+            void run(`withdrawal-${w.id}`, () => api.approveWithdrawal(group.id, w.id, stars ?? undefined)).then((done) => {
+              if (!done) return;
+              setReviewWithdrawalId(null);
+              if (stars != null) void queryClient.invalidateQueries({ queryKey: ["user"] });
+            })
           }
           onReject={(w) => void rejectWithdrawal(w)}
+        />
+      )}
+      {ratingOpen && detail.ratings?.kind === "members" && (
+        <RateMembersSheet
+          ratings={detail.ratings}
+          pending={pending === "rate"}
+          error={error?.message ?? null}
+          onClose={() => {
+            setRatingOpen(false);
+            clearError();
+          }}
+          onSave={(ratings) => rate(() => api.rateMembers(group.id, ratings))}
+        />
+      )}
+      {ratingOpen && detail.ratings?.kind === "organizer" && (
+        <RateOrganizerSheet
+          organizerName={group.organizerName}
+          stars={detail.ratings.stars}
+          pending={pending === "rate"}
+          error={error?.message ?? null}
+          onClose={() => {
+            setRatingOpen(false);
+            clearError();
+          }}
+          onSave={(stars) => rate(() => api.rateOrganizer(group.id, stars))}
         />
       )}
       <SlotSheet

@@ -22,6 +22,7 @@ import { aheadView, openPeriodView, visibleSubmissions } from "./submissions.js"
 import { visibleDisputes } from "./disputes.js";
 import { visibleSwaps } from "./swaps.js";
 import { handoversOf, leavingView } from "./withdrawals.js";
+import { ratingsView } from "./ratings.js";
 import { proofViewUrls } from "../lib/storage.js";
 import { assertNoDebts } from "./debts.js";
 import { assertState, memberUserIds, resetOrder, settingsOf, slotName, withGroupLock, type Db } from "./common.js";
@@ -178,9 +179,9 @@ function summary(group: Group) {
   };
 }
 
-/** The public face of a group, for invite landing pages (R-INV-01). */
+/** The public face of a group, for invite landing pages (R-INV-01). The id links the organizer's profile (R-DEC-43). */
 export function publicSummary(group: Group & { organizer: { displayName: string } }, occupied: number) {
-  return { ...summary(group), organizerName: group.organizer.displayName, occupied };
+  return { ...summary(group), organizerName: group.organizer.displayName, organizerId: group.organizerId, occupied };
 }
 
 /**
@@ -242,6 +243,8 @@ export async function groupDetail(groupId: string, viewerUserId: string, appOrig
   const slots = group.slots.map((slot) => ({
     id: slot.id,
     kind: slot.userId ? ("MEMBER" as const) : ("PLACEHOLDER" as const),
+    /** For the member's profile link (R-DEC-43); null for a placeholder. */
+    userId: slot.userId,
     name: slotName(slot),
     isOrganizer: slot.isOrganizer,
     isViewer: slot.id === viewer.id,
@@ -289,6 +292,7 @@ export async function groupDetail(groupId: string, viewerUserId: string, appOrig
     group.state === "LOBBY" || group.state === "CANCELLED"
       ? { withdrawals: [], leaving: null }
       : await leavingView(prisma, group, viewer, appOrigin);
+  const ratings = await ratingsView(prisma, group, viewer);
 
   return {
     // Terms stay out of summary(): guests see the public summary but not the terms (R-INV-08).
@@ -314,6 +318,8 @@ export async function groupDetail(groupId: string, viewerUserId: string, appOrig
     withdrawals,
     /** R-WDR-02/03: whether the viewer can leave now and what's left to do; null for the organizer or outside LAUNCHED/ACTIVE. */
     leaving,
+    /** R-DEC-43: the viewer's ratings in this paluwagan; null before completion. */
+    ratings,
     payouts,
     launch:
       group.state === "LOBBY"

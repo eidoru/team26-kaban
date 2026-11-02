@@ -17,6 +17,7 @@ import { debtOf, debtsOwedBy } from "./debts.js";
 import { publicSummary } from "./groups.js";
 import { notifyUsers } from "./notifications.js";
 import { periodTotals } from "./submissions.js";
+import { assertStars, rateLeaver } from "./ratings.js";
 import { memberUserIds, slotName, withGroupLock, type Db } from "./common.js";
 
 /** R-WDR-06: a request that can still go somewhere. */
@@ -385,18 +386,21 @@ export async function declineReplacement(token: string, userId: string) {
  * R-WDR-09: the organizer approves (after re-checking every rule) or rejects with a reason. Approval
  * hands the slot over in this one transaction: everything tied to the slot stays with it (R-CLM-06),
  * so the replacement inherits turn, history, payments ahead and debt, and the leaver loses access.
+ * With approval the organizer may rate the leaver as a member (R-DEC-43).
  */
 export async function reviewWithdrawal(
   groupId: string,
   organizerUserId: string,
   withdrawalId: string,
-  decision: { approve: true } | { approve: false; note: string },
+  decision: { approve: true; stars?: number } | { approve: false; note: string },
 ) {
   // `=== false`, not truthiness: Vercel compiles the function non-strict, where only this narrows the union.
   const note =
     decision.approve === false
       ? requiredText(decision.note, NOTE_MAX_LENGTH, "Say why, so they understand.", "The reason")
       : null;
+  const stars = decision.approve === true ? decision.stars : undefined;
+  if (stars != null) assertStars(stars);
   return withGroupLock(groupId, async (tx, group) => {
     const w = await tx.withdrawal.findFirst({
       where: { id: withdrawalId, groupId },
@@ -443,6 +447,8 @@ export async function reviewWithdrawal(
       throw conflict(`${replacement.displayName} has to accept again: the slot's debt grew since they agreed.`, "ACCEPT_AGAIN");
     }
     const turn = await turnOf(tx, groupId, w.slotId);
+    // R-DEC-43: rated while the slot is still theirs, so the rating names them.
+    if (stars != null) await rateLeaver(tx, group, w.slot, stars);
     // The unique (group, user) index backs R-INV-07 here too.
     await tx.slot.update({ where: { id: w.slotId }, data: { userId: replacement.id } });
     await tx.withdrawal.update({ where: { id: w.id }, data: { status: "APPROVED", reviewedAt: new Date() } });

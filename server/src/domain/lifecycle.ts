@@ -36,4 +36,6 @@ export const can = {
   requestSwap: (s: GroupState) => s === "ACTIVE",
   leave: (s: GroupState) => s === "LAUNCHED" || s === "ACTIVE", // R-WDR-01
   cancel: (s: GroupState) => s === "LOBBY",
+  /** R-DEC-43: after the final payout, debts or not. */
+  rate: (s: GroupState) => s === "COMPLETED" || s === "COMPLETED_WITH_OUTSTANDING_DEBT",
 };

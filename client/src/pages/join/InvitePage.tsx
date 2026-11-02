@@ -81,7 +81,7 @@ export function InvitePage() {
 
   return (
     <JoinShell>
-      <Ticket group={group} eyebrow={<>{group.organizerName} invites you to join</>}>
+      <Ticket group={group} signedIn={!!user} eyebrow={<>{group.organizerName} invites you to join</>}>
         {data.status === "FULL" ? (
           <p className="text-center text-sm text-ink-700">
             <b>This paluwagan is full.</b> The link works again if a slot opens up.
