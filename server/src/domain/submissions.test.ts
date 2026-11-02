@@ -8,6 +8,7 @@ import {
   contributionRooms,
   roundsLabel,
   splitContribution,
+  paymentLabel,
   periodStatus,
   proofError,
   refundFor,
@@ -246,24 +247,74 @@ describe("R-DEC-31 / R-DEC-33 paying ahead, and one payment across rounds", () =
     expect(rooms).toEqual([room(3, 500)]);
   });
 
-  it("debt keeps a payment to the open round", () => {
+  it("debt keeps a payment to the debt and the open round", () => {
     const rooms = contributionRooms({ open: room(2, 2_000), upcoming, debtLeft: pesos(1) });
-    expect(rooms).toEqual([room(2, 2_000)]);
-    expect(contributionAmountError(pesos(3_000), pesos(2_000), true)).toBe(
+    expect(rooms).toEqual([{ round: null, room: pesos(1) }, room(2, 2_000)]);
+    expect(contributionAmountError(pesos(3_000), pesos(2_001), true)).toBe(
       "That's more than what's left to pay. Pay off the debt before paying ahead.",
     );
-    expect(contributionAmountError(pesos(2_000), pesos(2_000), true)).toBeNull();
-  });
-
-  it("pays ahead into every remaining round, with no cap (R-DEC-36)", () => {
-    const rooms = contributionRooms({ open: room(1, 0), upcoming, debtLeft: 0 });
-    expect(rooms.map((r) => r.round)).toEqual([2, 3, 4, 5]);
+    expect(contributionAmountError(pesos(2_001), pesos(2_001), true)).toBeNull();
   });
 
   it("labels a payment's rounds", () => {
     expect(roundsLabel([3])).toBe("round 3");
     expect(roundsLabel([4, 1, 2, 3])).toBe("rounds 1–4");
   });
+});
+
+describe("R-DEC-42 one payment for the debt and this round", () => {
+  const room = (round: number, pesosLeft: number) => ({ round, room: pesos(pesosLeft) });
+  const upcoming = [room(5, 1_000)];
+
+  it("fills the debt first, then this round: ₱500 debt + ₱1,000 left = ₱1,500", () => {
+    const rooms = contributionRooms({ open: room(4, 1_000), upcoming, debtLeft: pesos(500) });
+    expect(rooms.reduce((total, r) => total + r.room, 0)).toBe(pesos(1_500));
+    expect(splitContribution(pesos(1_500), rooms)).toEqual([
+      { round: null, amount: pesos(500) },
+      { round: 4, amount: pesos(1_000) },
+    ]);
+  });
+
+  it("a payment smaller than the debt all goes to the debt", () => {
+    const rooms = contributionRooms({ open: room(4, 1_000), upcoming, debtLeft: pesos(500) });
+    expect(splitContribution(pesos(300), rooms)).toEqual([{ round: null, amount: pesos(300) }]);
+    expect(splitContribution(pesos(700), rooms)).toEqual([
+      { round: null, amount: pesos(500) },
+      { round: 4, amount: pesos(200) },
+    ]);
+  });
+
+  it("takes only what's left of a partly paid round", () => {
+    const rooms = contributionRooms({ open: room(4, 400), upcoming, debtLeft: pesos(500) });
+    expect(rooms).toEqual([{ round: null, room: pesos(500) }, room(4, 400)]);
+  });
+
+  it("a covered round leaves only the debt", () => {
+    const rooms = contributionRooms({ open: room(4, 0), upcoming, debtLeft: pesos(500) });
+    expect(rooms).toEqual([{ round: null, room: pesos(500) }]);
+  });
+
+  it("without debt, nothing changes", () => {
+    const rooms = contributionRooms({ open: room(4, 1_000), upcoming, debtLeft: 0 });
+    expect(rooms).toEqual([room(4, 1_000), room(5, 1_000)]);
+  });
+
+  it("labels what a payment went to", () => {
+    expect(paymentLabel([{ round: null }, { round: 4 }])).toBe("the debt and round 4");
+    expect(paymentLabel([{ round: null }])).toBe("the debt");
+    expect(paymentLabel([{ round: 1 }, { round: 2 }])).toBe("rounds 1–2");
+  });
+});
+
+describe("R-DEC-31 paying ahead, continued", () => {
+  const room = (round: number, pesosLeft: number) => ({ round, room: pesos(pesosLeft) });
+  const upcoming = [room(3, 2_000), room(2, 2_000), room(4, 2_000), room(5, 2_000)];
+
+  it("pays ahead into every remaining round, with no cap (R-DEC-36)", () => {
+    const rooms = contributionRooms({ open: room(1, 0), upcoming, debtLeft: 0 });
+    expect(rooms.map((r) => r.round)).toEqual([2, 3, 4, 5]);
+  });
+
 });
 
 describe("R-DEC-37 proof is required", () => {

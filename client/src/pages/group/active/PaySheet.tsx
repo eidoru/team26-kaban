@@ -3,8 +3,8 @@ import { Camera, X } from "lucide-react";
 import { NOTE_MAX_LENGTH } from "@domain/constants";
 import {
   contributionAmountError,
+  paymentLabel,
   proofError,
-  roundsLabel,
   splitContribution,
   submissionAmountError,
 } from "@domain/submissions";
@@ -26,6 +26,7 @@ type PayInput = { slotId: string; type: PayMode; amount: number; proofPath: stri
  * (R-SUB-02). The amount defaults to what's left and can't go over it (R-SUB-06). A proof photo is
  * required (R-DEC-37). A contribution fills what's left of the open round, then later rounds in order
  * once the debt is covered (paying ahead, R-DEC-31); the server splits it, one part per round (R-DEC-33).
+ * While the slot owes, it pays the debt first, then the open round, and defaults to both (R-DEC-42).
  */
 export function PaySheet({
   detail,
@@ -71,9 +72,10 @@ function PayForm({
   const pay = isDebt ? null : payRooms(detail, slot.id);
   const cap = isDebt ? debtReportable(detail, slot.id) : pay!.cap;
   // Nothing left this round: the whole payment goes ahead (R-DEC-31).
-  const aheadOnly = !!pay && pay.openRoom === 0 && pay.cap > 0;
-  // By default what's left this round, or one round's worth when paying ahead.
-  const suggested = isDebt ? cap : (pay!.rooms[0]?.room ?? 0);
+  const aheadOnly = !!pay && pay.openRoom === 0 && pay.ahead > 0;
+  // By default what's left this round, or one round's worth when paying ahead; with debt, the debt
+  // and what's left this round (R-DEC-42).
+  const suggested = isDebt || pay!.debtRoom > 0 ? cap : (pay!.rooms[0]?.room ?? 0);
   const [amountText, setAmountText] = useState(suggested > 0 ? pesoInputValue(suggested) : "");
   const [note, setNote] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -81,7 +83,7 @@ function PayForm({
   const [stage, setStage] = useState<"idle" | "uploading" | "sending">("idle");
   const [error, setError] = useState("");
   // Once sent: what was sent, shown instead of closing on the spot.
-  const [sent, setSent] = useState<{ amount: number; rounds: number[] } | null>(null);
+  const [sent, setSent] = useState<{ amount: number; parts: { round: number | null }[] } | null>(null);
   const fileId = useId();
   const noteId = useId();
 
@@ -96,9 +98,9 @@ function PayForm({
     : isDebt
       ? submissionAmountError(amount, cap)
       : contributionAmountError(amount, cap, pay!.blockedByDebt);
-  // R-DEC-33: how the server will split it, shown once it reaches past this round.
+  // R-DEC-33 / R-DEC-42: how the server will split it, shown once it's more than one part or ahead.
   const parts = pay && !amountError ? splitContribution(amount, pay.rooms) : [];
-  const reachesAhead = parts.some((p) => p.round !== openRound);
+  const showSplit = parts.length > 1 || parts.some((p) => p.round != null && p.round !== openRound);
   const noteError = note.trim().length > NOTE_MAX_LENGTH ? `Up to ${NOTE_MAX_LENGTH} characters.` : null;
   const missingProof = proofError(!!file);
   const forSomeoneElse = !slot.isViewer;
@@ -111,7 +113,7 @@ function PayForm({
       const proofPath = await uploadProof(detail.group.id, file);
       setStage("sending");
       if (await onSubmit({ slotId: slot.id, type: mode, amount, proofPath, note: note.trim() || undefined })) {
-        setSent({ amount, rounds: parts.map((p) => p.round) });
+        setSent({ amount, parts });
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't send it. Try again.");
@@ -126,7 +128,8 @@ function PayForm({
     return (
       <SheetDone title={forSomeoneElse ? `Recorded for ${slot.name}` : "Sent for review"} onClose={onClose}>
         {formatPeso(sent.amount)}
-        {isDebt ? " toward the debt" : ` for ${roundsLabel(sent.rounds)}`} counts once {reviewer}.
+        {isDebt || sent.parts.every((p) => p.round == null) ? " toward the debt" : ` for ${paymentLabel(sent.parts)}`}{" "}
+        counts once {reviewer}.
       </SheetDone>
     );
   }
@@ -149,7 +152,11 @@ function PayForm({
       subtitle={
         isDebt
           ? `Owes ${formatPeso(owedBy(detail, slot.id))} · ${formatPeso(cap)} left to report`
-          : pay!.openRoom > 0
+          : pay!.debtRoom > 0
+            ? `Round ${openRound} · ${pay!.openRoom > 0 ? `${formatPeso(pay!.openRoom)} left` : "covered"} · ${formatPeso(
+                pay!.debtRoom,
+              )} debt`
+            : pay!.openRoom > 0
             ? `Round ${openRound} · ${formatPeso(pay!.openRoom)} left${
                 pay!.ahead > 0 ? ` · up to ${formatPeso(cap)} with later rounds` : " to report"
               }`
@@ -175,6 +182,12 @@ function PayForm({
       >
         {/* The one rule worth stating here: how a debt payment is applied (R-DBT). */}
         {isDebt && <p className="text-sm text-ink-600">Pays interest first, then the rest.</p>}
+        {/* R-DEC-42: a contribution while the slot owes pays the debt first. */}
+        {pay && pay.debtRoom > 0 && (
+          <p className="text-sm text-ink-600">
+            Pays the debt first, interest then the rest{pay.openRoom > 0 ? ", then this round" : ""}.
+          </p>
+        )}
         {/* R-DEC-31: what paying ahead means for the member. */}
         {pay && pay.ahead > 0 && (
           <p className="text-sm text-ink-600">
@@ -193,12 +206,12 @@ function PayForm({
               : undefined
           }
         />
-        {reachesAhead && (
+        {showSplit && (
           <ul aria-label="How it's split" className="divide-y divide-ink-100 rounded-2xl bg-ink-50 px-4 text-sm">
             {parts.map((p) => (
-              <li key={p.round} className="flex justify-between gap-3 py-2">
+              <li key={p.round ?? "debt"} className="flex justify-between gap-3 py-2">
                 <span className="text-ink-700">
-                  Round {p.round}
+                  {p.round == null ? "Debt" : `Round ${p.round}`}
                   {p.round === openRound && <span className="text-ink-500"> (this round)</span>}
                 </span>
                 <span className="font-semibold text-ink-900 tabular-nums">{formatPeso(p.amount)}</span>

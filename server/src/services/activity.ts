@@ -50,9 +50,9 @@ export function describe(entry: {
   const { actor, amounts: a, before: b, after: f } = entry;
   const target = entry.target ?? "a member";
   const self = actor === entry.target;
-  // R-DEC-33: a payment split across rounds names them all.
+  // R-DEC-33: a payment split across rounds names them all; R-DEC-42: and the debt it paid first.
   const round = Array.isArray(f.rounds)
-    ? ` for ${roundsLabel(f.rounds as number[])}`
+    ? ` ${f.toDebt ? "toward debt and " : "for "}${roundsLabel(f.rounds as number[])}`
     : f.round != null
       ? ` in round ${f.round}`
       : "";

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ArrowRight, ChevronLeft, ChevronRight, CircleCheck, CircleX, ExternalLink, ImageOff, TriangleAlert } from "lucide-react";
 import { NOTE_MAX_LENGTH } from "@domain/constants";
-import { periodStatus, refundFor, roundsLabel } from "@domain/submissions";
+import { paymentLabel, periodStatus, refundFor } from "@domain/submissions";
 import type { DisputeView, GroupDetail, SubmissionView } from "../../../api/client";
 import { Avatar } from "../../../components/Avatar";
 import { Sheet } from "../../../components/flow/Sheet";
@@ -543,17 +543,40 @@ function DisputeBody({ detail, dispute, name }: { detail: GroupDetail; dispute: 
   );
 }
 
-/** "Round 3", or "Rounds 1–4" for a payment split across rounds (R-DEC-33). */
+/**
+ * "Round 3", "Rounds 1–4" for a payment split across rounds (R-DEC-33), or "The debt and round 3"
+ * for one that also pays debt (R-DEC-42).
+ */
 function roundsOf(payment: Payment) {
-  const label = roundsLabel(payment.parts.map((p) => p.round ?? 0));
+  const label = paymentLabel(payment.parts);
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
-/** R-DEC-33: where each round of a split payment stands once it's approved. */
+/**
+ * R-DEC-33: where each round of a split payment stands once it's approved; R-DEC-42: and the debt,
+ * paid first.
+ */
 function PartsAfter({ detail, payment }: { detail: GroupDetail; payment: Payment }) {
+  const owed = owedBy(detail, payment.slotId);
   return (
     <ul aria-label="After approval" className="divide-y divide-ink-100 rounded-2xl bg-ink-50 px-4 text-sm">
       {payment.parts.map((part) => {
+        if (part.round == null) {
+          return (
+            <li key={part.id} className="flex justify-between gap-3 py-2">
+              <span className="text-ink-700">
+                Debt · <span className="tabular-nums">{formatPeso(part.amount)}</span>
+              </span>
+              <span className="text-right font-semibold text-ink-900 tabular-nums">
+                {part.amount > owed
+                  ? `only ${formatPeso(owed)} owed now` // R-DEC-19: the server refuses it.
+                  : part.amount === owed
+                    ? "paid off"
+                    : `${formatPeso(owed - part.amount)} still owed`}
+              </span>
+            </li>
+          );
+        }
         const standing = standingOf(detail, part.slotId, part.round ?? undefined);
         const total = standing ? standing.approved + part.amount : 0;
         return (
