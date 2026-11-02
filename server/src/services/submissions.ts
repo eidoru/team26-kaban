@@ -9,6 +9,7 @@ import {
   contributionAmountError,
   contributionRooms,
   correctionIncrease,
+  paymentLabel,
   periodStatus,
   proofError,
   roundsLabel,
@@ -112,6 +113,7 @@ async function roomsFor(db: Db, slotId: string, rounds: { id: string; number: nu
  * R-SUB-01 / R-SUB-02 / R-SUB-06: report a payment. A CONTRIBUTION fills what's left of the open
  * period, then later ones once the slot's debt is covered (paying ahead, R-DEC-31); a payment that
  * reaches more than one round is stored as one submission per round, linked by a batch (R-DEC-33).
+ * While the slot owes, it pays the debt first, as a DEBT_PAYMENT part in the same batch (R-DEC-42).
  * A DEBT_PAYMENT pays down what the slot owes (R-DBT-04), also after completion (R-DBT-11). Members
  * report their own; the organizer reports for themselves and for placeholders. All start PENDING,
  * each with a proof photo (R-DEC-37).
@@ -161,7 +163,10 @@ export async function submitPayment(
       const error = contributionAmountError(input.amount, cap, blockedByDebt);
       if (error) throw new AppError(400, error, "BAD_AMOUNT", { amount: error });
       const idOf = new Map(rounds.map((r) => [r.number, r.id]));
-      parts = splitContribution(input.amount, fillable).map((p) => ({ ...p, roundId: idOf.get(p.round)! }));
+      parts = splitContribution(input.amount, fillable).map((p) => ({
+        ...p,
+        roundId: p.round == null ? null : idOf.get(p.round)!,
+      }));
     } else {
       const error = submissionAmountError(input.amount, debtLeft);
       if (error) throw new AppError(400, error, "BAD_AMOUNT", { amount: error });
@@ -175,7 +180,8 @@ export async function submitPayment(
           groupId,
           slotId: slot.id,
           roundId: part.roundId,
-          type: input.type,
+          // R-DEC-42: the part with no round pays the debt.
+          type: part.round == null ? "DEBT_PAYMENT" : input.type,
           amount: BigInt(part.amount),
           proofPath: input.proofPath,
           note,
@@ -186,6 +192,8 @@ export async function submitPayment(
     }
     const rounds = parts.flatMap((p) => (p.round == null ? [] : [p.round]));
     const ahead = !!open && rounds.some((r) => r !== open.number);
+    // R-DEC-42: the debt part of a payment that also goes to a round.
+    const toDebt = rounds.length ? parts.find((p) => p.round == null)?.amount : undefined;
     await audit(tx, {
       groupId,
       actorUserId,
@@ -194,9 +202,10 @@ export async function submitPayment(
       targetName: slotName(slot),
       amounts: { amount: input.amount },
       after: {
-        type: input.type,
+        type: rounds.length ? input.type : "DEBT_PAYMENT",
         round: rounds[0] ?? null,
         ...(batchId ? { rounds, parts: parts.map((p) => p.amount) } : {}),
+        ...(toDebt ? { toDebt } : {}),
         ...(ahead ? { ahead: true } : {}),
       },
       proofAttached: true,
@@ -207,7 +216,7 @@ export async function submitPayment(
         groupId,
         kind: "submission.pending",
         title: `${slotName(slot)} reported ${formatPeso(input.amount)}${
-          isDebt ? " toward their debt" : batchId ? ` for ${roundsLabel(rounds)}` : ahead ? " ahead" : ""
+          !rounds.length ? " toward their debt" : batchId ? ` for ${paymentLabel(parts)}` : ahead ? " ahead" : ""
         }`,
         body: `${group.name}${rounds.length === 1 ? `, round ${rounds[0]}` : ""}.`,
       });
@@ -239,7 +248,7 @@ export async function reviewSubmission(
     if (submission.status !== "PENDING") throw conflict("This submission was already handled.", "ALREADY_REVIEWED");
     const name = slotName(submission.slot);
     const { batchId } = submission;
-    // R-DEC-33: every part of a split payment, in round order.
+    // R-DEC-33: every part of a split payment, in round order; a debt part (no round) first (R-DEC-42).
     const parts = batchId
       ? (await tx.submission.findMany({ where: { batchId, status: "PENDING" }, include: { round: true } })).sort(
           (a, b) => (a.round?.number ?? 0) - (b.round?.number ?? 0),
@@ -315,6 +324,10 @@ export async function reviewSubmission(
       });
     }
     const allToDebt = parts.every(toDebtOf);
+    // R-DEC-42: the debt part of a payment that also went to a round.
+    const toDebt = allToDebt
+      ? 0
+      : parts.filter((p) => p.type === "DEBT_PAYMENT").reduce((total, p) => total + Number(p.amount), 0);
     const repayment = repaid.any ? repaid : null;
 
     await audit(tx, {
@@ -330,6 +343,7 @@ export async function reviewSubmission(
         ? {
             round: rounds[0] ?? null,
             ...(batchId ? { rounds } : {}),
+            ...(toDebt ? { toDebt } : {}),
             appliedAs: allToDebt ? "DEBT_PAYMENT" : "CONTRIBUTION",
           }
         : { reason },

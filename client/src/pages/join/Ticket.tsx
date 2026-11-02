@@ -1,8 +1,10 @@
 import type { ReactNode } from "react";
+import { Link } from "react-router-dom";
 import type { PublicGroup } from "../../api/client";
 import { KabanLogo } from "../../components/KabanLogo";
 import { formatDueDate } from "../../lib/dates";
 import { formatPeso, formatRate } from "../../lib/money";
+import { ui } from "../../lib/ui";
 
 /** Page frame for link landing pages: open to guests, centered, phone-first. */
 export function JoinShell({ children }: { children: ReactNode }) {
@@ -21,9 +23,20 @@ export function JoinShell({ children }: { children: ReactNode }) {
 
 /**
  * A paluwagan's terms as a ticket (R-INV-01): what joining commits you to, before you decide.
- * `eyebrow` names who's inviting; `children` holds the actions under the tear line.
+ * `eyebrow` names who's inviting; `children` holds the actions under the tear line. Signed in
+ * (`signedIn`), the organizer's profile is linked, so their rating can be checked first (R-DEC-43).
  */
-export function Ticket({ group, eyebrow, children }: { group: PublicGroup; eyebrow: ReactNode; children: ReactNode }) {
+export function Ticket({
+  group,
+  eyebrow,
+  signedIn = false,
+  children,
+}: {
+  group: PublicGroup;
+  eyebrow: ReactNode;
+  signedIn?: boolean;
+  children: ReactNode;
+}) {
   const facts = [
     { label: "Each payout", value: formatPeso(group.pot) },
     { label: "Members", value: `${group.occupied} of ${group.slotCount} joined` },
@@ -49,6 +62,16 @@ export function Ticket({ group, eyebrow, children }: { group: PublicGroup; eyebr
             <dd className="text-sm font-bold text-ink-900">{fact.value}</dd>
           </div>
         ))}
+        {signedIn && (
+          <div className="col-span-2">
+            <dt className="text-xs text-ink-500">Organizer</dt>
+            <dd>
+              <Link to={`/users/${group.organizerId}`} className={ui.link}>
+                {group.organizerName}&apos;s profile and ratings
+              </Link>
+            </dd>
+          </div>
+        )}
       </dl>
       <div className="relative border-t-2 border-dashed border-ink-200 px-6 py-5">
         <span aria-hidden className="absolute -left-3 -top-3 h-6 w-6 rounded-full bg-cream" />

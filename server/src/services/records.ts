@@ -1,8 +1,9 @@
 import type { DebtEntryKind } from "@prisma/client";
 import { formatPeso } from "../domain/money.js";
-import { roundsLabel } from "../domain/submissions.js";
+import { paymentLabel } from "../domain/submissions.js";
 import { prisma } from "../lib/prisma.js";
 import { slotName } from "./common.js";
+import { handoversOf } from "./withdrawals.js";
 
 /** R-CMP-02: one member's totals, in centavos. Available any time; final once the paluwagan completes. */
 export interface MemberTotals {
@@ -96,7 +97,7 @@ export interface RecordEvent {
   interestDelta: number | null;
   status: string | null;
   notes: string;
-  /** Before the current holder claimed this placeholder (R-CLM-06). */
+  /** Before the current holder claimed this placeholder (R-CLM-06) or took the slot over (R-WDR-12). */
   inherited: boolean;
 }
 
@@ -120,7 +121,7 @@ const SUBMISSION_STATUS: Record<string, string> = {
  */
 export async function recordEvents(groupId: string, slotId?: string): Promise<RecordEvent[]> {
   const bySlot = slotId ? { slotId } : {};
-  const [slots, submissions, debtEntries, payouts, refunds] = await Promise.all([
+  const [slots, submissions, debtEntries, payouts, refunds, handovers] = await Promise.all([
     prisma.slot.findMany({ where: { groupId }, include: { user: true } }),
     prisma.submission.findMany({ where: { groupId, ...bySlot }, include: { round: true } }),
     prisma.debtEntry.findMany({ where: { groupId, ...bySlot }, include: { round: true } }),
@@ -129,24 +130,29 @@ export async function recordEvents(groupId: string, slotId?: string): Promise<Re
       include: { round: true },
     }),
     prisma.refund.findMany({ where: { groupId, ...bySlot }, include: { dispute: { include: { submission: { include: { round: true } } } } } }),
+    handoversOf(prisma, groupId),
   ]);
   const slotById = new Map(slots.map((s) => [s.id, s]));
   const base = (id: string, at: Date) => {
     const slot = slotById.get(id);
+    const beforeClaim = !!slot?.claimedAt && at < slot.claimedAt;
+    // R-WDR-12: the first hand-over after this moment names who held the slot then (oldest first).
+    const heldBy = beforeClaim ? undefined : handovers.find((h) => h.slotId === id && at < h.until);
     return {
       slotId: id,
-      name: slot ? slotName(slot) : "Former member",
-      inherited: !!slot?.claimedAt && at < slot.claimedAt,
+      name: heldBy?.name ?? (slot ? slotName(slot) : "Former member"),
+      inherited: beforeClaim || !!heldBy,
     };
   };
 
-  // R-DEC-33: the parts of one payment split across rounds, so each part can say what it belongs to.
-  const batches = new Map<string, { amount: number; rounds: number[] }>();
+  // R-DEC-33: the parts of one payment split across rounds, so each part can say what it belongs to;
+  // a debt part has no round (R-DEC-42).
+  const batches = new Map<string, { amount: number; parts: { round: number | null }[] }>();
   for (const s of submissions) {
     if (!s.batchId) continue;
-    const batch = batches.get(s.batchId) ?? { amount: 0, rounds: [] };
+    const batch = batches.get(s.batchId) ?? { amount: 0, parts: [] };
     batch.amount += Number(s.amount);
-    if (s.round) batch.rounds.push(s.round.number);
+    batch.parts.push({ round: s.round?.number ?? null });
     batches.set(s.batchId, batch);
   }
 
@@ -168,7 +174,7 @@ export async function recordEvents(groupId: string, slotId?: string): Promise<Re
           s.proofPath ? "Proof attached" : "No proof attached",
           s.selfApproved && "Self-approved",
           late && "Counted toward debt (period had closed)",
-          batch && `Part of one ${formatPeso(batch.amount)} payment for ${roundsLabel(batch.rounds)}`,
+          batch && `Part of one ${formatPeso(batch.amount)} payment for ${paymentLabel(batch.parts)}`,
           effective !== null && `Corrected to ${formatPeso(effective)}`,
           s.status === "DENIED" && s.denialReason && `Reason: ${s.denialReason}`,
           s.note && `Note: ${s.note}`,

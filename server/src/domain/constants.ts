@@ -21,6 +21,8 @@ export const MIN_HALF_MONTH_DAYS = 15;
 export const SWAP_LOCK_DAYS = 3;
 /** R-SWP-04, R-DEC-35 */
 export const SWAP_REQUEST_EXPIRY_DAYS: number | null = 7;
+/** R-WDR-11, R-DEC-40: as swaps (R-SWP-04). */
+export const WITHDRAWAL_REQUEST_EXPIRY_DAYS: number | null = 7;
 /** §12 (assumption) */
 export const REMINDER_DAYS_BEFORE = 3;
 /** R-DEC-07, R-DEC-35 */
@@ -31,3 +33,5 @@ export const NOTE_MAX_LENGTH = 500;
 export const MAX_PROOF_BYTES = 5 * 1024 * 1024;
 /** Dispute reasons (the pre-rewrite dispute limit; the spec sets none). */
 export const DISPUTE_REASON_MAX_LENGTH = 1000;
+/** R-DEC-43: a rating is a whole number of stars, 1 to this. */
+export const MAX_STARS = 5;

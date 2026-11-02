@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { UserPlus } from "lucide-react";
+import { Link } from "react-router-dom";
+import { UserPlus, UserRound } from "lucide-react";
 import type { GroupDetail, SlotView } from "../../api/client";
 import { Field } from "../../components/flow/Field";
 import { ShareLink } from "../../components/flow/ShareLink";
@@ -139,6 +140,12 @@ export function SlotSheet({
       subtitle={isPlaceholder ? (slot.contact ?? "Placeholder") : "Member"}
     >
       <div className="space-y-6">
+        {slot.userId && (
+          <Link to={`/users/${slot.userId}`} className={ui.btnSecondaryFull}>
+            <UserRound className="h-4 w-4" aria-hidden />
+            View profile
+          </Link>
+        )}
         {isPlaceholder && (
           <section aria-label="Claim link">
             <div className="space-y-2">
@@ -158,7 +165,7 @@ export function SlotSheet({
           </section>
         )}
         {inLobby && (
-          <section className={isPlaceholder ? "border-t border-ink-100 pt-6" : ""}>
+          <section className="border-t border-ink-100 pt-6">
             <button
               type="button"
               onClick={() => onRemove(slot)}

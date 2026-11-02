@@ -21,7 +21,10 @@ import { notifyUsers } from "./notifications.js";
 import { aheadView, openPeriodView, visibleSubmissions } from "./submissions.js";
 import { visibleDisputes } from "./disputes.js";
 import { visibleSwaps } from "./swaps.js";
+import { handoversOf, leavingView } from "./withdrawals.js";
+import { ratingsView } from "./ratings.js";
 import { proofViewUrls } from "../lib/storage.js";
+import { assertNoDebts } from "./debts.js";
 import { assertState, memberUserIds, resetOrder, settingsOf, slotName, withGroupLock, type Db } from "./common.js";
 
 /** A 400 that carries per-field messages, shown under each form field. */
@@ -71,6 +74,7 @@ export async function createGroup(userId: string, input: SetupInput) {
   const { data } = settingsData(input);
 
   return prisma.$transaction(async (tx) => {
+    await assertNoDebts(tx, userId, "create");
     await assertNameAvailable(tx, userId, input.name);
     const group = await tx.group.create({
       // R-DEC-38: the standard terms for now; the group keeps this copy.
@@ -175,9 +179,9 @@ function summary(group: Group) {
   };
 }
 
-/** The public face of a group, for invite landing pages (R-INV-01). */
+/** The public face of a group, for invite landing pages (R-INV-01). The id links the organizer's profile (R-DEC-43). */
 export function publicSummary(group: Group & { organizer: { displayName: string } }, occupied: number) {
-  return { ...summary(group), organizerName: group.organizer.displayName, occupied };
+  return { ...summary(group), organizerName: group.organizer.displayName, organizerId: group.organizerId, occupied };
 }
 
 /**
@@ -230,14 +234,24 @@ export async function groupDetail(groupId: string, viewerUserId: string, appOrig
         })),
     );
 
+  // R-WDR-12: when each slot's current holder took it over from someone, if they did.
+  const handovers = new Map((group.rounds.length > 0 ? await handoversOf(prisma, groupId) : []).map((h) => [h.slotId, h]));
+  const tookOver = (slotId: string) => {
+    const h = handovers.get(slotId);
+    return h ? { at: h.until.toISOString(), from: h.name } : null;
+  };
   const slots = group.slots.map((slot) => ({
     id: slot.id,
     kind: slot.userId ? ("MEMBER" as const) : ("PLACEHOLDER" as const),
+    /** For the member's profile link (R-DEC-43); null for a placeholder. */
+    userId: slot.userId,
     name: slotName(slot),
     isOrganizer: slot.isOrganizer,
     isViewer: slot.id === viewer.id,
     position: slot.position,
     claimedAt: slot.claimedAt?.toISOString() ?? null,
+    /** The latest hand-over to this slot's holder (R-WDR-09), with who had it before. */
+    tookOver: tookOver(slot.id),
     /** What this slot owes the organizer (§8). Everyone sees everyone's (R-DEC-06). */
     debt: { principal: Number(slot.debtPrincipal), interest: Number(slot.debtInterest), ...breakdownOf(slot.id) },
     contact: isOrganizer && !slot.userId ? slot.placeholderContact : null,
@@ -274,6 +288,11 @@ export async function groupDetail(groupId: string, viewerUserId: string, appOrig
   const payouts = await payoutsView(groupId, viewer.id, isOrganizer);
   const disputes = started ? await visibleDisputes(prisma, groupId, viewerScope) : [];
   const swaps = started ? await visibleSwaps(prisma, groupId, viewerScope) : [];
+  const { withdrawals, leaving } =
+    group.state === "LOBBY" || group.state === "CANCELLED"
+      ? { withdrawals: [], leaving: null }
+      : await leavingView(prisma, group, viewer, appOrigin);
+  const ratings = await ratingsView(prisma, group, viewer);
 
   return {
     // Terms stay out of summary(): guests see the public summary but not the terms (R-INV-08).
@@ -295,6 +314,12 @@ export async function groupDetail(groupId: string, viewerUserId: string, appOrig
     disputes,
     /** Turn swaps the viewer may see (§9): all for the organizer, their own for a member. Newest first. */
     swaps,
+    /** §9.1: leaving requests the viewer may see, newest first (all for the organizer, their own for a member). */
+    withdrawals,
+    /** R-WDR-02/03: whether the viewer can leave now and what's left to do; null for the organizer or outside LAUNCHED/ACTIVE. */
+    leaving,
+    /** R-DEC-43: the viewer's ratings in this paluwagan; null before completion. */
+    ratings,
     payouts,
     launch:
       group.state === "LOBBY"

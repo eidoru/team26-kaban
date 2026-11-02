@@ -6,7 +6,7 @@ const db = vi.hoisted(() => {
   const tx = {
     $queryRaw: vi.fn(),
     group: { findUniqueOrThrow: vi.fn() },
-    slot: { findFirst: vi.fn(), count: vi.fn(), create: vi.fn(), update: vi.fn() },
+    slot: { findFirst: vi.fn(), findMany: vi.fn(), count: vi.fn(), create: vi.fn(), update: vi.fn() },
     claimLink: { findUniqueOrThrow: vi.fn(), update: vi.fn() },
   };
   return {
@@ -20,6 +20,8 @@ const db = vi.hoisted(() => {
   };
 });
 vi.mock("../lib/prisma.js", () => ({ prisma: db.prisma, prismaTransactionOptions: {} }));
+vi.mock("../lib/audit.js", () => ({ audit: vi.fn() }));
+vi.mock("./notifications.js", () => ({ notifyUsers: vi.fn() }));
 
 const { claimPlaceholder, getClaim, getInvite, joinViaInvite } = await import("./roster.js");
 
@@ -58,6 +60,7 @@ beforeEach(() => {
   db.tx.group.findUniqueOrThrow.mockResolvedValue(group);
   db.tx.slot.findFirst.mockResolvedValue(null);
   db.tx.slot.count.mockResolvedValue(1);
+  db.tx.slot.findMany.mockResolvedValue([]);
   db.prisma.claimLink.findUnique.mockResolvedValue({
     id: "c1",
     revokedAt: null,
@@ -112,6 +115,68 @@ describe("R-CLM-07: claim terms", () => {
       status: 400,
       message: TERMS_NOT_ACCEPTED,
     });
+    expect(db.tx.slot.update).not.toHaveBeenCalled();
+  });
+});
+
+// A slot this user holds elsewhere that still owes: ₱1,000 principal and ₱12.50 interest.
+const owingSlot = { groupId: "g9", debtPrincipal: 100_000n, debtInterest: 1_250n, group: { name: "Office" } };
+const inDebt = {
+  status: 409,
+  code: "IN_DEBT",
+  message: "You still owe ₱1,012.50 in Office. Settle it before you join another paluwagan.",
+};
+
+describe("R-DEC-39: no joining while in debt", () => {
+  it("looks only at the user's own slots that still owe", async () => {
+    await getInvite("t", "u1");
+    expect(db.tx.slot.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { userId: "u1", OR: [{ debtPrincipal: { gt: 0 } }, { debtInterest: { gt: 0 } }] },
+      }),
+    );
+  });
+
+  it("shows the invite as blocked, with what's owed where", async () => {
+    db.tx.slot.findMany.mockResolvedValue([owingSlot]);
+    expect(await getInvite("t", "u1")).toMatchObject({
+      status: "IN_DEBT",
+      debts: [{ groupId: "g9", groupName: "Office", owed: 101_250 }],
+    });
+  });
+
+  it("keeps the invite open for a user who owes nothing", async () => {
+    expect(await getInvite("t", "u1")).toMatchObject({ status: "OPEN", debts: [] });
+  });
+
+  it("doesn't look up debts for guests", async () => {
+    expect(await getInvite("t", undefined)).toMatchObject({ status: "OPEN", debts: [] });
+    expect(db.tx.slot.findMany).not.toHaveBeenCalled();
+  });
+
+  it("refuses to join, even with the terms agreed, and takes no slot", async () => {
+    db.tx.slot.findMany.mockResolvedValue([owingSlot]);
+    await expect(joinViaInvite("t", "u1", true)).rejects.toMatchObject(inDebt);
+    expect(db.tx.slot.create).not.toHaveBeenCalled();
+  });
+
+  it("lets a user who owes nothing join", async () => {
+    db.tx.slot.create.mockResolvedValue({ id: "s2", user: { displayName: "Ben" } });
+    db.tx.slot.findMany.mockResolvedValue([]);
+    await expect(joinViaInvite("t", "u1", true)).resolves.toEqual({ groupId: "g1", alreadyMember: false });
+  });
+
+  it("still lets an existing member through", async () => {
+    db.tx.slot.findMany.mockResolvedValue([owingSlot]);
+    db.tx.slot.findFirst.mockResolvedValue({ id: "s1" });
+    await expect(joinViaInvite("t", "u1", true)).resolves.toEqual({ groupId: "g1", alreadyMember: true });
+  });
+
+  it("shows the claim as blocked and refuses to claim", async () => {
+    db.tx.slot.findMany.mockResolvedValue([owingSlot]);
+    db.tx.slot.count.mockResolvedValue(0);
+    expect(await getClaim("t", "u1")).toMatchObject({ status: "IN_DEBT", debts: [{ groupName: "Office" }] });
+    await expect(claimPlaceholder("t", "u1", true)).rejects.toMatchObject(inDebt);
     expect(db.tx.slot.update).not.toHaveBeenCalled();
   });
 });

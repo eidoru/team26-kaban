@@ -3,49 +3,74 @@ import { DISPUTE_REASON_MAX_LENGTH } from "@domain/constants";
 import { disputeAmountError, refundFor } from "@domain/submissions";
 import type { GroupDetail, SubmissionView } from "../../../api/client";
 import { AmountField } from "../../../components/flow/AmountField";
+import { ProofPicker } from "../../../components/flow/ProofPicker";
 import { Sheet } from "../../../components/flow/Sheet";
 import { SheetDone } from "../../../components/flow/SheetDone";
 import { formatDueDate } from "../../../lib/dates";
 import { formatPeso, parsePesoInput, pesoInputValue } from "../../../lib/money";
+import { uploadProof } from "../../../lib/proofUpload";
 import { ui } from "../../../lib/ui";
 import { standingOf } from "./period";
+
+export type DisputeInput = {
+  submissionId: string;
+  proposedAmount: number;
+  reason: string;
+  forLeaving?: boolean;
+  proofPath?: string;
+};
 
 /**
  * R-DSP-01: ask to change an approved contribution, while its period is open or, for one paid
  * ahead, still to come (R-DSP-04, R-DEC-32). Lower is a
  * correction or a refund request; higher can't take the period past the contribution (R-DEC-13).
+ * `forLeaving` asks the whole payment back before leaving: ₱0, with a proof photo (R-WDR-04).
  */
 export function DisputeSheet({
   detail,
   submission,
+  forLeaving = false,
   onClose,
   onSubmit,
 }: {
   detail: GroupDetail;
   submission: SubmissionView | null;
+  forLeaving?: boolean;
   onClose: () => void;
-  onSubmit: (input: { submissionId: string; proposedAmount: number; reason: string }) => Promise<boolean>;
+  onSubmit: (input: DisputeInput) => Promise<boolean>;
 }) {
   if (!submission) return null;
-  return <DisputeForm key={submission.id} detail={detail} submission={submission} onClose={onClose} onSubmit={onSubmit} />;
+  return (
+    <DisputeForm
+      key={submission.id}
+      detail={detail}
+      submission={submission}
+      forLeaving={forLeaving}
+      onClose={onClose}
+      onSubmit={onSubmit}
+    />
+  );
 }
 
 function DisputeForm({
   detail,
   submission,
+  forLeaving,
   onClose,
   onSubmit,
 }: {
   detail: GroupDetail;
   submission: SubmissionView;
+  forLeaving: boolean;
   onClose: () => void;
-  onSubmit: (input: { submissionId: string; proposedAmount: number; reason: string }) => Promise<boolean>;
+  onSubmit: (input: DisputeInput) => Promise<boolean>;
 }) {
   const current = submission.effectiveAmount ?? submission.amount;
   const standing = standingOf(detail, submission.slotId, submission.round ?? undefined);
   // R-DEC-32: a report expires at its own round's payout, which for one paid ahead is a later one.
   const payoutDate = detail.schedule.find((r) => r.number === submission.round)?.payoutDate ?? detail.period?.payoutDate;
-  const [amountText, setAmountText] = useState(pesoInputValue(current));
+  const [amountText, setAmountText] = useState(pesoInputValue(forLeaving ? 0 : current));
+  const [file, setFile] = useState<File | null>(null);
   const [reason, setReason] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
@@ -63,12 +88,17 @@ function DisputeForm({
   const forRound = submission.round === detail.period?.number ? "this round" : `round ${submission.round}`;
   const payout = payoutDate ? `before the ${formatDueDate(payoutDate)} payout` : "before the payout";
 
+  const missingProof = forLeaving && !file;
+  const blocked = !!amountError || !!reasonError || !reason.trim() || missingProof || sending;
+
   async function submit() {
-    if (amountError || reasonError || !reason.trim() || sending) return;
+    if (blocked) return;
     setSending(true);
     setError("");
     try {
-      if (await onSubmit({ submissionId: submission.id, proposedAmount: value, reason: reason.trim() })) setSent(true);
+      const proofPath = forLeaving && file ? await uploadProof(detail.group.id, file) : undefined;
+      const input = { submissionId: submission.id, proposedAmount: value, reason: reason.trim() };
+      if (await onSubmit(forLeaving ? { ...input, forLeaving, proofPath } : input)) setSent(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't send it. Try again.");
     } finally {
@@ -90,13 +120,13 @@ function DisputeForm({
     <Sheet
       open
       onClose={onClose}
-      title="Report a problem with this payment"
+      title={forLeaving ? "Ask for this payment back" : "Report a problem with this payment"}
       subtitle={`Recorded as ${formatPeso(current)} · round ${submission.round}`}
       footer={
         <button
           type="button"
           onClick={() => void submit()}
-          disabled={!!amountError || !!reasonError || !reason.trim() || sending}
+          disabled={blocked}
           className={`${ui.btnPrimaryFull} min-h-11`}
         >
           {sending ? "Sending…" : "Send to the organizer"}
@@ -113,7 +143,7 @@ function DisputeForm({
         <p className="text-sm text-ink-600">
           {detail.group.organizerName} decides {payout}. If not, {formatPeso(current)} stands.
         </p>
-        <AmountField label="Correct amount" value={amountText} onChange={setAmountText} error={amountError} />
+        {!forLeaving && <AmountField label="Correct amount" value={amountText} onChange={setAmountText} error={amountError} />}
         {refund > 0 && !amountError && (
           <p className="rounded-2xl bg-sun-50 px-4 py-3 text-sm text-sun-900">
             If approved, {detail.group.organizerName} owes you a <b>{formatPeso(refund)}</b> refund, and you&apos;ll be{" "}
@@ -122,18 +152,21 @@ function DisputeForm({
         )}
         <div>
           <label htmlFor={reasonId} className={ui.label}>
-            What happened?
+            {forLeaving ? "Why do you need it back?" : "What happened?"}
           </label>
           <textarea
             id={reasonId}
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             rows={3}
-            placeholder="e.g. I sent ₱1,500, not ₱2,000. GCash ref 1234."
+            placeholder={forLeaving ? "e.g. I'm leaving and need it back. GCash ref 1234." : "e.g. I sent ₱1,500, not ₱2,000. GCash ref 1234."}
             className={ui.input}
           />
           {reasonError && <p className="mt-1.5 text-xs font-semibold text-danger-700">{reasonError}</p>}
         </div>
+        {forLeaving && (
+          <ProofPicker file={file} onChange={setFile} onError={setError} prompt="Add a photo of the original payment" />
+        )}
         {error && (
           <p className={ui.error} role="alert">
             {error}

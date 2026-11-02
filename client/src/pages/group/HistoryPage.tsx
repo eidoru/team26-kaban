@@ -16,7 +16,8 @@ function debtChange(e: HistoryEvent): string | null {
 
 /**
  * §15.3 "My history": everything recorded for the viewer's slot, newest first: reports and their
- * reviews, debt changes, payouts, refunds. Records from before a claim are labeled inherited.
+ * reviews, debt changes, payouts, refunds. Records from before a claim or a hand-over (R-WDR-12) are
+ * labeled inherited.
  */
 export function HistoryPage() {
   const { id = "" } = useParams<{ id: string }>();
@@ -36,7 +37,12 @@ export function HistoryPage() {
           <ArrowLeft className="h-4 w-4" aria-hidden />
           Money &amp; records
         </Link>
-        {data?.claimedAt && (
+        {data?.tookOver ? (
+          <p className="mt-4 rounded-2xl bg-sky-50 px-4 py-3 text-sm text-sky-900">
+            You took this slot over from {data.tookOver.from} on {new Date(data.tookOver.at).toLocaleDateString()}. Earlier
+            records came with it and are marked inherited.
+          </p>
+        ) : data?.claimedAt && (
           <p className="mt-4 rounded-2xl bg-sky-50 px-4 py-3 text-sm text-sky-900">
             You claimed this slot on {new Date(data.claimedAt).toLocaleDateString()}. Earlier records came with it and are marked
             inherited.

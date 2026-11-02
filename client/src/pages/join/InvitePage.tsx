@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, api } from "../../api/client";
+import { DebtBlock } from "../../components/DebtBlock";
 import { Spinner } from "../../components/Splash";
 import { TermsAgreement } from "../../components/Terms";
 import { useAuth } from "../../context/useAuth";
@@ -80,7 +81,7 @@ export function InvitePage() {
 
   return (
     <JoinShell>
-      <Ticket group={group} eyebrow={<>{group.organizerName} invites you to join</>}>
+      <Ticket group={group} signedIn={!!user} eyebrow={<>{group.organizerName} invites you to join</>}>
         {data.status === "FULL" ? (
           <p className="text-center text-sm text-ink-700">
             <b>This paluwagan is full.</b> The link works again if a slot opens up.
@@ -89,6 +90,8 @@ export function InvitePage() {
           <p className="text-center text-sm text-ink-700">
             <b>It's no longer taking members.</b> It has already launched or was cancelled.
           </p>
+        ) : data.status === "IN_DEBT" ? (
+          <DebtBlock debts={data.debts} action="join" />
         ) : !user ? (
           <div className="space-y-2">
             <button type="button" onClick={() => goAuth("/login")} className={`${ui.btnPrimaryFull} min-h-11`}>

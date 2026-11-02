@@ -34,5 +34,8 @@ export const can = {
   submitContribution: (s: GroupState) => s === "ACTIVE",
   submitDebtPayment: (s: GroupState) => s === "ACTIVE" || s === "COMPLETED_WITH_OUTSTANDING_DEBT", // R-DBT-11
   requestSwap: (s: GroupState) => s === "ACTIVE",
+  leave: (s: GroupState) => s === "LAUNCHED" || s === "ACTIVE", // R-WDR-01
   cancel: (s: GroupState) => s === "LOBBY",
+  /** R-DEC-43: after the final payout, debts or not. */
+  rate: (s: GroupState) => s === "COMPLETED" || s === "COMPLETED_WITH_OUTSTANDING_DEBT",
 };

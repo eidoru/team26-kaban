@@ -9,12 +9,15 @@ import {
   CalendarClock,
   CircleCheck,
   ClipboardCheck,
+  DoorOpen,
   HandCoins,
   Hourglass,
   NotebookPen,
   Rocket,
   Shuffle,
+  Star,
   TriangleAlert,
+  UserRoundCog,
   Users,
 } from "lucide-react";
 import {
@@ -25,6 +28,7 @@ import {
   type SlotView,
   type SubmissionView,
   type SwapView,
+  type WithdrawalView,
 } from "../../api/client";
 import { ActionBar } from "../../components/flow/ActionBar";
 import { NowPanel } from "../../components/flow/NowPanel";
@@ -45,7 +49,15 @@ import { currentOrder } from "./slots";
 import { PaySheet, type PayMode } from "./active/PaySheet";
 import { PayoutSheet } from "./active/PayoutSheet";
 import { WhoPaidSheet } from "./active/WhoPaidSheet";
-import { debtReportable, owedBy, payoutsToActOnFor, reviewItems, standingOf, type ReviewItem } from "./active/period";
+import {
+  debtReportable,
+  owedBy,
+  paymentIdOf,
+  payoutsToActOnFor,
+  reviewItems,
+  standingOf,
+  type ReviewItem,
+} from "./active/period";
 import { MyPayments, PayoutStageCard, PeriodCard, PeriodStatusList } from "./active/PeriodSections";
 import { DebtsView } from "./debts/DebtSections";
 import { DisputeSheet } from "./active/DisputeSheet";
@@ -54,6 +66,8 @@ import { Recap } from "./records/RecordsSections";
 import { MyStanding, YourTurn } from "./dashboard/StatsSections";
 import { swapToActOn } from "./swaps/swaps";
 import { ReviewSheet } from "./active/ReviewSheet";
+import { WithdrawalReviewSheet } from "./leave/WithdrawalReviewSheet";
+import { RateMembersSheet, RateOrganizerSheet, YourRatingsCard } from "./ratings/RatingSheets";
 import { MembersList, SlotsList } from "./SlotsList";
 import { STATE_LABELS, useGroupShell } from "./groupShell";
 
@@ -102,6 +116,8 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
   const [swapWithSlotId, setSwapWithSlotId] = useState<string | null>(null);
   // Open on the whole queue (true), or on one item from the Debts view (its review key).
   const [reviewOpen, setReviewOpen] = useState<boolean | string>(false);
+  const [reviewWithdrawalId, setReviewWithdrawalId] = useState<string | null>(null);
+  const [ratingOpen, setRatingOpen] = useState(false);
   // The Dashboard's "Record payments" with more than one placeholder to record: who paid first.
   const [pickingRecord, setPickingRecord] = useState(false);
   const [demoTools] = useDemoToolsSetting();
@@ -281,8 +297,66 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
     if (note?.trim()) await run(`swap-${swap.id}`, () => api.denySwap(group.id, swap.id, note.trim()));
   }
 
+  /** R-WDR-09: the organizer rejects with a reason, as with swaps. */
+  async function rejectWithdrawal(request: WithdrawalView) {
+    const note = await dialog.prompt({
+      title: `Reject ${request.leaverName}'s request?`,
+      label: "Why not?",
+      required: true,
+      multiline: true,
+      submitLabel: "Reject",
+    });
+    if (note?.trim() && (await run(`withdrawal-${request.id}`, () => api.rejectWithdrawal(group.id, request.id, note.trim())))) {
+      setReviewWithdrawalId(null);
+    }
+  }
+
+  /** R-DEC-43: save ratings, then refresh any profile on screen (their averages changed). */
+  async function rate(call: () => Promise<GroupDetail>) {
+    const saved = await run("rate", call);
+    if (saved) void queryClient.invalidateQueries({ queryKey: ["user"] });
+    return !!saved;
+  }
+
   // The swap the Now panel shows with its actions; the swaps list leaves it out.
   let nowSwapId: string | undefined;
+
+  // §9.1: requests to leave the organizer must decide, and the viewer's own while it's open.
+  const myLeave = detail.withdrawals.find((w) => w.mine && (w.status === "AWAITING_REPLACEMENT" || w.status === "AWAITING_ORGANIZER"));
+  const leaveTodos: Todo[] = [
+    ...(isOrganizer ? detail.withdrawals.filter((w) => w.status === "AWAITING_ORGANIZER") : []).map(
+      (w): Todo => ({
+        id: `withdrawal-${w.id}`,
+        icon: UserRoundCog,
+        tone: "brand",
+        title: `Review ${w.leaverName}'s request to leave`,
+        detail: `${w.replacement?.name} agreed to take over their slot.`,
+        action: { label: "Review", onClick: () => setReviewWithdrawalId(w.id) },
+      }),
+    ),
+    ...(myLeave
+      ? [
+          {
+            id: "leaving",
+            icon: DoorOpen,
+            tone: "calm" as const,
+            title:
+              myLeave.status === "AWAITING_ORGANIZER"
+                ? `Your request to leave is with ${group.organizerName}`
+                : myLeave.replacement
+                  ? `Waiting for ${myLeave.replacement.name} to accept again`
+                  : "Share your replacement link",
+            detail:
+              myLeave.status === "AWAITING_ORGANIZER"
+                ? `${myLeave.replacement?.name} agreed to take your slot. Keep paying until it's approved.`
+                : "Someone takes over your slot once they accept and it's approved.",
+            action: { label: "Open", onClick: () => navigate(`/groups/${group.id}/leave`) },
+            // Only sharing the link is the viewer's move; the others are waiting.
+            inBar: myLeave.status === "AWAITING_REPLACEMENT" && !myLeave.replacement,
+          },
+        ]
+      : []),
+  ];
 
   // --- The viewer's next step (design rule: it comes first), and the one main action.
   let now: ReactNode;
@@ -367,7 +441,7 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
       />
     );
   } else if (group.state === "LAUNCHED") {
-    now = (
+    const startsPanel = (
       <NowPanel
         tone="sun"
         icon={CalendarClock}
@@ -391,6 +465,17 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
         )}
       </NowPanel>
     );
+    // Leaving works from launch (R-WDR-01), so its to-dos can come before the start date.
+    now =
+      leaveTodos.length > 0 ? (
+        <div className="space-y-4">
+          <TodoPanel todos={leaveTodos} />
+          {startsPanel}
+        </div>
+      ) : (
+        startsPanel
+      );
+    if (leaveTodos.some((t) => t.inBar !== false)) primary = <TodoBarButton todos={leaveTodos} />;
   } else if (group.state === "ACTIVE" || group.state === "COMPLETED" || group.state === "COMPLETED_WITH_OUTSTANDING_DEBT") {
     const period = detail.period;
     const mine = period ? standingOf(detail, viewer.slotId) : null;
@@ -432,6 +517,7 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
         action: { label: "Review", onClick: () => setReviewOpen(true) },
       });
     }
+    todos.push(...leaveTodos.filter((t) => t.id !== "leaving"));
     for (const payout of payoutsToActOn) {
       const recipient = detail.slots.find((s) => s.id === payout.recipientSlotId);
       const confirming = payout.status === "HANDED_OVER";
@@ -552,6 +638,7 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
         inBar: false,
       });
     }
+    todos.push(...leaveTodos.filter((t) => t.id === "leaving"));
     if (debtLeft > 0) {
       todos.push({
         id: "debt",
@@ -563,6 +650,27 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
             ? `Owed to ${group.organizerName}. Interest grows at each payout until it's paid.`
             : `Shortfalls ${group.organizerName} covered for you.`,
         action: { label: "Pay", onClick: () => pay(viewer.slotId, "DEBT_PAYMENT") },
+      });
+    }
+    // R-DEC-43: once completed, the organizer must rate every member; a member may rate the organizer.
+    const ratings = detail.ratings;
+    if (ratings?.kind === "members" && !ratings.done) {
+      todos.push({
+        id: "rate",
+        icon: Star,
+        tone: "brand",
+        title: "Rate your members",
+        detail: "1 to 5 stars each. Their profiles show the average.",
+        action: { label: "Rate", onClick: () => setRatingOpen(true) },
+      });
+    } else if (ratings?.kind === "organizer" && ratings.stars == null) {
+      todos.push({
+        id: "rate",
+        icon: Star,
+        tone: "calm",
+        title: `Rate ${group.organizerName}`,
+        detail: "If you like: 1 to 5 stars for how they ran it.",
+        action: { label: "Rate", onClick: () => setRatingOpen(true) },
       });
     }
 
@@ -648,7 +756,10 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
               <h1 className={ui.pageTitle}>{group.name}</h1>
             </div>
             {isOrganizer && inLobby && (
-              <GroupMenu onCancel={() => void cancelGroup()} disabled={pending !== null} />
+              <GroupMenu
+                items={[{ label: "Cancel this paluwagan", icon: Ban, onSelect: () => void cancelGroup() }]}
+                disabled={pending !== null}
+              />
             )}
           </header>
           {now}
@@ -732,7 +843,7 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
           <DebtsView
             detail={detail}
             onPay={(slot) => pay(slot.id, "DEBT_PAYMENT")}
-            onReview={(submission) => setReviewOpen(`payment-${submission.id}`)}
+            onReview={(submission) => setReviewOpen(`payment-${paymentIdOf(detail, submission)}`)}
           />
         </>
       ) : (
@@ -777,6 +888,7 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
               onDispute={(s) => setDisputeForId(s.id)}
               onWithdrawDispute={(d) => void withdrawDispute(d)}
             />
+            <YourRatingsCard detail={detail} onChange={() => setRatingOpen(true)} />
             {(group.state === "COMPLETED" || group.state === "COMPLETED_WITH_OUTSTANDING_DEBT") && <Recap detail={detail} />}
           </div>
           <div className="mt-8 min-w-0 space-y-8 lg:mt-0">
@@ -878,6 +990,51 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
           onDeny={denyItem}
           error={error?.message ?? null}
           onClearError={clearError}
+        />
+      )}
+      {isOrganizer && (
+        <WithdrawalReviewSheet
+          detail={detail}
+          request={detail.withdrawals.find((w) => w.id === reviewWithdrawalId) ?? null}
+          pending={pending}
+          error={error?.message ?? null}
+          onClose={() => {
+            setReviewWithdrawalId(null);
+            clearError();
+          }}
+          onApprove={(w, stars) =>
+            void run(`withdrawal-${w.id}`, () => api.approveWithdrawal(group.id, w.id, stars ?? undefined)).then((done) => {
+              if (!done) return;
+              setReviewWithdrawalId(null);
+              if (stars != null) void queryClient.invalidateQueries({ queryKey: ["user"] });
+            })
+          }
+          onReject={(w) => void rejectWithdrawal(w)}
+        />
+      )}
+      {ratingOpen && detail.ratings?.kind === "members" && (
+        <RateMembersSheet
+          ratings={detail.ratings}
+          pending={pending === "rate"}
+          error={error?.message ?? null}
+          onClose={() => {
+            setRatingOpen(false);
+            clearError();
+          }}
+          onSave={(ratings) => rate(() => api.rateMembers(group.id, ratings))}
+        />
+      )}
+      {ratingOpen && detail.ratings?.kind === "organizer" && (
+        <RateOrganizerSheet
+          organizerName={group.organizerName}
+          stars={detail.ratings.stars}
+          pending={pending === "rate"}
+          error={error?.message ?? null}
+          onClose={() => {
+            setRatingOpen(false);
+            clearError();
+          }}
+          onSave={(stars) => rate(() => api.rateOrganizer(group.id, stars))}
         />
       )}
       <SlotSheet

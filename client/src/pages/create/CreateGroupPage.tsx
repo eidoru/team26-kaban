@@ -1,17 +1,18 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
 import { earliestStartDate, frequencyLabel, type SetupErrors } from "@domain/setup";
 import { STANDARD_TERMS } from "@domain/terms";
 import { ApiError, api } from "../../api/client";
+import { DebtBlock } from "../../components/DebtBlock";
 import { ActionBar } from "../../components/flow/ActionBar";
 import { Sheet } from "../../components/flow/Sheet";
 import { Stepper } from "../../components/flow/Stepper";
 import { TermsText } from "../../components/Terms";
 import { formatDueDate, todayInManila } from "../../lib/dates";
 import { groupKey } from "../../lib/groupQueries";
-import { invalidateHomeLists } from "../../lib/homeQueries";
+import { homeKey, invalidateHomeLists } from "../../lib/homeQueries";
 import { formatPeso } from "../../lib/money";
 import { ui } from "../../lib/ui";
 import { BasicsSection, InterestSection, MoneySection, PotCard, ScheduleSection } from "./SetupFields";
@@ -34,6 +35,11 @@ export function CreateGroupPage() {
   const [serverErrors, setServerErrors] = useState<SetupErrors>({});
   const [submitError, setSubmitError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  // R-DEC-39: Home already knows what's owed where; the server refuses too, if this is stale.
+  const { data: home } = useQuery({ queryKey: homeKey, queryFn: () => api.home() });
+  const debts = (home?.groups ?? [])
+    .filter((g) => g.owed > 0)
+    .map((g) => ({ groupId: g.id, groupName: g.name, owed: g.owed }));
 
   const today = todayInManila();
   const errors = useMemo(() => ({ ...draftErrors(draft, today), ...serverErrors }), [draft, today, serverErrors]);
@@ -66,6 +72,19 @@ export function CreateGroupPage() {
 
   const sectionProps = { draft, set, errors };
   const isLast = step === STEPS.length - 1;
+
+  if (debts.length > 0) {
+    return (
+      <div className="mx-auto max-w-lg">
+        <Link to="/home" className={`${ui.btnGhost} mb-6`}>
+          <ArrowLeft className="h-4 w-4" aria-hidden />
+          Back
+        </Link>
+        <h1 className="sr-only">Start a paluwagan</h1>
+        <DebtBlock debts={debts} action="create" />
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-3xl">

@@ -1,7 +1,10 @@
 import { type FormEvent, type ReactNode, useId, useState } from "react";
+import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { api, ApiError, patchSession, storeAuth } from "../api/client";
 import { useAuth } from "../context/useAuth";
 import { Avatar } from "../components/Avatar";
+import { ProfileRatings } from "../components/StarRating";
 import { ToggleSwitch } from "../components/ToggleSwitch";
 import { demoToolsAvailable, useDemoToolsSetting } from "../lib/devTools";
 import { ui } from "../lib/ui";
@@ -65,6 +68,12 @@ function SecurityRow({
 export function ProfilePage() {
   const { user, refreshUser } = useAuth();
   const [demoToolsOn, setDemoToolsOn] = useDemoToolsSetting();
+  // R-DEC-43: the viewer's own ratings, as others see them on their public profile.
+  const { data: publicProfile } = useQuery({
+    queryKey: ["user", user?.id],
+    queryFn: () => api.userProfile(user!.id),
+    enabled: !!user,
+  });
   const emailPanelId = useId();
   const passwordPanelId = useId();
 
@@ -270,6 +279,20 @@ export function ProfilePage() {
           </form>
         </div>
       </div>
+
+      {publicProfile && (
+        <section aria-labelledby="ratings-heading">
+          <div className="mb-4 flex items-end justify-between gap-2">
+            <h2 id="ratings-heading" className={ui.sectionHeading}>
+              Ratings
+            </h2>
+            <Link to={`/users/${publicProfile.id}`} className={ui.link}>
+              Public profile
+            </Link>
+          </div>
+          <ProfileRatings profile={publicProfile} />
+        </section>
+      )}
 
       <section>
         <h2 className={`${ui.sectionHeading} mb-4`}>Account security</h2>

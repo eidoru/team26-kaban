@@ -1,5 +1,6 @@
 import type { DebtEntryKind, Slot } from "@prisma/client";
-import { applyRepayment, outstanding, type DebtState } from "../domain/debt.js";
+import { applyRepayment, inDebtMessage, outstanding, type DebtOwed, type DebtState } from "../domain/debt.js";
+import { AppError } from "../lib/errors.js";
 import type { Db } from "./common.js";
 
 export function debtOf(slot: Pick<Slot, "debtPrincipal" | "debtInterest">): DebtState {
@@ -68,4 +69,23 @@ export async function groupHasDebt(db: Db, groupId: string) {
     where: { groupId, OR: [{ debtPrincipal: { gt: 0 } }, { debtInterest: { gt: 0 } }] },
   });
   return owing > 0;
+}
+
+/**
+ * R-DEC-39: every paluwagan where this user's slot still owes the organizer, inherited debt
+ * included (R-CLM-06). Reads the cached balances, so only approved repayments count.
+ */
+export async function debtsOwedBy(db: Db, userId: string): Promise<DebtOwed[]> {
+  const slots = await db.slot.findMany({
+    where: { userId, OR: [{ debtPrincipal: { gt: 0 } }, { debtInterest: { gt: 0 } }] },
+    include: { group: { select: { name: true } } },
+    orderBy: { createdAt: "asc" },
+  });
+  return slots.map((s) => ({ groupId: s.groupId, groupName: s.group.name, owed: outstanding(debtOf(s)) }));
+}
+
+/** R-DEC-39: refuse to start, join or claim while the user owes in any paluwagan. */
+export async function assertNoDebts(db: Db, userId: string, action: "create" | "join") {
+  const debts = await debtsOwedBy(db, userId);
+  if (debts.length > 0) throw new AppError(409, inDebtMessage(debts, action), "IN_DEBT");
 }

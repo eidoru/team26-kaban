@@ -6,6 +6,7 @@ import { prisma } from "../lib/prisma.js";
 import { APP_TIME_ZONE } from "../lib/today.js";
 import { slotName } from "./common.js";
 import { completionSummary, recordEvents, type MemberTotals, type RecordEvent } from "./records.js";
+import { handoversOf } from "./withdrawals.js";
 import { formatDisplayDate } from "../lib/dates.js";
 
 export type ExportKind = "statement" | "ledger" | "summary";
@@ -100,7 +101,12 @@ export async function buildExport(input: {
     const slot = group.slots.find((s) => s.id === (input.slotId ?? viewer.id));
     if (!slot) throw notFound("Slot");
     if (slot.id !== viewer.id && !viewer.isOrganizer) throw forbidden("You can only export your own statement.");
-    const [{ members }, events] = await Promise.all([completionSummary(group.id), recordEvents(group.id, slot.id)]);
+    const [{ members }, events, handovers] = await Promise.all([
+      completionSummary(group.id),
+      recordEvents(group.id, slot.id),
+      handoversOf(prisma, group.id),
+    ]);
+    const tookOver = handovers.filter((h) => h.slotId === slot.id).at(-1);
     const totals = members.find((m) => m.slotId === slot.id)!;
     const name = slotName(slot);
     const round = group.rounds.find((r) => r.recipientSlotId === slot.id);
@@ -128,6 +134,8 @@ export async function buildExport(input: {
       `${group.name} · ${terms}`,
       round ? `Payout turn: round ${round.number}, ${formatDisplayDate(round.payoutDate)}` : "Payout turn not set yet",
       ...(slot.claimedAt ? [`Claimed from a placeholder on ${when(slot.claimedAt)}. Earlier records are marked inherited.`] : []),
+      // R-WDR-12
+      ...(tookOver ? [`Taken over from ${tookOver.name} on ${when(tookOver.until)}. Earlier records are marked inherited.`] : []),
       generated,
     ];
     const report = new Report(FOOTER).title("Member statement", name, lines).facts(totalsFacts(totals)).heading("History");

@@ -1,8 +1,8 @@
 import { PENDING_INVITE_KEY } from "../api/client";
 
-type PendingLink = { kind: "invite" | "claim"; token: string };
+type PendingLink = { kind: "invite" | "claim" | "replace"; token: string };
 
-/** Remember an invite or claim link while the visitor logs in or registers (R-INV-02, R-CLM-04). */
+/** Remember an invite, claim or replacement link while the visitor logs in or registers (R-INV-02, R-CLM-04, R-WDR-07). */
 export function stashPendingLink(link: PendingLink) {
   sessionStorage.setItem(PENDING_INVITE_KEY, JSON.stringify(link));
 }
@@ -11,7 +11,7 @@ function readPendingLink(): PendingLink | null {
   try {
     const raw = sessionStorage.getItem(PENDING_INVITE_KEY);
     const link = raw ? (JSON.parse(raw) as PendingLink) : null;
-    return link?.token && (link.kind === "invite" || link.kind === "claim") ? link : null;
+    return link?.token && (link.kind === "invite" || link.kind === "claim" || link.kind === "replace") ? link : null;
   } catch {
     return null;
   }
@@ -25,7 +25,7 @@ function readPendingLink(): PendingLink | null {
 export function pendingDestination(): string | null {
   const link = readPendingLink();
   if (!link) return null;
-  return link.kind === "invite" ? `/invite/${link.token}` : `/claim/${link.token}`;
+  return link.kind === "invite" ? `/invite/${link.token}` : link.kind === "claim" ? `/claim/${link.token}` : `/replace/${link.token}`;
 }
 
 /** The landing page calls this once it has loaded, so the link isn't followed again later. */

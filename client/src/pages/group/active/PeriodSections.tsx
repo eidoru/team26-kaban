@@ -1,6 +1,6 @@
 import { Check, ChevronRight, Clock, ImageOff, Paperclip } from "lucide-react";
 import type { DisputeView, GroupDetail, GroupStats, PayoutView, PeriodSlot, SlotView, SubmissionView } from "../../../api/client";
-import { roundsLabel } from "@domain/submissions";
+import { paymentLabel, roundsLabel } from "@domain/submissions";
 import { Avatar } from "../../../components/Avatar";
 import { daysUntil, formatMonthDay } from "../../../lib/dates";
 import { formatPeso } from "../../../lib/money";
@@ -359,6 +359,10 @@ export function MyPayments({
       <ul className="divide-y divide-ink-100 overflow-hidden rounded-3xl border border-ink-200 bg-white">
         {mine.map((s) => {
           const label = SUBMISSION_LABELS[s.status];
+          // R-WDR-06: once a request to leave is sent, its slot's payments can't be reported.
+          const leaving = detail.withdrawals.some(
+            (w) => w.slotId === s.slotId && (w.status === "AWAITING_REPLACEMENT" || w.status === "AWAITING_ORGANIZER"),
+          );
           const slot = nameOf(s.slotId);
           const dispute = latestDispute(detail, s.id);
           const changed = s.effectiveAmount != null && s.effectiveAmount !== s.amount;
@@ -366,7 +370,8 @@ export function MyPayments({
             s.status === "APPROVED" &&
             s.appliedAs === "CONTRIBUTION" &&
             (s.round === detail.period?.number || isAhead(detail, s)) &&
-            dispute?.status !== "PENDING";
+            dispute?.status !== "PENDING" &&
+            !leaving;
           return (
             <li key={s.id} className="px-4 py-3">
               <div className="flex items-start gap-3">
@@ -381,7 +386,7 @@ export function MyPayments({
                     {(s.parts.length > 1 || isAhead(detail, s)) && (
                       <span className="font-semibold text-ink-600">
                         {s.parts.length > 1
-                          ? ` for ${roundsLabel(s.parts.map((p) => p.round ?? 0))}`
+                          ? ` for ${paymentLabel(s.parts)}`
                           : ` ahead for round ${s.round}`}
                       </span>
                     )}

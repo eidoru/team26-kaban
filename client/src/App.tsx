@@ -10,6 +10,7 @@ const HomePage = lazy(() => import("./pages/HomePage").then((m) => ({ default: m
 const LoginPage = lazy(() => import("./pages/LoginPage").then((m) => ({ default: m.LoginPage })));
 const RegisterPage = lazy(() => import("./pages/RegisterPage").then((m) => ({ default: m.RegisterPage })));
 const ProfilePage = lazy(() => import("./pages/ProfilePage").then((m) => ({ default: m.ProfilePage })));
+const UserProfilePage = lazy(() => import("./pages/UserProfilePage").then((m) => ({ default: m.UserProfilePage })));
 const NotificationsPage = lazy(() =>
   import("./pages/NotificationsPage").then((m) => ({ default: m.NotificationsPage })),
 );
@@ -28,6 +29,8 @@ const ActivityPage = lazy(() => import("./pages/group/ActivityPage").then((m) =>
 const HistoryPage = lazy(() => import("./pages/group/HistoryPage").then((m) => ({ default: m.HistoryPage })));
 const InvitePage = lazy(() => import("./pages/join/InvitePage").then((m) => ({ default: m.InvitePage })));
 const ClaimPage = lazy(() => import("./pages/join/ClaimPage").then((m) => ({ default: m.ClaimPage })));
+const ReplacePage = lazy(() => import("./pages/join/ReplacePage").then((m) => ({ default: m.ReplacePage })));
+const LeavePage = lazy(() => import("./pages/group/leave/LeavePage").then((m) => ({ default: m.LeavePage })));
 
 export function App() {
   return (
@@ -41,11 +44,13 @@ export function App() {
           </Route>
           <Route path="/invite/:token" element={<InvitePage />} />
           <Route path="/claim/:token" element={<ClaimPage />} />
+          <Route path="/replace/:token" element={<ReplacePage />} />
 
           <Route element={<ProtectedRoute />}>
             <Route element={<AppLayout />}>
               <Route path="/home" element={<HomePage />} />
               <Route path="/profile" element={<ProfilePage />} />
+              <Route path="/users/:id" element={<UserProfilePage />} />
               <Route path="/notifications" element={<NotificationsPage />} />
               <Route path="/money" element={<Navigate to="/home" replace />} />
               {/* Old "Owed to you" address, kept for bookmarks and older notifications. */}
@@ -60,6 +65,7 @@ export function App() {
                 <Route path="money" element={<MoneyRecordsPage />} />
                 <Route path="activity" element={<ActivityPage />} />
                 <Route path="history" element={<HistoryPage />} />
+                <Route path="leave" element={<LeavePage />} />
               </Route>
               <Route path="/groups/:id/edit" element={<EditGroupPage />} />
               {/* The review step is gone (R-DEC-28); launching happens on the group page. */}

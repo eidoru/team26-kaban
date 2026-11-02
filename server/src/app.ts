@@ -7,6 +7,7 @@ import groupsRoutes from "./routes/groups.js";
 import invitesRoutes from "./routes/invites.js";
 import cronRoutes from "./routes/cron.js";
 import notificationsRoutes from "./routes/notifications.js";
+import usersRoutes from "./routes/users.js";
 import devRoutes from "./routes/dev.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { resolveCorsOrigin } from "./lib/origin.js";
@@ -35,6 +36,7 @@ app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/groups", groupsRoutes);
 app.use("/api/v1", invitesRoutes);
 app.use("/api/v1/notifications", notificationsRoutes);
+app.use("/api/v1/users", usersRoutes);
 app.use("/api/v1/cron", cronRoutes);
 
 // Always mounted: requireDemoTools decides per request, so ALLOW_DEMO_TOOLS can turn them on in production.

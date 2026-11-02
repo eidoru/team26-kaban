@@ -11,6 +11,7 @@ import { fromCalendarDate, todayInManila } from "../lib/today.js";
 import { debtOf, groupHasDebt, recordDebtChange } from "./debts.js";
 import { expireDisputes } from "./disputes.js";
 import { expireSwapsFor } from "./swaps.js";
+import { expireWithdrawalsFor, resetStaleAcceptances } from "./withdrawals.js";
 import { notifyUsers } from "./notifications.js";
 import { periodTotals } from "./submissions.js";
 import { memberUserIds, slotName, withGroupLock, type Db } from "./common.js";
@@ -168,6 +169,9 @@ export async function closeOpenRound(groupId: string, actorUserId: string | null
     await tx.round.update({ where: { id: round.id }, data: { status: "CLOSED", closedAt: new Date() } });
     // R-DEC-24: the recipient's turn is used, so swaps involving it can't happen anymore.
     await expireSwapsFor(tx, groupId, recipient.id);
+    // R-WDR-11: the recipient's slot can't change hands now; R-WDR-10: others whose debt grew are re-asked.
+    await expireWithdrawalsFor(tx, group, recipient.id);
+    await resetStaleAcceptances(tx, group);
     await audit(tx, {
       groupId,
       actorUserId,
@@ -228,6 +232,22 @@ export async function closeOpenRound(groupId: string, actorUserId: string | null
       kind: "group.completed",
       title: `${group.name} is complete`,
       body: owing ? "Every payout is done. Some debts are still open." : "Every payout is done, and nobody owes anything.",
+    });
+    // R-DEC-43: the organizer rates every member; members may rate the organizer.
+    const raters = (await memberUserIds(tx, groupId)).filter((id) => id !== group.organizerId);
+    if (raters.length > 0) {
+      await notifyUsers(tx, [group.organizerId], {
+        groupId,
+        kind: "rating.due",
+        title: `Rate the members of ${group.name}`,
+        body: "Give each member 1 to 5 stars. Their profiles show the average.",
+      });
+    }
+    await notifyUsers(tx, raters, {
+      groupId,
+      kind: "rating.due",
+      title: `Rate the organizer of ${group.name}`,
+      body: "Give them 1 to 5 stars if you like. Their profile shows the average.",
     });
     return { closed: round.number, completed: true };
   });

@@ -34,6 +34,16 @@ describe("API smoke", () => {
     expect(res.status).toBe(401);
   });
 
+  it("GET /api/v1/users/:id (profiles, R-DEC-43) requires authentication", async () => {
+    const res = await request(app).get("/api/v1/users/00000000-0000-0000-0000-000000000001");
+    expect(res.status).toBe(401);
+  });
+
+  it("PUT /api/v1/groups/:id/ratings/members requires authentication", async () => {
+    const res = await request(app).put("/api/v1/groups/00000000-0000-0000-0000-000000000001/ratings/members").send({ ratings: [] });
+    expect(res.status).toBe(401);
+  });
+
   it("POST /api/v1/claims/:token/claim requires authentication", async () => {
     const res = await request(app).post("/api/v1/claims/some-token/claim");
     expect(res.status).toBe(401);

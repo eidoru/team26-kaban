@@ -3,6 +3,7 @@ import { TERMS_NOT_ACCEPTED } from "../domain/terms.js";
 import { audit } from "../lib/audit.js";
 import { badRequest, conflict, forbidden, notFound } from "../lib/errors.js";
 import { prisma } from "../lib/prisma.js";
+import { assertNoDebts, debtsOwedBy } from "./debts.js";
 import { notifyUsers } from "./notifications.js";
 import { publicSummary } from "./groups.js";
 import { assertState, memberUserIds, resetOrder, slotName, withGroupLock } from "./common.js";
@@ -23,7 +24,7 @@ export async function createInviteLink(groupId: string, actorUserId: string) {
   });
 }
 
-export type InviteStatus = "OPEN" | "FULL" | "CLOSED" | "ALREADY_MEMBER";
+export type InviteStatus = "OPEN" | "FULL" | "CLOSED" | "ALREADY_MEMBER" | "IN_DEBT";
 
 /** R-INV-08, R-CLM-07: joining or claiming needs the member's agreement to the group's terms. */
 function assertTermsAccepted(acceptTerms: boolean) {
@@ -32,7 +33,7 @@ function assertTermsAccepted(acceptTerms: boolean) {
 
 /**
  * R-INV-01…06: what the landing page shows for this link and viewer. The terms only for signed-in
- * viewers (R-INV-08).
+ * viewers (R-INV-08); what they owe elsewhere only to themselves (R-DEC-39).
  */
 export async function getInvite(token: string, userId: string | undefined) {
   const link = await prisma.inviteLink.findUnique({
@@ -43,14 +44,17 @@ export async function getInvite(token: string, userId: string | undefined) {
   const { group } = link;
   const occupied = group.slots.length;
   const isMember = !!userId && group.slots.some((s) => s.userId === userId);
+  const debts = userId && !isMember ? await debtsOwedBy(prisma, userId) : [];
   const status: InviteStatus = isMember
     ? "ALREADY_MEMBER"
     : !can.join(group.state)
       ? "CLOSED"
       : occupied >= group.slotCount
         ? "FULL"
-        : "OPEN";
-  return { status, group: publicSummary(group, occupied), terms: userId ? group.terms : null };
+        : debts.length > 0
+          ? "IN_DEBT"
+          : "OPEN";
+  return { status, group: publicSummary(group, occupied), terms: userId ? group.terms : null, debts };
 }
 
 /**
@@ -66,6 +70,7 @@ export async function joinViaInvite(token: string, userId: string, acceptTerms: 
     if (!can.join(group.state)) throw conflict("This paluwagan is no longer accepting members.", "CLOSED");
     const occupied = await tx.slot.count({ where: { groupId: group.id } });
     if (occupied >= group.slotCount) throw conflict("This paluwagan is full.", "FULL");
+    await assertNoDebts(tx, userId, "join");
     assertTermsAccepted(acceptTerms);
 
     const slot = await tx.slot.create({ data: { groupId: group.id, userId }, include: { user: true } });
@@ -196,7 +201,7 @@ async function liveClaim(token: string) {
   return link;
 }
 
-export type ClaimStatus = "OPEN" | "CLAIMED" | "CLOSED" | "ALREADY_MEMBER";
+export type ClaimStatus = "OPEN" | "CLAIMED" | "CLOSED" | "ALREADY_MEMBER" | "IN_DEBT";
 
 /**
  * R-CLM-05: the placeholder's full record before claiming. In the lobby that's just its name and
@@ -207,18 +212,23 @@ export async function getClaim(token: string, userId: string | undefined) {
   const { slot } = link;
   const group = slot.group;
   const isMember = !!userId && (await prisma.slot.count({ where: { groupId: group.id, userId } })) > 0;
+  // R-DEC-39: claiming is joining, so debt elsewhere blocks it too.
+  const debts = userId && !isMember ? await debtsOwedBy(prisma, userId) : [];
   const status: ClaimStatus = link.claimedAt
     ? "CLAIMED"
     : !can.claimPlaceholder(group.state)
       ? "CLOSED"
       : isMember
         ? "ALREADY_MEMBER"
-        : "OPEN";
+        : debts.length > 0
+          ? "IN_DEBT"
+          : "OPEN";
   return {
     status,
     group: publicSummary(group, group.slots.length),
     placeholder: { slotId: slot.id, name: slot.placeholderName, position: slot.position },
     terms: userId ? group.terms : null,
+    debts,
   };
 }
 
@@ -233,6 +243,7 @@ export async function claimPlaceholder(token: string, userId: string, acceptTerm
     if (await tx.slot.findFirst({ where: { groupId: group.id, userId } })) {
       throw conflict("You already hold a slot in this paluwagan.", "ALREADY_MEMBER");
     }
+    await assertNoDebts(tx, userId, "join");
     assertTermsAccepted(acceptTerms);
 
     const now = new Date();
