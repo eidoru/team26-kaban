@@ -38,9 +38,9 @@ export function PayoutBreakdown({ payout }: { payout: PayoutView }) {
 }
 
 /**
- * R-PAY-05 for one payout. The organizer marks it handed over with a proof photo (R-DEC-37; none
- * for their own payout); the recipient then confirms they got it. For a placeholder, the
- * organizer's handover is also the receipt.
+ * R-PAY-05 for one payout. The organizer marks it handed over with a proof photo (R-DEC-37, their
+ * own payout included, R-DEC-44); the recipient then confirms they got it. For a placeholder or the
+ * organizer's own payout, the handover is also the receipt.
  */
 export function PayoutSheet({
   detail,
@@ -89,7 +89,7 @@ function PayoutForm({
   const recipient = detail.slots.find((s) => s.id === payout.recipientSlotId);
   const isRecipient = payout.recipientSlotId === detail.viewer.slotId;
   const handingOver = detail.viewer.isOrganizer && payout.status === "AWAITING_HANDOVER";
-  // The organizer's own payout: they hold the pot already, so taking it is the receipt.
+  // The organizer's own payout: they hold the pot already, so taking it, with proof, is the receipt.
   const ownPayout = handingOver && isRecipient;
   const confirming = isRecipient && payout.status === "HANDED_OVER";
   const [file, setFile] = useState<File | null>(null);
@@ -105,14 +105,11 @@ function PayoutForm({
   }, [preview]);
 
   async function handOver() {
-    if (!ownPayout && !file) return;
+    if (!file) return;
     setError("");
     try {
-      let proofPath: string | undefined;
-      if (file) {
-        setUploading(true);
-        proofPath = await uploadProof(detail.group.id, file);
-      }
+      setUploading(true);
+      const proofPath = await uploadProof(detail.group.id, file);
       if (await onHandOver(payout.round, proofPath)) setDone("handedOver");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't save it. Try again.");
@@ -122,7 +119,7 @@ function PayoutForm({
   }
 
   const busy = uploading || pending === "handover" || pending === "confirm";
-  const missingProof = ownPayout ? null : proofError(!!file);
+  const missingProof = proofError(!!file);
   const name = isRecipient ? "you" : (recipient?.name ?? "the recipient");
   if (done) {
     // R-PAY-05: the recipient confirms; for a placeholder the organizer's record is the receipt.
@@ -177,7 +174,7 @@ function PayoutForm({
         {payout.net === 0 && (
           <p className="text-sm text-ink-600">What {name} owed used up the whole pot, so there was nothing to hand over.</p>
         )}
-        {handingOver && !ownPayout && (
+        {handingOver && (
           <div>
             <span className={ui.label}>Proof</span>
             {file && preview ? (
@@ -198,7 +195,7 @@ function PayoutForm({
                 className="flex min-h-16 cursor-pointer items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-ink-300 bg-white px-4 py-3 text-sm font-semibold text-ink-600 hover:border-brand-300 hover:bg-brand-50"
               >
                 <Camera className="h-5 w-5" aria-hidden />
-                Add a photo of the transfer
+                {ownPayout ? "Add a photo of your payout" : "Add a photo of the transfer"}
                 <input
                   id={fileId}
                   type="file"
