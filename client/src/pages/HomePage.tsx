@@ -9,6 +9,7 @@ import {
   ChevronRight,
   ClipboardCheck,
   HandCoins,
+  Hourglass,
   Plus,
   Users,
   type LucideIcon,
@@ -81,6 +82,8 @@ function badges(g: Group): Badge[] {
             : { icon: HandCoins, text: `${formatPeso(s.approved)} of ${formatPeso(s.due)} paid`, tone: TONES.due },
         );
       }
+      // R-DEC-45: the rounds are over, but a payout isn't confirmed yet.
+      if (!g.openRound) out.push({ icon: Hourglass, text: "Finishing payouts", tone: TONES.due });
       break;
     }
     // A finished paluwagan wears the check seal by its name instead of a badge; only a debt of yours stays.

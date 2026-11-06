@@ -7,6 +7,17 @@ import { prisma } from "../lib/prisma.js";
 import { slotName, withGroupLock, type Db } from "./common.js";
 
 const NOT_YET = "Ratings open once every payout is done.";
+const ORGANIZER_NOT_YET = "You can rate the organizer once the last round closes.";
+
+/**
+ * R-DEC-47: members can rate the organizer from when the last round closes, without waiting for
+ * completion, or an organizer who never pays out could never be rated.
+ */
+async function canRateOrganizer(db: Db, group: Group) {
+  if (can.rate(group.state)) return true;
+  if (group.state !== "ACTIVE") return false;
+  return (await db.round.count({ where: { groupId: group.id, status: { not: "CLOSED" } } })) === 0;
+}
 
 /** Throws the 400 for stars outside 1 to 5 (R-DEC-43). */
 export function assertStars(stars: number) {
@@ -104,11 +115,11 @@ export async function rateMembers(groupId: string, organizerUserId: string, rati
   });
 }
 
-/** R-DEC-43: a member rates the organizer after completion. Optional, and can be changed. */
+/** R-DEC-43: a member rates the organizer, from the last round's close (R-DEC-47). Optional, and can be changed. */
 export async function rateOrganizer(groupId: string, userId: string, stars: number) {
   assertStars(stars);
   return withGroupLock(groupId, async (tx, group) => {
-    if (!can.rate(group.state)) throw conflict(NOT_YET, "WRONG_STATE");
+    if (!(await canRateOrganizer(tx, group))) throw conflict(ORGANIZER_NOT_YET, "WRONG_STATE");
     const slot = await tx.slot.findFirst({ where: { groupId, userId } });
     if (!slot) throw notFound("Paluwagan");
     if (slot.isOrganizer) throw forbidden("You can't rate yourself.");
@@ -148,11 +159,11 @@ export async function rateLeaver(
 }
 
 /**
- * For the group page once it's completed: the organizer's ratings of members (and whether every
- * member has one), or a member's rating of the organizer. Null before completion.
+ * For the group page: once it's completed, the organizer's ratings of members (and whether every
+ * member has one); from the last round's close (R-DEC-47), a member's rating of the organizer. Null before.
  */
 export async function ratingsView(db: Db, group: Group, viewer: Slot) {
-  if (!can.rate(group.state)) return null;
+  if (viewer.isOrganizer ? !can.rate(group.state) : !(await canRateOrganizer(db, group))) return null;
   const given = await db.rating.findMany({ where: { groupId: group.id, reviewerId: viewer.userId! } });
   const starsFor = (userId: string, role: RatingRole) =>
     given.find((r) => r.recipientId === userId && r.role === role)?.stars ?? null;

@@ -19,6 +19,7 @@ export type NotificationKind =
   | "submission.denied"
   | "payout.ready"
   | "payout.handed_over"
+  | "payout.not_received"
   | "debt.created"
   | "debt.interest"
   | "group.completed"

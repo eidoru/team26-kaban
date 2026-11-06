@@ -9,7 +9,7 @@ import { cancelGroup, createGroup, editGroup, groupDetail } from "../services/gr
 import { addPlaceholder, createClaimLink, createInviteLink, removeSlot } from "../services/roster.js";
 import { launchGroup, setOrder, shuffleOrder } from "../services/launch.js";
 import { cancelSubmission, reviewSubmission, submitPayment } from "../services/submissions.js";
-import { confirmReceipt, markHandedOver } from "../services/payouts.js";
+import { confirmReceipt, markHandedOver, reportNotReceived } from "../services/payouts.js";
 import { cancelDispute, raiseDispute, reviewDispute } from "../services/disputes.js";
 import { cancelSwap, requestSwap, respondToSwap, reviewSwap } from "../services/swaps.js";
 import { cancelWithdrawal, requestWithdrawal, reviewWithdrawal } from "../services/withdrawals.js";
@@ -255,6 +255,10 @@ router.post(
 router.post(
   "/:id/rounds/:number/confirm-receipt",
   ...memberAction((req, id, user) => confirmReceipt(id, user, Number(req.params.number))),
+);
+router.post(
+  "/:id/rounds/:number/not-received",
+  ...memberAction((req, id, user) => reportNotReceived(id, user, Number(req.params.number))),
 );
 
 // --- Records (§10, §14): the summary as JSON, and downloadable statements, ledger and summary.
