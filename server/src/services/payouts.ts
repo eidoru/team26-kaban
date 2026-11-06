@@ -294,8 +294,8 @@ async function payoutFor(db: Db, groupId: string, roundNumber: number) {
 }
 
 /**
- * R-PAY-05: the organizer records that the money was handed over, with a proof photo unless the
- * payout is their own (R-DEC-37).
+ * R-PAY-05: the organizer records that the money was handed over, with a proof photo (R-DEC-37),
+ * their own payout included (R-DEC-44).
  */
 export async function markHandedOver(groupId: string, organizerUserId: string, roundNumber: number, proofPath?: string) {
   if (proofPath) {
@@ -309,8 +309,8 @@ export async function markHandedOver(groupId: string, organizerUserId: string, r
     // A placeholder can't confirm, so the organizer's handover is also the receipt (R-PAY-05). When
     // the organizer is the recipient they already hold the pot: taking it is the receipt too.
     const selfReceipt = placeholder || round.recipient.userId === organizerUserId;
-    // R-DEC-37: handing the pot to someone else needs a proof photo; taking their own needs none.
-    const missingProof = round.recipient.userId === organizerUserId ? null : proofError(!!proofPath);
+    // R-DEC-37, R-DEC-44: every handover needs a proof photo, the organizer's own payout included.
+    const missingProof = proofError(!!proofPath);
     if (missingProof) throw badRequest(missingProof);
     await tx.payout.update({
       where: { id: round.payout.id },
