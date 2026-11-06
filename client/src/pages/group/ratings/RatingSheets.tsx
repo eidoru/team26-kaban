@@ -160,7 +160,7 @@ export function RateOrganizerSheet({
 }
 
 /**
- * On a completed paluwagan's dashboard, once the viewer has rated: what they gave, with Change
+ * On the dashboard once the viewer has rated (from the last round's close for members, R-DEC-47): what they gave, with Change
  * (R-DEC-43: ratings can be changed any time). Before that, the to-do list asks instead.
  */
 export function YourRatingsCard({ detail, onChange }: { detail: GroupDetail; onChange: () => void }) {

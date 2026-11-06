@@ -1,3 +1,4 @@
+import type { Group } from "@prisma/client";
 import { RECEIPT_AUTO_CONFIRM_DAYS } from "../domain/constants.js";
 import { outstanding } from "../domain/debt.js";
 import { formatPeso } from "../domain/money.js";
@@ -22,7 +23,8 @@ import { formatDisplayDate } from "../lib/dates.js";
  *  1. close Contribution Period k (approved money only; pending stays queued, R-DEC-04);
  *  2. the organizer covers every non-recipient's shortfall, which becomes debt with interest (§8);
  *  3–4. the recipient's own shortfall and whole debt come out of the pot (R-PAY-03/04, R-DEC-10);
- *  6. Period k+1 opens, or the paluwagan completes (R-CMP-01).
+ *  6. Period k+1 opens, or the rounds are over and the paluwagan completes once every payout is
+ *     confirmed (R-CMP-01, R-DEC-45).
  * `actorUserId` is null for the scheduled run, or the organizer for the demo tool.
  */
 export async function closeOpenRound(groupId: string, actorUserId: string | null) {
@@ -221,36 +223,54 @@ export async function closeOpenRound(groupId: string, actorUserId: string | null
       });
       return { closed: round.number, completed: false };
     }
-    const owing = await groupHasDebt(tx, groupId);
-    await tx.group.update({
-      where: { id: groupId },
-      data: { state: owing ? "COMPLETED_WITH_OUTSTANDING_DEBT" : "COMPLETED", completedAt: new Date() },
-    });
-    await audit(tx, { groupId, actorUserId: null, action: "group.completed", after: { outstandingDebt: owing } });
-    await notifyUsers(tx, await memberUserIds(tx, groupId), {
-      groupId,
-      kind: "group.completed",
-      title: `${group.name} is complete`,
-      body: owing ? "Every payout is done. Some debts are still open." : "Every payout is done, and nobody owes anything.",
-    });
-    // R-DEC-43: the organizer rates every member; members may rate the organizer.
+    // R-DEC-47: members can rate the organizer from here, even if a payout never comes.
     const raters = (await memberUserIds(tx, groupId)).filter((id) => id !== group.organizerId);
-    if (raters.length > 0) {
-      await notifyUsers(tx, [group.organizerId], {
-        groupId,
-        kind: "rating.due",
-        title: `Rate the members of ${group.name}`,
-        body: "Give each member 1 to 5 stars. Their profiles show the average.",
-      });
-    }
     await notifyUsers(tx, raters, {
       groupId,
       kind: "rating.due",
       title: `Rate the organizer of ${group.name}`,
       body: "Give them 1 to 5 stars if you like. Their profile shows the average.",
     });
-    return { closed: round.number, completed: true };
+    return { closed: round.number, completed: await completeIfDone(tx, group) };
   });
+}
+
+/**
+ * R-CMP-01, R-DEC-45: a paluwagan completes once its last round has closed and every payout is
+ * confirmed, not just the last one. Run after anything that could be the last of those; call it
+ * holding the group lock. A group that already completed stays as it is.
+ */
+async function completeIfDone(tx: Db, group: Group) {
+  if (group.state !== "ACTIVE") return false;
+  const groupId = group.id;
+  const [roundsLeft, unconfirmed] = await Promise.all([
+    tx.round.count({ where: { groupId, status: { not: "CLOSED" } } }),
+    tx.payout.count({ where: { round: { groupId }, status: { not: "CONFIRMED" } } }),
+  ]);
+  if (roundsLeft > 0 || unconfirmed > 0) return false;
+  const owing = await groupHasDebt(tx, groupId);
+  await tx.group.update({
+    where: { id: groupId },
+    data: { state: owing ? "COMPLETED_WITH_OUTSTANDING_DEBT" : "COMPLETED", completedAt: new Date() },
+  });
+  await audit(tx, { groupId, actorUserId: null, action: "group.completed", after: { outstandingDebt: owing } });
+  const members = await memberUserIds(tx, groupId);
+  await notifyUsers(tx, members, {
+    groupId,
+    kind: "group.completed",
+    title: `${group.name} is complete`,
+    body: owing ? "Every payout is done. Some debts are still open." : "Every payout is done, and nobody owes anything.",
+  });
+  // R-DEC-43: the organizer rates every member. Members were asked when the last round closed (R-DEC-47).
+  if (members.some((id) => id !== group.organizerId)) {
+    await notifyUsers(tx, [group.organizerId], {
+      groupId,
+      kind: "rating.due",
+      title: `Rate the members of ${group.name}`,
+      body: "Give each member 1 to 5 stars. Their profiles show the average.",
+    });
+  }
+  return true;
 }
 
 /**
@@ -340,6 +360,7 @@ export async function markHandedOver(groupId: string, organizerUserId: string, r
         body: `${group.name}'s organizer says round ${roundNumber}'s payout was handed to you. Confirm once you have it.`,
       });
     }
+    await completeIfDone(tx, group);
   });
 }
 
@@ -366,6 +387,42 @@ export async function confirmReceipt(groupId: string, userId: string, roundNumbe
       amounts: { net: Number(round.payout.net) },
       after: { round: roundNumber },
     });
+    await completeIfDone(tx, group);
+  });
+}
+
+/**
+ * R-DEC-46: the recipient says the money never came. The handover is taken back, which also stops
+ * the auto-confirm (R-DEC-07), and the organizer records it again with a new photo. The old photo's
+ * path stays in the audit entry; `before` isn't shown to members, so R-DEC-17 still holds.
+ */
+export async function reportNotReceived(groupId: string, userId: string, roundNumber: number) {
+  return withGroupLock(groupId, async (tx, group) => {
+    const round = await payoutFor(tx, groupId, roundNumber);
+    if (round.recipient.userId !== userId) throw forbidden("Only the person it was handed to can report this.");
+    if (round.payout.status === "CONFIRMED") throw conflict("This payout is already confirmed.", "ALREADY_DONE");
+    if (round.payout.status !== "HANDED_OVER") throw conflict("The organizer hasn't marked it handed over yet.", "NOT_HANDED_OVER");
+    await tx.payout.update({
+      where: { id: round.payout.id },
+      data: { status: "AWAITING_HANDOVER", handedOverAt: null, handedOverById: null, proofPath: null },
+    });
+    const net = Number(round.payout.net);
+    await audit(tx, {
+      groupId,
+      actorUserId: userId,
+      action: "payout.not_received",
+      targetSlotId: round.recipientSlotId,
+      targetName: slotName(round.recipient),
+      amounts: { net },
+      before: { handedOverAt: round.payout.handedOverAt?.toISOString(), proofPath: round.payout.proofPath },
+      after: { round: roundNumber },
+    });
+    await notifyUsers(tx, [group.organizerId], {
+      groupId,
+      kind: "payout.not_received",
+      title: `${slotName(round.recipient)} says they didn't get ${formatPeso(net)}`,
+      body: `${group.name}, round ${roundNumber}. Hand it over again with a new photo.`,
+    });
   });
 }
 
@@ -387,7 +444,7 @@ export async function nudgeUnconfirmedPayouts(now = new Date()) {
       RECEIPT_AUTO_CONFIRM_DAYS !== null &&
       payout.handedOverAt!.getTime() <= now.getTime() - RECEIPT_AUTO_CONFIRM_DAYS * 86_400_000;
     if (due) {
-      await withGroupLock(round.groupId, async (tx) => {
+      await withGroupLock(round.groupId, async (tx, group) => {
         const fresh = await tx.payout.findUniqueOrThrow({ where: { id: payout.id } });
         if (fresh.status !== "HANDED_OVER") return;
         await tx.payout.update({ where: { id: payout.id }, data: { status: "CONFIRMED", confirmedAt: now, autoConfirmed: true } });
@@ -400,6 +457,7 @@ export async function nudgeUnconfirmedPayouts(now = new Date()) {
           amounts: { net: Number(payout.net) },
           after: { round: round.number, automatic: true },
         });
+        await completeIfDone(tx, group);
         autoConfirmed++;
       });
       continue;
@@ -422,4 +480,42 @@ export async function nudgeUnconfirmedPayouts(now = new Date()) {
     reminded++;
   }
   return { receiptReminders: reminded, autoConfirmed };
+}
+
+/** Under a day, so a daily job that runs a little early still sends each day's reminder. */
+const HANDOVER_REMINDER_GAP_MS = 20 * 3_600_000;
+
+/**
+ * R-DEC-45: once a day, remind the organizer of every payout they haven't handed over, in any round
+ * of a running paluwagan, their own and placeholders' included. Skips what's less than a day old:
+ * closing the round just told them. Paluwagans that completed before R-DEC-45 aren't chased.
+ */
+export async function nudgeHandovers(now = new Date()) {
+  const since = new Date(now.getTime() - HANDOVER_REMINDER_GAP_MS);
+  const waiting = await prisma.payout.findMany({
+    where: { status: "AWAITING_HANDOVER", round: { closedAt: { lt: since }, group: { state: "ACTIVE" } } },
+    include: { round: { include: { group: true, recipient: { include: { user: true } } } } },
+  });
+  let reminded = 0;
+  for (const payout of waiting) {
+    const { round } = payout;
+    const { group, recipient } = round;
+    const slotId = round.recipientSlotId;
+    const recent = await prisma.reminderSent.findFirst({
+      where: { roundId: round.id, slotId, kind: "HANDOVER", sentAt: { gt: since } },
+    });
+    if (recent) continue;
+    const net = formatPeso(Number(payout.net));
+    await prisma.$transaction(async (tx) => {
+      await tx.reminderSent.create({ data: { roundId: round.id, slotId, kind: "HANDOVER", sentAt: now } });
+      await notifyUsers(tx, [group.organizerId], {
+        groupId: round.groupId,
+        kind: "payout.ready",
+        title: recipient.userId === group.organizerId ? `Take your ${net} payout` : `Hand ${net} to ${slotName(recipient)}`,
+        body: `${group.name}, round ${round.number}. Everyone can see it's still not handed over.`,
+      });
+    });
+    reminded++;
+  }
+  return { handoverReminders: reminded };
 }

@@ -40,7 +40,8 @@ export function PayoutBreakdown({ payout }: { payout: PayoutView }) {
 /**
  * R-PAY-05 for one payout. The organizer marks it handed over with a proof photo (R-DEC-37, their
  * own payout included, R-DEC-44); the recipient then confirms they got it. For a placeholder or the
- * organizer's own payout, the handover is also the receipt.
+ * organizer's own payout, the handover is also the receipt. A recipient who never got it says so,
+ * and it goes back to the organizer (R-DEC-46).
  */
 export function PayoutSheet({
   detail,
@@ -49,6 +50,7 @@ export function PayoutSheet({
   onClose,
   onHandOver,
   onConfirm,
+  onNotReceived,
 }: {
   detail: GroupDetail;
   payout: PayoutView | null;
@@ -56,6 +58,7 @@ export function PayoutSheet({
   onClose: () => void;
   onHandOver: (round: number, proofPath?: string) => Promise<boolean>;
   onConfirm: (round: number) => Promise<boolean>;
+  onNotReceived: (round: number) => Promise<boolean>;
 }) {
   if (!payout) return null;
   return (
@@ -67,6 +70,7 @@ export function PayoutSheet({
       onClose={onClose}
       onHandOver={onHandOver}
       onConfirm={onConfirm}
+      onNotReceived={onNotReceived}
     />
   );
 }
@@ -78,6 +82,7 @@ function PayoutForm({
   onClose,
   onHandOver,
   onConfirm,
+  onNotReceived,
 }: {
   detail: GroupDetail;
   payout: PayoutView;
@@ -85,6 +90,7 @@ function PayoutForm({
   onClose: () => void;
   onHandOver: (round: number, proofPath?: string) => Promise<boolean>;
   onConfirm: (round: number) => Promise<boolean>;
+  onNotReceived: (round: number) => Promise<boolean>;
 }) {
   const recipient = detail.slots.find((s) => s.id === payout.recipientSlotId);
   const isRecipient = payout.recipientSlotId === detail.viewer.slotId;
@@ -97,7 +103,9 @@ function PayoutForm({
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   // Once recorded: what was done, shown instead of closing on the spot.
-  const [done, setDone] = useState<"handedOver" | "received" | null>(null);
+  const [done, setDone] = useState<"handedOver" | "received" | "notReceived" | null>(null);
+  // R-DEC-46: saying it never came takes back the handover, so it's asked twice.
+  const [denying, setDenying] = useState(false);
   const fileId = useId();
   useEffect(() => {
     if (!preview) return;
@@ -118,9 +126,16 @@ function PayoutForm({
     }
   }
 
-  const busy = uploading || pending === "handover" || pending === "confirm";
+  const busy = uploading || pending === "handover" || pending === "confirm" || pending === "notReceived";
   const missingProof = proofError(!!file);
   const name = isRecipient ? "you" : (recipient?.name ?? "the recipient");
+  if (done === "notReceived") {
+    return (
+      <SheetDone title={`${detail.group.organizerName} was told`} onClose={onClose}>
+        They're asked to hand over {formatPeso(payout.net)} again, with a new photo.
+      </SheetDone>
+    );
+  }
   if (done) {
     // R-PAY-05: the recipient confirms; for a placeholder the organizer's record is the receipt.
     const title =
@@ -157,15 +172,34 @@ function PayoutForm({
                   ? `I took my ${formatPeso(payout.net)}`
                   : `I handed ${formatPeso(payout.net)} to ${name}`}
           </button>
+        ) : confirming && denying ? (
+          <div className="flex gap-2">
+            <button type="button" onClick={() => setDenying(false)} disabled={busy} className={`${ui.btnSecondary} min-h-11 flex-1`}>
+              Back
+            </button>
+            <button
+              type="button"
+              onClick={() => void onNotReceived(payout.round).then((ok) => ok && setDone("notReceived"))}
+              disabled={busy}
+              className="min-h-11 flex-1 rounded-full bg-danger-600 px-5 text-sm font-bold text-white hover:bg-danger-700 disabled:opacity-50"
+            >
+              {pending === "notReceived" ? "Sending…" : "Tell the organizer"}
+            </button>
+          </div>
         ) : confirming ? (
-          <button
-            type="button"
-            onClick={() => void onConfirm(payout.round).then((ok) => ok && setDone("received"))}
-            disabled={busy}
-            className={`${ui.btnPrimaryFull} min-h-11`}
-          >
-            {pending === "confirm" ? "Confirming…" : "Yes, I received it"}
-          </button>
+          <div className="flex flex-col gap-2">
+            <button
+              type="button"
+              onClick={() => void onConfirm(payout.round).then((ok) => ok && setDone("received"))}
+              disabled={busy}
+              className={`${ui.btnPrimaryFull} min-h-11`}
+            >
+              {pending === "confirm" ? "Confirming…" : "Yes, I received it"}
+            </button>
+            <button type="button" onClick={() => setDenying(true)} disabled={busy} className={`${ui.btnSecondary} min-h-11 w-full`}>
+              I didn't get it
+            </button>
+          </div>
         ) : undefined
       }
     >
@@ -213,6 +247,11 @@ function PayoutForm({
               </label>
             )}
           </div>
+        )}
+        {confirming && denying && (
+          <p className="text-sm text-ink-600">
+            {detail.group.organizerName} is told, and the handover is taken back until they send it again.
+          </p>
         )}
         {payout.status === "HANDED_OVER" && !confirming && (
           <p className="text-sm text-ink-600">Handed over. Waiting for {recipient?.name} to confirm.</p>

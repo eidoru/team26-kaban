@@ -136,6 +136,8 @@ export function describe(entry: {
       return f.automatic
         ? T(`${target}'s ${peso(a.net)} payout was marked received automatically`, `Round ${f.round}: not confirmed in time.`)
         : T(`${target} confirmed receiving ${peso(a.net)}`, f.round ? `Round ${f.round}.` : null);
+    case "payout.not_received":
+      return T(`${target} says they didn't get ${peso(a.net)}`, `Round ${f.round}: the handover was taken back.`);
     case "debt.created":
       return T(
         `${target} was ${peso(a.shortfall)} short${round}`,

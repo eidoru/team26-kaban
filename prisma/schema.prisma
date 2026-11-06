@@ -552,7 +552,7 @@ model ReminderSent {
   id      String   @id @default(uuid())
   roundId String   @map("round_id")
   slotId  String   @map("slot_id")
-  /// "BEFORE_PAYOUT", "PAYOUT_DAY", "MANUAL" (the organizer's send-reminder) or "RECEIPT" (confirm a payout).
+  /// "BEFORE_PAYOUT", "PAYOUT_DAY", "MANUAL" (the organizer's send-reminder), "RECEIPT" (confirm a payout) or "HANDOVER" (hand one over).
   kind    String
   sentAt  DateTime @default(now()) @map("sent_at")
 

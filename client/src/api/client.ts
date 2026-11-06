@@ -819,6 +819,7 @@ export const api = {
   markHandedOver: (id: string, round: number, proofPath?: string) =>
     send<GroupDetail>("POST", `/groups/${id}/rounds/${round}/handover`, { proofPath }),
   confirmReceipt: (id: string, round: number) => send<GroupDetail>("POST", `/groups/${id}/rounds/${round}/confirm-receipt`),
+  reportNotReceived: (id: string, round: number) => send<GroupDetail>("POST", `/groups/${id}/rounds/${round}/not-received`),
   approveSubmission: (id: string, submissionId: string) =>
     send<GroupDetail>("POST", `/groups/${id}/submissions/${submissionId}/approve`),
   denySubmission: (id: string, submissionId: string, reason: string) =>

@@ -36,6 +36,7 @@ const KINDS: Record<string, { icon: LucideIcon; tone: string }> = {
   "submission.denied": { icon: CircleX, tone: "bg-danger-50 text-danger-700" },
   "payout.ready": { icon: Banknote, tone: "bg-sun-100 text-sun-800" },
   "payout.handed_over": { icon: Banknote, tone: "bg-sun-100 text-sun-800" },
+  "payout.not_received": { icon: Banknote, tone: "bg-danger-50 text-danger-700" },
   "debt.created": { icon: Scale, tone: "bg-danger-50 text-danger-700" },
   "debt.interest": { icon: Scale, tone: "bg-danger-50 text-danger-700" },
   "dispute.raised": { icon: ShieldCheck, tone: "bg-sky-100 text-sky-800" },
