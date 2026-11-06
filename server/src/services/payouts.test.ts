@@ -73,13 +73,23 @@ describe("markHandedOver (R-PAY-05, R-DEC-37)", () => {
     });
   });
 
-  it("needs no proof when the organizer takes their own payout", async () => {
+  it("R-DEC-44: refuses the organizer's own payout without a proof photo", async () => {
     db.tx.round.findUnique.mockResolvedValue(roundFor({ userId: "org" }));
-    await markHandedOver("g1", "org", 2);
+    await expect(markHandedOver("g1", "org", 2)).rejects.toThrow("Attach a photo of the payment as proof.");
+    expect(db.tx.payout.update).not.toHaveBeenCalled();
+  });
+
+  it("R-DEC-44: records the organizer's own payout with its proof as received, in one step", async () => {
+    db.tx.round.findUnique.mockResolvedValue(roundFor({ userId: "org" }));
+    await markHandedOver("g1", "org", 2, PROOF);
     expect(db.tx.payout.update).toHaveBeenCalledWith({
       where: { id: "p2" },
-      data: expect.objectContaining({ status: "CONFIRMED", proofPath: null }),
+      data: expect.objectContaining({ status: "CONFIRMED", proofPath: PROOF, confirmedById: "org" }),
     });
+    expect(audit).toHaveBeenCalledWith(
+      db.tx,
+      expect.objectContaining({ action: "payout.handed_over", proofAttached: true }),
+    );
   });
 
   it.each([
