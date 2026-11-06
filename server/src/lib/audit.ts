@@ -29,6 +29,7 @@ export type AuditAction =
   | "payout.processed"
   | "payout.handed_over"
   | "payout.confirmed"
+  | "payout.not_received"
   | "debt.created"
   | "debt.interest_charged"
   | "debt.deducted"

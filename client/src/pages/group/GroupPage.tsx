@@ -619,7 +619,7 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
         icon: TriangleAlert,
         tone: "danger",
         title: `Pay toward your ${formatPeso(owed)} debt`,
-        detail: group.interestRate > 0 && group.state === "ACTIVE" ? "Interest grows at each payout." : undefined,
+        detail: group.interestRate > 0 && period ? "Interest grows at each payout." : undefined,
         action: { label: "Pay", onClick: () => pay(viewer.slotId, "DEBT_PAYMENT") },
       });
     }
@@ -672,6 +672,9 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
           }
         />
       );
+    } else if (group.state === "ACTIVE") {
+      // R-DEC-45: the rounds are over but a payout isn't confirmed. Its stage card says where it stands.
+      now = null;
     } else if (group.state === "COMPLETED_WITH_OUTSTANDING_DEBT") {
       now = (
         <NowPanel
@@ -930,6 +933,7 @@ function GroupView({ detail, navMode, view }: { detail: GroupDetail; navMode: bo
         onClose={() => setPayoutRound(null)}
         onHandOver={async (round, proofPath) => !!(await run("handover", () => api.markHandedOver(group.id, round, proofPath)))}
         onConfirm={async (round) => !!(await run("confirm", () => api.confirmReceipt(group.id, round)))}
+        onNotReceived={async (round) => !!(await run("notReceived", () => api.reportNotReceived(group.id, round)))}
       />
       {isOrganizer && (
         <ReviewSheet

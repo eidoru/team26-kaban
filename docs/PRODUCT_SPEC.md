@@ -51,16 +51,16 @@ A paluwagan is a rotating savings group. Every member contributes a fixed amount
    │                  │ start date reached
    │                  ▼
    │               ACTIVE   (contribution periods + payouts)
-   │                  │ final payout processed
+   │                  │ last round closed + every payout confirmed
    │                  ▼
    │     COMPLETED  or  COMPLETED_WITH_OUTSTANDING_DEBT
 ```
 
 - **LOBBY:** invitations, placeholders, edits, payout ordering.
 - **LAUNCHED:** everything locked; waiting for the start date.
-- **ACTIVE:** start date reached; contributions are being collected.
-- **COMPLETED:** last payout done, no outstanding debt.
-- **COMPLETED_WITH_OUTSTANDING_DEBT:** last payout done, at least one member still owes the organizer. Debt records stay open until settled.
+- **ACTIVE:** start date reached; contributions are being collected, then the last payouts are confirmed (R-DEC-45).
+- **COMPLETED:** every payout confirmed, no outstanding debt.
+- **COMPLETED_WITH_OUTSTANDING_DEBT:** every payout confirmed, at least one member still owes the organizer. Debt records stay open until settled.
 - **CANCELLED:** only reachable from LOBBY (R-DEC-03).
 
 ---
@@ -218,7 +218,7 @@ On payout date _k_, in this order:
 | 3 | R-PAY-03 | For the **recipient**: net payout = pot − recipient's own shortfall this period − recipient's **total accumulated debt** (principal + accrued interest). The accumulated debt portion is settled to the organizer. |
 | 4 | R-PAY-04 | If deductions exceed the pot, the net payout is 0 and the remainder stays as debt. |
 | 5 | R-PAY-05 | The organizer records the payout as handed over, with proof (R-DEC-37). The recipient confirms receipt. For a placeholder recipient, the organizer records and confirms on its behalf. |
-| 6 | R-PAY-06 | If _k_ < N, Contribution Period _k+1_ opens and members are notified. If _k_ = N, the paluwagan completes (§10). |
+| 6 | R-PAY-06 | If _k_ < N, Contribution Period _k+1_ opens and members are notified. If _k_ = N, the paluwagan completes once every payout is confirmed (§10, R-DEC-45). |
 
 A recipient's payout is **never reduced by other members' shortfalls** — only by their own.
 
@@ -289,7 +289,7 @@ Test cases worth covering: the first recipient (all debt is post-payout), the la
 
 | ID | Rule |
 |---|---|
-| R-CMP-01 | After the final payout: `COMPLETED` if no debt remains, otherwise `COMPLETED_WITH_OUTSTANDING_DEBT`. |
+| R-CMP-01 | Once the last round has closed and every payout is confirmed (R-DEC-45): `COMPLETED` if no debt remains, otherwise `COMPLETED_WITH_OUTSTANDING_DEBT`. |
 | R-CMP-02 | A **completion summary** is generated: per member, total contributed, total received, refunds, debt incurred, debt settled, debt outstanding. |
 | R-CMP-03 | When all outstanding debt is settled, the state moves to `COMPLETED` *(assumption)*. |
 
@@ -433,3 +433,6 @@ All questions below are decided; see §16.1. New open questions get the next `R-
 | R-DEC-42 | (R-SUB-01, R-SUB-06, R-DBT-04, R-DBT-05, R-DEC-19, R-DEC-31, R-DEC-33, 2026-11-02) **One payment for the debt and this round.** While a slot owes, a contribution pays the debt first, then what's left of the open round, and the form defaults to both (debt left + round left, e.g. ₱500 + ₱1,000 = ₱1,500); the amount can be changed and nothing is sent until the member sends it. Debt left is what's owed (principal + interest, approved repayments only) less pending payments toward debt; round left is R-SUB-06's cap. So the cap is debt left + round left: paying ahead still needs the debt covered before the payment is sent (R-DEC-31). A payment no bigger than the debt is a plain debt payment; one that reaches the round is stored as one batch (R-DEC-33) of a `DEBT_PAYMENT` part and a `CONTRIBUTION` part, with one proof, reviewed, approved, denied and withdrawn as one, and waits for the slot's earlier debt payments and earlier payments for that round (R-SUB-05). On approval the debt part is applied first, interest then principal (R-DBT-05), and every part is re-checked: if the debt has gone down meanwhile (e.g. taken from the slot's payout, R-PAY-03), the whole payment fails (R-DEC-19) and the organizer denies it. The debt part can't be corrected by a problem report, like any debt payment. The separate debt payment form is unchanged. |
 | R-DEC-43 | (§10, R-WDR-09, R-AUD-01, R-AUD-03, R-DEC-06, R-DEC-40, 2026-11-02) **Ratings and profiles.** Users rate each other with whole stars, 1 to 5 (`MAX_STARS`). Once a paluwagan is completed (`COMPLETED` or `COMPLETED_WITH_OUTSTANDING_DEBT`), the organizer must rate every registered member holding a slot, all at once (never themselves, never placeholders): a to-do stays on the group page until it's done, and nothing else is blocked. Each member may rate the organizer (optional). The one exception to "after completion": approving a hand-over, the organizer may rate the member leaving (optional), since they lose access then; leavers can also be rated or re-rated after completion, optionally. A leaver can't rate the organizer. One rating per paluwagan, reviewer, recipient and role (member or organizer); ratings can be changed any time after, which updates it, and the audit log records every rating and change, stars included (public to members, R-AUD-03). Profiles are open to any signed-in user: name, when they joined, and two averages with their counts, the **Member rating** (from organizers) and the **Organizer rating** (from members), rounded to one decimal and drawn as five gold stars filled to the exact fraction (4.7 → four full and 70% of the fifth). No ratings in a role shows "Not Yet Rated (0 ratings)", never zero stars. Profiles never show email, contact or money. Members are linked to their profiles from the group's member lists, the organizer from the group details and from invite, claim and replacement links (signed in). |
 | R-DEC-44 | (R-PAY-05, R-DEC-37, 2026-11-06) **Proof for the organizer's own payout.** Taking their own payout needs a proof photo too, checked in the form and on the server, which drops R-DEC-37's exception. It stays one step: the organizer is the only one who could confirm it, so recording it with proof is the receipt. A payout with nothing to hand over needs no proof (R-DEC-20). Own payouts recorded before this keep having no proof. |
+| R-DEC-45 | (R-PAY-05, R-PAY-06, R-CMP-01, R-DBT-07, R-DEC-07, R-DEC-20, 2026-11-06) **Completion waits for every payout.** A paluwagan completes only when its last round has closed and every payout, in any round, is confirmed: by the recipient, by the organizer's record for a placeholder or their own payout (R-DEC-44), automatically (R-DEC-07), or because there was nothing to hand over (R-DEC-20). Until then it stays `ACTIVE` with no open round: no contributions, swaps, leaving or problem reports, as for any paid-out slot; debt payments still work, and no new interest is charged, since interest is only charged when a round closes. The organizer gets a daily reminder for every payout not handed over, in any round, while the paluwagan is `ACTIVE`. An organizer who never hands over keeps the paluwagan open, on purpose: that's what's true. Paluwagans completed before this stay completed, and aren't reminded. |
+| R-DEC-46 | (R-PAY-05, R-DEC-07, R-DEC-17, R-DEC-37, 2026-11-06) **"I didn't get it."** A recipient asked to confirm a payout can say it never came. The handover is taken back: the payout returns to "not handed over", the auto-confirm stops, the organizer is told, and the activity log shows it. The organizer records it again with a new photo, which restarts the 7 days. The earlier photo's path stays in the audit entry, not shown to members. It only works before the payout is confirmed. Known limit, left as is: a recipient can say this every time, even if they were paid, which keeps the paluwagan open; the log shows each time, and the proof photos are the organizer's answer. |
+| R-DEC-47 | (R-DEC-43, R-DEC-45, 2026-11-06) **Rating an organizer who hasn't paid out.** Members may rate the organizer from when the last round closes, without waiting for completion, or an organizer who never pays out could never be rated. They're asked then. The organizer's required rating of members still waits for completion. |

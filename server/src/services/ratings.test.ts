@@ -7,6 +7,7 @@ const db = vi.hoisted(() => {
     group: { findUniqueOrThrow: vi.fn() },
     slot: { findMany: vi.fn(), findFirst: vi.fn(), findFirstOrThrow: vi.fn() },
     withdrawal: { findMany: vi.fn() },
+    round: { count: vi.fn() },
     rating: { findUnique: vi.fn(), upsert: vi.fn(), findMany: vi.fn(), groupBy: vi.fn() },
     user: { findUnique: vi.fn() },
   };
@@ -225,5 +226,43 @@ describe("userProfile (R-DEC-43)", () => {
   it("is a 404 for an unknown user", async () => {
     db.tx.user.findUnique.mockResolvedValue(null);
     await expect(userProfile("nobody")).rejects.toMatchObject({ status: 404 });
+  });
+});
+
+describe("rating the organizer before completion (R-DEC-47)", () => {
+  const organizerSlot = { id: "s1", isOrganizer: true, placeholderName: null, user: { displayName: "Org" } };
+  const memberSlot = { id: "s2", isOrganizer: false, userId: "ana" };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    db.tx.group.findUniqueOrThrow.mockResolvedValue(group("ACTIVE"));
+    db.tx.slot.findFirst.mockResolvedValue(memberSlot);
+    db.tx.slot.findFirstOrThrow.mockResolvedValue(organizerSlot);
+    db.tx.rating.findUnique.mockResolvedValue(null);
+    db.tx.rating.findMany.mockResolvedValue([]);
+  });
+
+  it("lets a member rate once the last round has closed, with a payout still out", async () => {
+    db.tx.round.count.mockResolvedValue(0);
+    await rateOrganizer("g1", "ana", 1);
+    expect(db.tx.rating.upsert).toHaveBeenCalled();
+  });
+
+  it("refuses while a round is left", async () => {
+    db.tx.round.count.mockResolvedValue(1);
+    await expect(rateOrganizer("g1", "ana", 1)).rejects.toMatchObject({ status: 409, code: "WRONG_STATE" });
+    expect(db.tx.rating.upsert).not.toHaveBeenCalled();
+  });
+
+  it("shows a member the rating then, but keeps the organizer's for completion", async () => {
+    db.tx.round.count.mockResolvedValue(0);
+    const active = group("ACTIVE") as never;
+    await expect(ratingsView(db.tx as never, active, memberSlot as never)).resolves.toMatchObject({ kind: "organizer" });
+    await expect(ratingsView(db.tx as never, active, { isOrganizer: true, userId: "org" } as never)).resolves.toBeNull();
+  });
+
+  it("still keeps the organizer from rating members before completion", async () => {
+    db.tx.round.count.mockResolvedValue(0);
+    await expect(rateMembers("g1", "org", [])).rejects.toMatchObject({ status: 409, code: "WRONG_STATE" });
   });
 });
